@@ -20,7 +20,7 @@
 1. 临时想法、问题、摘录先记到 [[file:00-index/inbox.org][00-index/inbox.org]]。
 2. 每周把 inbox 里真正有价值的内容整理到对应主题的 =index.org=。
 3. 主题页里只保留你以后还会回看的结构化内容，不重复抄课件。
-4. 一个主题如果开始有稳定产出，再考虑拆出 =concepts.org= 或 =practice.org=。
+4. 一个主题如果开始有稳定产出，再考虑拆出 =concepts.org= 或 =practice.org= 。
 
 * 当前入口
 - [[file:00-index/index.org][总入口]]
