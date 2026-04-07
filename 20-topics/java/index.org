@@ -1,0 +1,17 @@
+#+title: Java
+
+* 目标
+- 用一页统一管理 =JavaLearning= 和 =Javadoc= 两条学习线。
+
+* 原始目录
+- Java 基础：[[file:/home/yurikon/Learning/software/languages/JavaLearning][software/languages/JavaLearning]]
+- Javadoc：[[file:/home/yurikon/Learning/software/framework/Javadoc][software/framework/Javadoc]]
+
+* 学习线
+- Java 语法与面向对象
+- 常用标准库
+- Javadoc 的结构和阅读方式
+
+* 当前问题
+- 哪些 Java 基础要和 Spring 学习复用
+- Javadoc 应该按阶段记，还是按 API 类型记

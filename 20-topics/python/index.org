@@ -1,0 +1,10 @@
+#+title: Python
+
+* 原始目录
+- [[file:/home/yurikon/Learning/software/languages/Python][software/languages/Python]]
+
+* 当前状态
+- 只有 =Day1= ，先不细拆。
+
+* 建议
+- 只保留一个入口页，等形成连续学习后再扩展。

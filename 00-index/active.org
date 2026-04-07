@@ -1,0 +1,21 @@
+#+title: Active Learning
+
+* 当前学习中
+| 类型 | 主题 | 状态 | 下一步 |
+|------+----------------+--------+------------------------------|
+| 课程 | 编译原理 | ACTIVE | 建立词法分析到语法分析主线 |
+| 课程 | 软件测试 | ACTIVE | 合并计划、练习和样例项目入口 |
+| 主题 | Go | ACTIVE | 从语法知识转向工程化练习 |
+| 主题 | REST | ACTIVE | 串起 notes、addons、project |
+| 主题 | Shell | ACTIVE | 从 raw notes 提炼命令模式 |
+| 主题 | Agent Protocols | ACTIVE | 把 phase 和 plan 合成一张图 |
+| 主题 | Spring JWT | WARM | 记录鉴权链路和常见坑 |
+| 主题 | Rust Regex | WARM | 补充常用语法和用例 |
+
+* 入口页
+- [[file:../10-courses/compiler-principle/index.org][编译原理]]
+- [[file:../10-courses/software-testing/index.org][软件测试]]
+- [[file:../20-topics/go/index.org][Go]]
+- [[file:../20-topics/rest/index.org][REST]]
+- [[file:../20-topics/shell/index.org][Shell]]
+- [[file:../20-topics/agent-protocols/index.org][Agent Protocols]]

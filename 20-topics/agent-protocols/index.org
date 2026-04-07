@@ -1,0 +1,18 @@
+#+title: Agent Protocols
+
+* 目标
+- 弄清 =phase= 和 =plan= 的关系。
+- 把流程理解整理成“协议结构图 + 示例”。
+
+* 原始目录
+- [[file:/home/yurikon/Learning/software/agent-protocols][software/agent-protocols]]
+
+* 当前结构
+- =phase=
+- =plan=
+
+* 建议沉淀
+- 协议参与者
+- 状态流转
+- 消息结构
+- 一个最小工作示例

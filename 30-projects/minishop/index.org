@@ -1,0 +1,13 @@
+#+title: MiniShop
+
+* 项目定位
+- 软件测试相关练习项目。
+
+* 原始目录
+- [[file:/home/yurikon/Learning/software/software-testing/MiniShop][software/software-testing/MiniShop]]
+
+* 建议记录
+- 被测对象结构
+- 测试目标
+- 用例设计
+- 缺陷记录

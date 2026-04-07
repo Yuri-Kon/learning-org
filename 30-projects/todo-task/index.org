@@ -1,0 +1,14 @@
+#+title: todo-task
+
+* 项目定位
+- REST 学习配套项目。
+
+* 原始目录
+- [[file:/home/yurikon/Learning/software/framework/REST/project/todo-task][software/framework/REST/project/todo-task]]
+
+* 建议记录
+- 项目目标
+- API 设计
+- 数据模型
+- 已完成功能
+- 下一步

@@ -1,0 +1,24 @@
+#+title: Migration Guide
+
+* 迁移策略
+- 先建索引，不急着搬文件。
+- 优先整理你现在真的在学的内容：编译原理、Go、REST、Shell、软件测试、Agent Protocols。
+- 旧的 =Learning Resources= 只保留粗略入口，避免重新陷入“资料库维护”。
+
+* 一个主题怎么迁
+1. 在对应 =index.org= 里补三类内容：目标、当前阶段、关键问题。
+2. 把现有 =plan.md= 、 =note.md= 、 =Day1/= 这种材料提炼成几个稳定标题，而不是逐日照搬。
+3. 项目代码不要移动，只在主题页和项目页互相链接。
+4. 当一个主题的信息量明显变多，再拆出子文件；不要一开始就拆太细。
+
+* 推荐拆分标准
+- 还在探索阶段：只保留一个 =index.org= 。
+- 形成稳定知识结构：增加 =concepts.org= 。
+- 有持续练习或实验：增加 =practice.org= 或放到 =30-projects/= 。
+- 暂停三个月以上：移到 =90-archive/= ，首页只留一句话说明。
+
+* 对你当前目录的具体建议
+- =software/SE Learing Resources/= 当作历史课程资源仓，只在资源索引里记录大类。
+- =software/framework/= 和 =software/languages/= 里的活跃主题，迁成 =20-topics/= 下的主题页。
+- =software/software-testing/= 更像课程 + 项目混合体，课程笔记进 =10-courses/software-testing/= ，项目入口进 =30-projects/= 。
+- =software/compiler-principle/= 现在是空目录，可以把真正的学习入口放在 =10-courses/compiler-principle/= 。

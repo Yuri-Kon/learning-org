@@ -1,0 +1,30 @@
+#+title: 软件测试
+
+* 学习目标
+- 把计划、日常笔记、准备材料和样例项目串成一条完整学习线。
+- 课程内容和实践项目分开管理，但互相链接。
+
+* 原始资料
+- 主目录：[[file:/home/yurikon/Learning/software/software-testing][software/software-testing]]
+- 学习计划：[[file:/home/yurikon/Learning/software/software-testing/LearningPlan][LearningPlan]]
+- 学习笔记：[[file:/home/yurikon/Learning/software/software-testing/LearnNote][LearnNote]]
+- 准备材料：[[file:/home/yurikon/Learning/software/software-testing/prepare][prepare]]
+
+* 笔记主线
+** 理论
+- 测试层次
+- 测试设计方法
+- 覆盖率
+- 缺陷与回归
+
+** 实践
+- 样例项目分析
+- 用例设计
+- 执行结果与复盘
+
+* 关联项目
+- [[file:../../30-projects/minishop/index.org][MiniShop]]
+
+* 当前整理动作
+- 把 =Day1..Day6= 提炼为“概念页”而不是继续按天堆积
+- 把 =prepare/= 里的材料压缩为“考前清单”

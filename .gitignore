@@ -1,0 +1,10 @@
+*~
+\#*\#
+.\#*
+.DS_Store
+.dir-locals.el
+.org-id-locations
+/auto-save-list/
+/eln-cache/
+/org-roam.db
+/org-roam.db-*

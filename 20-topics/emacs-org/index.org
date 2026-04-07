@@ -1,0 +1,88 @@
+#+title: Emacs org
+
+* org mode 学习总索引
+
+** 学习目标
+- 理解 org mode 的核心设计
+- 熟练使用 TODO / Agenda 进行任务管理
+- 能用org 组织知识
+- 掌握代码块(Babel) 进行可执行文档
+- 构建自己的长期知识库
+
+
+** 当前阶段
+:PROPERTIES:
+:LEVEL: Beginner
+:STARTED: 2026-04-08
+:END:
+:END:
+
+当前状态：
+
+- 正在学习基本语法
+- 尚未进入 Agenda / Capture / Babel
+
+
+** 当前问题
+
+- [ ] 不理解 org 的核心模型（只是觉得像 markdown）
+- [ ] 不清楚 Agenda 的工作机制
+- [ ] 不知道如何组织文件结构
+- [ ] 不熟悉快捷键
+
+
+** 学习路径
+
+*** Phase 1: 基础结构
+- [ ] 标题
+- [ ] 列表
+- [ ] TODO 系统
+- [ ] 标签
+- [ ] 属性
+
+
+*** Phase 2: 任务管理
+- [ ] Agenda (C-c a)
+- [ ] Deadline / Scheduled
+- [ ] 优先级
+- [ ] 过滤 / 视图
+
+
+*** Phase 3: 笔记系统
+- [ ] 内部链接
+- [ ] ID / 引用
+- [ ] org-roam
+
+
+*** Phase 4: 高级能力
+- [ ] 代码块
+- [ ] Babel 执行
+- [ ] 导出
+- [ ] 表格系统
+
+-----
+
+** 待做列表
+
+*** TODO 学习标题与折叠
+DEADLINE: <2026-04-10 五>
+说明：理解 Org 是一个 outline system
+
+*** TODO 学习基本快捷键
+
+- C-c C-t 切换TODO状态
+- TAB 折叠/展开
+- M-RET 新建同级目录
+
+
+*** TODO 配置 org-agenda
+说明：这是Org的核心功能之一
+
+-----
+
+** 参考资料
+- [[https://orgmode.org/manual][官方文档]]
+- Emacs 内置文档: C-h i -> Org Mode
+
+
+

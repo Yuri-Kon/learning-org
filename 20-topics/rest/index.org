@@ -1,0 +1,29 @@
+#+title: REST
+
+* 目标
+- 把 REST 的原则、URI 设计、CRUD 语义和项目实践放到同一页里。
+
+* 原始目录
+- [[file:/home/yurikon/Learning/software/framework/REST][software/framework/REST]]
+
+* 当前材料
+- =notes/stage0..stage2=
+- =addons/CRUD=
+- =addons/URI=
+- =plan=
+- =project/todo-task=
+
+* 建议整理结构
+** 核心原则
+- Resource
+- Representation
+- Stateless
+- Uniform Interface
+
+** 设计问题
+- URI 怎么命名
+- HTTP 方法如何选择
+- 状态码如何返回
+
+** 实践
+- [[file:../../30-projects/todo-task/index.org][todo-task]]

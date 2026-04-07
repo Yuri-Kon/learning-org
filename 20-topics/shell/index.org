@@ -1,0 +1,24 @@
+#+title: Shell
+
+* 目标
+- 把命令、脚本、练习和补充知识整合成一个可检索的入口。
+
+* 原始目录
+- [[file:/home/yurikon/Learning/software/languages/Shell][software/languages/Shell]]
+
+* 当前材料
+- =plan=
+- =raw_notes=
+- =shell-practice=
+- =supplementary-knowledge=
+
+* 建议主线
+- 常用命令模式
+- 变量与展开
+- 管道与重定向
+- 条件、循环、函数
+- 文本处理工具
+
+* 当前整理动作
+- =raw_notes= 只提炼高频命令模板
+- 练习题只保留题目、解法、易错点

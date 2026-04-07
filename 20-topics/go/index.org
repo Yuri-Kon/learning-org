@@ -1,0 +1,33 @@
+#+title: Go
+
+* 目标
+- 从分散的语法笔记进入“语言特性 + 工程实践”的结构。
+
+* 原始目录
+- [[file:/home/yurikon/Learning/software/languages/Go][software/languages/Go]]
+
+* 当前材料
+- =notes=
+- =plan=
+- =project/task-runner=
+- =supplementary-knowledge=
+
+* 主线
+** 语言基础
+- 变量与类型
+- struct 和 interface
+- pointer
+- package 和 namespace
+
+** 工程化
+- module
+- 错误处理
+- 项目结构
+- 并发基础
+
+** 练习
+- [[file:../../30-projects/task-runner/index.org][task-runner]]
+
+* 当前整理动作
+- 把 =instant-notes= 并入对应概念标题
+- 把 =part0/part1/part2= 提炼成一页进度脉络

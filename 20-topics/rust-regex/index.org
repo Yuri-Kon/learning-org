@@ -1,0 +1,14 @@
+#+title: Rust Regex
+
+* 原始目录
+- [[file:/home/yurikon/Learning/software/tools/Rust%20Regex][software/tools/Rust Regex]]
+
+* 当前结构
+- =plan=
+- =Step1=
+
+* 推荐整理
+- 基本语法
+- 分组与捕获
+- 贪婪与非贪婪
+- Rust 中的使用方式

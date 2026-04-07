@@ -1,0 +1,15 @@
+#+title: Some Tools
+
+* 原始目录
+- [[file:/home/yurikon/Learning/software/tools/Some-Tools][software/tools/Some-Tools]]
+
+* 当前工具
+- Gradle
+- LaTeX
+- OCRMypdf
+- Podman
+- SSH
+
+* 用法建议
+- 这个页面只做工具导航。
+- 某个工具如果笔记开始稳定增长，再拆成单独目录。

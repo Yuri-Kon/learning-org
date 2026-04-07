@@ -1,0 +1,29 @@
+#+title: Learning Index
+
+* 总入口
+- [[file:active.org][当前学习中]]
+- [[file:inbox.org][收集箱]]
+- [[file:../40-resources/software-map.org][资源粗索引]]
+- [[file:../90-archive/index.org][归档]]
+
+* 课程
+- [[file:../10-courses/compiler-principle/index.org][编译原理]]
+- [[file:../10-courses/software-testing/index.org][软件测试]]
+
+* 主题
+- [[file:../20-topics/agent-protocols/index.org][Agent Protocols]]
+- [[file:../20-topics/rest/index.org][REST]]
+- [[file:../20-topics/spring-jwt/index.org][Spring JWT]]
+- [[file:../20-topics/go/index.org][Go]]
+- [[file:../20-topics/java/index.org][Java]]
+- [[file:../20-topics/json-schema/index.org][JSON Schema]]
+- [[file:../20-topics/python/index.org][Python]]
+- [[file:../20-topics/shell/index.org][Shell]]
+- [[file:../20-topics/rust-regex/index.org][Rust Regex]]
+- [[file:../20-topics/tools/index.org][Some Tools]]
+- [[file:../20-topics/emacs-org/index.org][Emacs ORG]]
+
+* 项目
+- [[file:../30-projects/todo-task/index.org][todo-task]]
+- [[file:../30-projects/task-runner/index.org][task-runner]]
+- [[file:../30-projects/minishop/index.org][MiniShop]]

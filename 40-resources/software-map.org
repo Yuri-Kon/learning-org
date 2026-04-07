@@ -1,0 +1,11 @@
+#+title: Software Resources Map
+
+* 粗索引
+- 历史课程资源：[[file:/home/yurikon/Learning/software/SE%20Learing%20Resources][software/SE Learing Resources]]
+- 历史实验与大作业：[[file:/home/yurikon/Learning/software/SE-Learning-Labs][software/SE-Learning-Labs]]
+- SOA 和微服务资料：[[file:/home/yurikon/Learning/software/SOA&MSA][software/SOA&MSA]]
+
+* 使用原则
+- 这里只回答“资源大概在哪”。
+- 不继续细分到每一门课、每一份 PPT、每一个 PDF。
+- 如果某个历史资源重新变成活跃主题，再从这里提升到课程页或主题页。

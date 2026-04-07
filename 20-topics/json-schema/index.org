@@ -1,0 +1,15 @@
+#+title: JSON Schema
+
+* 目标
+- 从 =Day1= 、 =Day2= 迁移成“核心关键字 + 例子”的结构。
+
+* 原始目录
+- [[file:/home/yurikon/Learning/software/languages/JSON%20Schema][software/languages/JSON Schema]]
+
+* 推荐结构
+- type
+- properties
+- required
+- array
+- enum
+- validation 组合
