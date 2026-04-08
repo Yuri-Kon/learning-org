@@ -34,8 +34,8 @@
 ** 学习路径
 
 *** Phase 1: 基础结构
-- [ ] 标题
-- [ ] 列表
+- [X] 标题
+- [X] 列表
 - [ ] TODO 系统
 - [ ] 标签
 - [ ] 属性
@@ -64,21 +64,66 @@
 
 ** 待做列表
 
-*** TODO 学习标题与折叠
-DEADLINE: <2026-04-10 五>
+*** Basics 待做列表
+
+**** DONE 学习标题与折叠
+SCHEDULED: <2026-04-08 三>
+
 说明：理解 Org 是一个 outline system
 
-*** TODO 学习基本快捷键
+**** DONE 学习基本快捷键
+SCHEDULED: <2026-04-08 三>
+
 
 - C-c C-t 切换TODO状态
 - TAB 折叠/展开
 - M-RET 新建同级目录
 
 
-*** TODO 配置 org-agenda
-说明：这是Org的核心功能之一
+**** DONE 能力A: 自己写出一个结构化文档
+SCHEDULED: <2026-04-09 四>
 
------
+- [X] 能写出多级 headline 结构
+- [X] 能区分 headline 与普通文本
+- [X] 不再写 “平铺文档”
+
+
+**** DONE 能力B: 可见性切换(visibility cycling)
+SCHEDULED: <2026-04-09 四>
+
+- [X] 使用 TAB 折叠/展开子树
+- [X] 使用 S-TAB 在全局视图切换
+- [X] 能快速聚焦当前节点
+
+
+**** DONE 能力C: 结构编辑
+SCHEDULED: <2026-04-09 四>
+
+- [X] 使用 M-up / M-down 移动 subtree
+- [X] 使用 M-left / M-right 提升/降级标题
+- [X] 不再手动剪切粘贴结构块
+
+
+**** TODO 能力D: 结构区分能力
+SCHEDULED: <2026-04-09 四>
+
+- [ ] 能使用 properties drawer
+- [X] 能区分 headline / list / 正文
+
+
+**** TODO 阅读顺序
+SCHEDULED: <2026-04-10 五>
+
+1. Introduction / Summary
+2. Document Structure
+3. Headlines
+4. Visibility Cycling
+5. Motion
+6. Structure Editing
+7. Plain Lists
+8. Drawers
+
+
 
 ** 参考资料
 - [[https://orgmode.org/manual][官方文档]]
