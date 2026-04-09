@@ -1,3 +1,12 @@
 #+title: Org 进阶基础
 * Org 进阶基础：Sparse Trees, Lists, Drawers 与 Blocks
+** 本节定位
 
+这一节仍然属于 Org 的基础层，不进入任务系统，也不进入 Agenda。
+
+它解决四个问题：
+
+- 当文件很长时，我如何只看我现在想看的内容
+- 在一个 headline 内，如何组织局部内容
+- 如何保存不想总是看见的附加信息
+- 如何在 Org 中容纳
