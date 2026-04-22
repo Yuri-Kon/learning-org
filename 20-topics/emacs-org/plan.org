@@ -28,7 +28,7 @@
 
 - [X] 能独立编写结构清晰的 Org 文件
 - [X] 熟练使用折叠、导航、结构编辑
-- [ ] 能正确区分标题、列表、正文、属性、代码块、链接
+- [X] 能正确区分标题、列表、正文、属性、代码块、链接
 
 
 *** 目标3：任务管理能力
@@ -78,7 +78,7 @@
 目标：
 - [X] 理解 Org 的本体是树结构
 - [X] 掌握 headline, subtree, folding, navigation, structure editing
-- [ ] 理解 plain list, drawer, properties 的位置与应用
+- [X] 理解 plain list, drawer, properties 的位置与应用
 
 
 重点内容：

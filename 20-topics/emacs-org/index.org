@@ -28,7 +28,7 @@
 
 - [X] 不理解 org 的核心模型（只是觉得像 markdown）
 - [ ] 不清楚 Agenda 的工作机制
-- [ ] 不知道如何组织文件结构
+- [X] 不知道如何组织文件结构
 - [ ] 不熟悉快捷键
 
 
@@ -105,10 +105,10 @@ SCHEDULED: <2026-04-09 四>
 - [X] 不再手动剪切粘贴结构块
 
 
-**** TODO 能力D: 结构区分能力
+**** DONE 能力D: 结构区分能力
 SCHEDULED: <2026-04-09 四>
 
-- [ ] 能使用 properties drawer
+- [X] 能使用 properties drawer
 - [X] 能区分 headline / list / 正文
 
 
