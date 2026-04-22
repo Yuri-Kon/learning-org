@@ -1,0 +1,96 @@
+#+TITLE: 快速上手
+
+* Testcontainers 快速上手
+
+** 这一章要学什么
+
+用 Testcontainers 在 Java 测试中启动真实依赖（MySQL），并完成一次集成测试。
+
+展开为三个能力：
+
+1. 能运行
+   - 能在测试中启动一个 MySQL 容器
+   - 能连接数据库并执行 SQL
+   - 测试可以正常通过
+2. 能理解机制
+   - 理解 ~@Testcontainers~ 和 ~@Container~ 的作用
+   - 理解容器生命周期
+   - 区分 static vs 非 static 容器
+3. 能扩展
+   - 知道如何替换 Redis / Kafka 等服务
+   - 理解 Testcontainers 的模块化设计
+   - 能在项目中复用容器配置
+
+
+-----
+
+** 学习路径
+
+1. 环境与依赖准备
+   - Docker 环境检查
+   - Maven / Gradle 引入 Testcontainers
+   - 理解依赖结构:
+     - core
+     - modules
+2. 第一个示例(MySQL 实战)
+   - 创建测试类
+   - 使用 MySQLContainer 启动容器
+   - 获取：
+     - JDBC URL
+     - username / password
+   - 使用JDBC 执行 SQL
+   - 完成：
+     - 建表
+     - 插入
+     - 查询 + 断言
+3. JUnit5 集成机制
+   - ~@Testcontainers~
+   - ~@Container~
+   - 生命周期机制：
+     - 类级别的（static）容器
+     - 方法级别容器
+   - 理解：容器何时启动/何时销毁，为什么static更高效
+4. 代码结构优化
+   - 抽离容器配置(Base Test)
+   - 多测试复用容器
+   - 日志查看与调试方式
+5. 常见容器支持
+   - 数据库：MySQL / PostgreSQL
+   - 缓存:Redis
+   - 消息队列：Kafka
+   - 搜索：Elasticsearch
+
+
+-----
+
+** 最终学习成果
+
+学习完本章后，应该具备：
+
+*** 基础能力
+
+- 能写出一个完整的 Testcontainers 测试用例
+- 能通过容器连接数据库并执行真实 SQL
+- 不依赖本地环境
+
+
+*** 工程能力
+
+- 能在项目中引入 Testcontainers
+- 能设计测试结构
+- 能调试容器运行问题
+
+
+*** 一个最小项目成果
+
+拥有一个可运行demo，例如：
+
+#+BEGIN_EXAMPLE
+testcontainers-demo/MySQLContainerTest.java
+#+END_EXAMPLE
+
+具备：
+
+- 自动拉起 MySQL 容器
+- 自动执行测试
+- 自动销毁环境

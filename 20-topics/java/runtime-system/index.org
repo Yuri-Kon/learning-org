@@ -1,0 +1,33 @@
+#+TITLE: JVM / GC / Runtime System 学习索引
+* 学习目标
+
+本专题聚焦 Java 在“运行时”的行为，包括：
+- JVM 内存模型
+- 对象创建与内存布局
+- 垃圾回收（GC）机制
+- JVM执行引擎
+- 性能调优与问题排查
+
+
+最终目标：
+
+- 能解释JVM行为
+- 能分析GC问题
+- 能进行基本调优
+
+
+-----
+* 学习路线（Roadmap）
+1. [[file:runtime-data-areas/index.org][JVM 内存结构（基础）]]
+2. [[file:object-model/index.org][对象模型（连接代码与内存）]]
+3. [[file:grabage-collection-basics/index.org][GC 基础（算法+判定）]]
+4. [[file:gc-algorithm/index.org][GC 算法]]
+5. [[file:generational-gc/index.org][分代模型（HotSpot 核心设计）]]
+6. [[file:gc-collectors/index.org][垃圾收集器（G1 / CMS 等）]]
+7. [[file:execution-engine/index.org][JVM 执行引擎（JIT / 字节码）]]
+8. [[file:jvm-tuning/index.org]]
+9. [[file:troubleshooting/index.org][故障排查（OOM / Full GC）]]
+
+
+-----
+

@@ -1,0 +1,24 @@
+#+TITLE: JVM 内存结构(Runtime Data Areas)
+#+STARTUP: overview
+* 本章目标
+理解 JVM 在运行时如何组织内存，并能够回答：
+- 一个 Java 程序运行时内存如何划分？
+- 对象、方法、变量分别存在哪里？
+- 为什么会出现 StackOverflowError / OutOfMemoryError?
+- GC 主要作用于哪一块内存？
+
+
+-----
+* 本章结构
+
+1. JVM 运行时整体结构
+2. 线程私有 vs 线程共享内存
+3. 堆（Heap）
+4. 虚拟机栈（Stack）
+5. 方法区（Metaspace）
+6. 内存计数器（PC Register）
+7. 直接内存（Direct Memory）
+8. 常见问题（OOM/栈溢出）
+
+
+-----

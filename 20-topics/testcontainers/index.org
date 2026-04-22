@@ -1,0 +1,120 @@
+#+TITLE: Testcontainers
+
+* Testcontainers 学习索引
+
+** 基础认知
+
+1. Testcontainers 是什么
+   - 定义：基于Docker集成测试工具库
+   - 核心思想：用真实依赖替代mock
+2. 它解决什么问题
+   - 本地依赖环境复杂
+   - CI 环境不一致
+   - mock 不可信
+3. 与传统测试方法对比
+   - 单元测试(JUnit + Mock)
+   - 集成测试(SpringBootTest)
+   - Testcontainers定位
+
+
+-----
+
+** 核心原理
+
+1. 基础架构
+   - Java API -> Docker API -> Container
+   - 生命周期控制
+2. 容器生命周期
+   - 启动(start)
+   - 等待策略(WaitStrategy)
+   - 销毁(stop)
+3. 核心抽象
+   - ~GenericContainer~
+   - ~JdbcDatabaseContainer~
+   - ~Network~
+   - ~DockerClinet~
+4. 与Docker的关系
+   - 依赖Docker daemon
+   - 不需要手写 docker-compose
+
+
+-----
+
+** [[file:hands-on/index.org][快速上手(Hands-on)]] 
+
+1. 引入依赖
+   - Maven/Gradle 配置
+2. 第一个示例（MySQL）
+   - 启动容器
+   - 获取 JDBC URL
+   - 写测试
+3. 与 JUnit5 集成
+   - ~@Testcontainers~
+   - ~@Container~
+   - 生命周期
+4. 常见容器支持
+   - MuSQL / PostgreSQL
+   - Redis
+   - Kafka
+   - Elasticsearch
+
+
+-----
+
+** 进阶使用
+
+1. 等待策略
+   - 端口监听
+   - 日志匹配
+   - HTTP health check
+2. 数据初始化
+   - SQL 脚本
+   - 自定义 entrypoint
+3. 网络与多容器
+   - Container network
+   - 服务间通信
+4. 自定义容器
+   - 基于 ~GenericContainer~
+   - 自定义镜像
+
+
+-----
+
+** 与Spring Boot集成
+
+1. 与 Spring Boot 测试结合
+2. ~@DynamicPropertySource~
+   - 动态替换数据库连接
+3. 替换 application.yml
+4. 测试隔离
+
+
+-----
+
+** 工程实践
+
+1. CI/CD 集成
+   1. Github Actions
+   2. Docker in Docker
+2. 性能优化
+   1. 容器复用
+   2. 启动时间优化
+3. 测试分层策略
+   1. 单元测试 vs. 集成测试 vs. E2E
+4. 与微服务架构结合
+   1. 多服务测试
+   2. API + DB + MQ 一体测试
+
+
+-----
+
+** 对比与扩展
+
+1. vs Mock(Mockito)
+   1. 何时用 mock
+   2. 何时用真实容器
+2. vs docker-compose
+   1. Testcontainers 优势
+   2. 自动化 vs 手动编排
+3. 替代方案      
+     
