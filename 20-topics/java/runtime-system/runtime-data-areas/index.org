@@ -22,3 +22,219 @@
 
 
 -----
+* JVM 内存总体结构
+:PROPERTIES:
+:CUSTOM_ID: jvm-overview
+:END:
+** 核心划分
+- 线程共享
+  - Heap（堆）
+  - Method Area（方法区）
+- 线程私有
+  - Java Stack（虚拟机栈）
+  - PC Register（程序计数器）
+  - Native Method Stack（本地方法栈）
+** 关键理解
+- GC 只作用于“堆”和“方法区”
+- 栈不需要GC
+------
+* 线程私有 vs 线程共享
+:PROPERTIES:
+:CUSTOM_ID: thread-memory
+:END:
+** 线程私有
+- 栈
+- PC
+- 本地方法栈
+
+
+特点：
+- 多线程共享
+- 需要GC
+- 存在线程安全问题
+** 关键问题
+- 为什么栈是线程私有的
+- 为什么堆必须共享
+
+
+-----
+* 堆（Heap）
+:PROPERTIES:
+:CUSTOM_ID: heap
+:END:
+
+** 核心作用
+- 存放对象实例
+- GC 主要区域
+
+
+** 结构（HotSpot）
+- 新生代（Young）
+  - Eden
+  - Surivior S0 / S1
+- 老年代（Old）
+
+
+** 关键问题
+- 为什么对象在堆上
+- new 对象一定在堆吗？
+
+
+** JVM 参数
+- ~-Xms~ 初始堆大小
+- ~-Xmx~ 最大堆大小
+
+
+** 实验
+- 写程序不断创建对象触发GC
+- 观察Minor GC
+
+
+-----
+
+* 虚拟机栈（Java Stack）
+:PROPERTIES:
+:CUSTOM_ID: stack
+:END:
+
+** 核心作用
+- 存储方式调用信息
+
+
+** 栈帧（Stack Frame）
+- 局部变量表
+- 操作数栈
+- 方法出口
+
+
+** 关键问题
+- 基本类型 vs 引用类型存在哪里
+- 为什么会 StackOverflowError
+
+
+** JVM 参数
+- ~-Xss~ 栈大小
+
+
+** 实验
+
+- [ ] 写递归触发栈溢出
+
+
+------
+
+* 方法区（Metaspace）
+:PROPERTIES:
+:CUSTOM_ID: metaspace
+:END:
+
+** 核心作用
+- 存储类信息
+- 常量池
+- 静态变量
+
+
+** 演进
+- JDK8 之前：PermGen
+- JDK8 之后：Metaspacce（使用本地内存）
+
+
+
+** 关键问题
+- 为什么移除 PermGen
+- 类过多会发生什么
+
+
+** JVM 参数
+- ~-XX:MetaspaceSize~
+- ~-XX:MaxMetaspaceSize~
+
+
+** 实验
+- [ ] 动态生成类触发 Metaspace OOM
+
+
+-----
+
+* 程序计数器（PC Regsiter）
+:PROPERTIES:
+:CUSTOM_ID: pc-register
+:END:
+
+** 核心作用
+- 当前线程执行的字节码位置指示器
+
+
+** 特点
+- 线程私有
+- 不会OOM
+
+
+** 关键问题
+- 为什么必须线程私有
+- 多线程如何切换执行
+
+
+-----
+
+* 直接内存（Direct Memory）
+:PROPERTIES:
+:CUSTOM_ID: direct-memory
+:END:
+
+
+** 核心作用
+- JVM 外内存（堆外内存）
+- 由 NIO 使用
+
+
+** 特点
+- 不受 GC 管理
+- 但仍可能 OOM
+
+
+** 示例
+- ~ByteBuffer.allocateDirect()~
+
+
+** 关键问题
+- 为什么使用直接内存
+- 为什么性能更好
+
+
+-----
+
+* 常见问题
+:PROPERTIES:
+:CUSTOM_ID: problems
+:END:
+
+** OutOfMemoryError 类型
+- Java heap space
+- GC overhead limit exceeded
+- Metaspace
+- Direct buffer memory
+
+
+** StackOverflowError
+- 递归过深
+- 栈帧过大
+
+
+** 关键问题
+- OOM 和 StackOverflow 的本质区别
+- 如何快速定位问题
+
+
+-----
+
+* 本章实验
+:PROPERTIES:
+:CUSTOM_ID: experiments
+:END:
+
+- [ ] 观察堆内存变化
+- [ ] 触发 Minor GC
+- [ ] 触发 OOM
+- [ ] 触发 StackOverflowError
+- [ ] 打印GC日志分析

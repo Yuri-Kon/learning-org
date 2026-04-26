@@ -1,0 +1,21 @@
+#+ 计划执行记录
+* 总体计划表
+* 阶段0：项目准备
+** 第一节
+*** DONE 建立项目目录
+#+begin_example
+mini-wafer-engine/
+|-- cpp/
+|-- python/
+|-- data/
+|-- tests/
+|-- docs/
+|-- build/
+|-- README.md
+#+end_example
+
+*** DONE 写一个最小C++程序g
+*** DONE 写一个最小Python脚本 
+** 第二节
+*** TODO 拆分头文件与源文件
+*** TODO 写第一个核心类 ~Matrix~
