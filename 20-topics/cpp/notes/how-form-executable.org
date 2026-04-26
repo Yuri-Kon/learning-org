@@ -1,0 +1,155 @@
+
+#+TITLE: C++工程代码如何从源码变成可执行程序
+* C++ 工程代码如何变成可执行程序
+对应阶段0：项目准备。这一阶段解决一个根问题：写的 ~.cpp~ 文件，到底是如何变成一个可以运行的程序的？
+
+C++ 工程的第一条主线可以记成：
+
+#+begin_example
+源码文件→预处理→编译→汇编→链接→可执行文件
+#+end_example
+
+GCC 官方文档把编译过程分为四个阶段：preprocessing、compilation proper、assembly、linking,也就是：预处理、正式编译、汇编、链接；链接阶段会把多个object file 组合成最终可执行文件。
+
+比如我们所写的 ~.cpp~ 文件：
+
+#+begin_src C++ :exports code
+  #include <iostream>
+  int main() {
+    std::cout << "Mini Wafer Processing Engine started." << std::endl;
+    return 0;
+  }
+#+end_src
+
+这个文件里有两个东西需要注意：
+
+- ~include <iostream>~ 属于预处理阶段。它会把标准库中关于输入输出流的声明引入当前源码。
+- ~int main()~ 是程序入口。操作系统运行这个程序时，最终会从这里开始执行。
+
+
+如果直接用编译器，可以这样编译：
+
+#+begin_src shell :exports code
+  g++ cpp/main.cpp -o mini_wafer_engne
+  ./mini_wafer_engine
+#+end_src
+
+这条命令做了：预处理 ~main.cpp~ ，编译成汇编，再汇编成目标文件，最后链接成 ~mini_wafer_engine~ 。以后项目大了，不会直接手写很长的 ~g++~ 命令，因为源文件太多，依赖会越来越负载，这时候就需要 CMake.
+** CMake
+CMake的核心概念叫 targe，也就是“构建目标”。CMake的官方文档说明，CMake-based buildsystem 是围绕高层逻辑 target 组织的，每个 target 可以对应一个可执行程序、一个库，或者自定义构建目标。
+
+可以把CMake理解为一个描述器，在其中告诉它这个项目叫什么、用什么语言、用什么C++标准、哪些源文件要生成哪个程序、以后哪些库要链接到哪个程序等。
+
+比如项目中写的最小 ~CMakeLists.txt~:
+
+#+begin_src
+cmake_minimum_required(VERSION 3.20)
+
+project(mini_wafer_engne LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+add_executable(mini_wafer_engne
+  cpp/main.cpp
+)
+#+end_src
+
+这一段逐行解释：
+
+- ~cmake_minimum_required(VERSION 3.20)~: 表示当前项目至少需要 CMake 3.20，这样做的意义是避免不同机器上的CMake版本差异导致构建行为不一致
+- ~project(mini_wafer_engne LANGUAGES CXX)~: 表示声明一个项目，项目名称是 ~mini_wafer_engine~ ，使用的语言是 C++。这里的 ~CXX~ 就是CMake里表示C++的写法。
+- ~set(CMAKE_CXX_STANDARD 17)~, ~set(CMAKE_CXX_STANDARD_REQUIRED ON)~: 表示使用C++17。
+- ~add_executable(mini_wafer_engne cpp/main.cpp)~: 这是今天最重要的一行。CMake官方文档对 ~add_executable~ 的解释是：添加一个由指定源文件构建出来的 executable target。也就是说，这行代码表达的是：创建一个叫做 ~mini_wafer_engine~ 的可执行程序，它的源代码只有 ~cpp/main.cpp~
+
+
+现在可以这样理解CMake的链条：
+
+1. ~CMakeLists.txt~: 描述构建规则
+2. ~cpp/main.cpp~: 被编译的源代码
+3. ~mini_wafer_engine~: 最终生成的可执行程序
+** 构建命令
+
+#+begin_src shell :exports code
+cmake -S . -B build
+camke --build build
+#+end_src
+
+这里的意思是：第一行表示当前目录是 ~.~ ，构建目录是 ~build~ 。其中， 可以理解为:
+
+#+begin_example
+-S . 从当前目录读取 CMakeLists.txt
+-B build 把生成的构建文件放进 build 目录
+#+end_example
+
+然后第二行的意思是根据 ~build~ 目录中的构建规则开始真正编译项目。这之后，在 ~build~ 目录下就会出现一个 ~mini_wafer_engine~ 的可执行文件。
+
+* 头文件与源文件
+接下来是从“一个 ~main.cpp~ 文件过渡到多个文件协作的C++工程”。
+
+C++ 里有一个重要概念: *translation unit, 翻译单元* 。可以粗略理解为：一个 ~.cpp~ 文件经过 ~#include~ 展开之后，交给编译器处理的完整代码单元。源文件会经过预处理并形成 translation unit；而现代 C++ 项目通常由多个 translation unit 组成，需要通过头文件共享声明和定义。
+
+这里的基本分工是：
+- ~.h~: 放“声明”，告诉别人我有什么
+- ~.cpp~: 放“实现”，具体说明怎么做
+
+
+[[https://cpp-core-guidelines-docs.vercel.app/source][C++ Core Guidelines]] 的 Source Files 部分也建议使用 ~.h~ 表示接口文件、~.cpp~ 表示实现文件。并且多个源文件需要共享的声明应该放在头文件里。
+
+** 具体实现
+
+现在要做一个 ~Matrix~ 类，用来表示二维晶圆检测数据。以后CSV文件读进来之后，就会变成一个 ~Matrix~ 对象。
+
+目标效果如下：未来的 ~main.cpp~ 里应该能这样写：
+
+#+begin_src C++
+  #include <iostream>
+  #include "Matrix.h"
+
+  int main() {
+    Matrix wafer(3, 4, 0.0);
+
+    wafer.at(0, 0) = 1.5;
+    wafer.at(1, 2) = 9.8;
+
+    std::cout << "rows = " << wafer.rows() << "\n";
+    std::cout << "cols = " << wafer.cols() << "\n";
+    std::cout << "valude(1, 2) = " << wafer.at(1, 2) << "\n";
+  }
+#+end_src
+
+这段代码里，~Matrix wafer(3, 4, 0.0)~ 表示创建一个3行4列的二维数组，初始值全是0.0 。
+
+~wafer.at(1, 2)~ 表示访问第1行第2列的元素。
+
+那么我们的 ~Matrix.h~ 头文件可以这样写:
+
+#+begin_src C++
+  #pragma one
+
+  #include <cstddef>
+  #include <vector>
+
+  class Matrix {
+  public:
+    Matrix(std::size_t rows, std::size_t cols, double initial_value = 0.0);
+
+    std::size_t rows() const;
+    std::size_t cols() const;
+
+    double &at(std::size_t row, std::size_t col);
+    double at(std::size_t row, std::size_t col) const;
+
+  private:
+    std::size_t rows_;
+    std::size_t cols;
+    std::vector<double> data_;
+  };
+#+end_src
+
+*** 该头文件的解释
+
+~pragma once~ 的作用是防止同一个头文件在同一个翻译单元里被重复包含。传统写法也可以用 include guard,也就是 ~#ifndef / #define / #endif~ 。
+
+[[https://en.cppreference.com/cpp/preprocessor/impl][cppreference]] 对预处理器的相关说明中提到，include guard的目的就是让头文件在同一个 trainslation unit 中只被真正处理一次。
+
