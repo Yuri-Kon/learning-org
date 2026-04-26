@@ -1,0 +1,58 @@
+% Created 2026-04-25 六 23:35
+% Intended LaTeX compiler: xelatex
+\documentclass[UTF8,a4paper,12pt]{ctexart}
+\usepackage{graphicx}
+\usepackage{longtable}
+\usepackage{wrapfig}
+\usepackage{rotating}
+\usepackage[normalem]{ulem}
+\usepackage{capt-of}
+\usepackage{hyperref}
+\date{\today}
+\title{C++ 学习计划}
+\hypersetup{
+ pdfauthor={},
+ pdftitle={C++ 学习计划},
+ pdfkeywords={},
+ pdfsubject={},
+ pdfcreator={Emacs 30.2 (Org mode 9.7.11)}, 
+ pdflang={Zh-Cn}}
+\begin{document}
+
+\maketitle
+\tableofcontents
+
+\section{C++ 学习计划}
+\label{sec:org22a228c}
+以一个小型工业项目贯穿学习。
+\section{项目简介}
+\label{sec:org7b38a4d}
+\subsection{Mini Wafer Processing Engine,半导体检测数据小引擎}
+\label{sec:org01c0cc7}
+
+它模拟我未来可能做的事情：算法部门给出一个Python原型的算法，我负责把算法核心逻辑用C++工程化实现，并提供Python调用接口、测试、日志、性能评估和异常处理。项目不需要真实半导体业务数据，可以用二维矩阵模拟晶圆检测数据，例如CSV文件中的数值代表检测点强度、缺陷概率或异常分数。
+\subsubsection{项目的学习依据}
+\label{sec:orgd5ec7b2}
+
+C++ Core Guidelines 的目标是帮助写出简单、高效、可维护的现代C++代码；CMake官方教程强调通过示例项目构建系统；CTest文档把测试视为生产和维护健壮性、有效性软件的关键工具。C++侧还需要加入 AddressSanitizer，因为Clang官方也说明它可以检测越界访问、user-after-free 等典型内存错误。Python侧使用pytest、logging、pybind11，分别对应测试、日志和C++/Python 绑定；pybind11 官方说明它用于把C++类型暴露给Python.
+\section{任务表}
+\label{sec:org53473d5}
+
+\begin{center}
+\begin{tabular}{llllll}
+阶段 & 时间 & 阶段目标 & 学习内容 & 项目任务 & 验收标准\\
+\hline
+阶段0：项目准备 & 4月25日-4月27日 & 明确项目边界，搭好最小环境 & Git、目录结构、CMake基础、CSV数据格式 & 建立仓库 mini-wafer-engine；创建 cpp/、python/、data/、tests/、docs/；准备 3 份模拟 CSV 数据 & 能运行一个最小C++程序和一个最小Python脚本；README写清楚项目目标\\
+阶段1：C++基础模型 & 第一周 & 从会写算法转向理解C++代码结构 & 编译链接、头文件、源文件、命名空间、类、构造函数、析构函数、引用、指针、const、栈/堆、对象生命周期 & 用C++实现CSV提取器、二维矩阵 Matrix、基础统计函数：均值、最大值、最小值、标准差 & 能解释对象合适创建和销毁；代码拆成 .h/.cpp；能读取CSV并输出统计结果\\
+阶段2：现代C++与资源管理 & 第二周 & 掌握工业C++最常见的安全写法 & RAII、智能指针、移动语义、std::vector、std::string、std::option、异常处理、错误码设计 & 实现数据清洗模块：缺失值处理、异常值裁剪、归一化、阈值过滤；为输入异常设计错误返回 & 不出现裸 new/delete；能处理空文件、格式错误、非法数字；异常输入不会导致程序崩溃\\
+阶段3：算法工程化封装 & 第三周 & 把“算法”变成复用模块 & 类设计、接口设计、模块边界、单元测试思想、GoogleTest或Catch2基础 & 实现2到3个算法：滑动窗孔均值、异常点检测、连通区域统计；为每个算法写测试 & 每个算法有独立接口和测试；同一输入输出稳定；README能说明算法输入、输出和复杂度\\
+阶段4：构建、测试与调试 & 第四周 & 建立工程项目的基本质量保障 & CMake、CTest、Debug/Release、编译选项、日志、断点调试、ASan/UBSan & 重构CMake；加入测试命令；打开 AddressSanitizer 和 UnderfinedBehaviorSanitizer；整理构建脚本 & 一条命令完成构建和测试；Sanitizer下测试用过；能定位一次认为制造的越界错误\\
+阶段5：Python原型与C++加速 & 第五周 & 建立Python/C++协作链路 & Python包结构、pytest、logging、NumPy基础、类型标注、pybind11 & Python写参考算法；C++写高性能版本；用pybind11暴露C++函数给Python；pytest对比Python/C++输出的一致性 & Python可以import mini\textsubscript{wafer}\textsubscript{engne}；同一数据下Python版本和C++版本一致；误差检查使用容差\\
+阶段6：性能可靠与可靠性加固 & 第六周 & 模拟工业落地中的性能和稳定性要求 & benchmark、复杂度分析、内存占用、批处理、日志分级、配置文件、错误报告 & 加入Google Benchmark；测试小/中/大三种数据规模；输出性能报告；加入配置文件控制算法参数 & 有一份性能报告；能说明瓶颈在哪里；能解释C++版本比Python版本快在哪里或慢在哪里\\
+阶段7：项目收尾与入职准备 & 最后几天 & 把项目整理成可展示、可复述的工程经历 & README、技术总结、问题复盘 & 写 docs/project-summary.md: 项目背景、架构、模块、测试、性能、问题与改进 & 能讲清楚项目，能回答为什么这样设计、怎么保证可靠、怎么定位性能问题\\
+\end{tabular}
+\end{center}
+\section{主线总结}
+\label{sec:org35b58bb}
+用 Python 写算法原型，用C++实现核心计算，用测试和性能工具验证结果，用日志、异常处理和工程结构保证可维护性。
+\end{document}
