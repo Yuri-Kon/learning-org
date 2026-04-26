@@ -9,3 +9,5 @@
 /org-roam.db
 /org-roam.db-*
 *.html
+
+build/
