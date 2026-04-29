@@ -1,7 +1,7 @@
 #+ 计划执行记录
 * 总体计划表
-* 阶段0：项目准备
-** 第一节
+* 阶段0：[[file:notes/how-form-executable.org][项目准备]]
+** 第一节：项目骨架
 *** DONE 建立项目目录
 #+begin_example
 mini-wafer-engine/
@@ -16,6 +16,9 @@ mini-wafer-engine/
 
 *** DONE 写一个最小C++程序g
 *** DONE 写一个最小Python脚本 
-** 第二节
-*** TODO 拆分头文件与源文件
-*** TODO 写第一个核心类 ~Matrix~
+** 第二节：头文件与源文件
+*** DONE 拆分头文件与源文件
+*** DONE 写第一个核心类 ~Matrix~
+** 第三节：CSV 数据协议与样例数据
+*** DONE 准备三份文件
+* 阶段1: C++ 模型基础
