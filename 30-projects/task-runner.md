@@ -1,0 +1,10 @@
+# 项目定位
+
+- Go 学习配套项目。
+
+- [原始目录](/home/yurikon/Learning/software/languages/Go/project/task-runner)
+- 建议记录
+- 练到了哪些 Go 特性
+- 当前架构
+- 遇到的问题
+- 可继续扩展的点

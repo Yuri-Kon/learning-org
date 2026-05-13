@@ -2,6 +2,8 @@
 
 这是一个用于学习C++/Python工程化协作的小型工业项目。
 
+[项目地址](~/Learning/projects/mini-wafer-engine)
+
 项目目标：
 1. 使用CSV模拟半导体晶圆检测数据
 2. 使用Python编写算法原型
