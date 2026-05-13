@@ -131,3 +131,89 @@ nix flake init
 ```shell
 nix develop
 ```
+
+这里会在当前目录读取 `flake.nix` ，寻找里面定义的默认开发环境。具体来说， Nix 会优先查找：
+
+```nix
+devShells.<你的系统架构>.default
+```
+
+比如目前的机器是在 Linux_x86.64 ，那么就是：
+
+```nix
+devShells.x86_64-linux.default
+```
+
+
+### 执行 `nix develop` 后大致会发生的事情
+
+第一，Nix 会解析 `flake.nix` ，它会看到:
+
+```nix
+inputs = {
+  nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+};
+```
+
+这表示 OCaml、utop、dune、ocaml-lsp等包都从 `nixpkgs` 这个输入中获取。flake 会通过 `flake.lock` 固定输入版本，从而让之后再次进入环境时尽量取得同一套依赖。Nix 官方文档说明，flake 使用 `flake.nix` 声明输入和输出，并通过 lock file 记录依赖版本。
+
+第二，如果这是第一次运行， Nix 会生成或更新 `flake.lock` ，这会固定当前 `nixpkgs` 版本
+
+第三，Nix 会检查这些包本地是否存在。如果 `nix/store` 中已经存在对应版本，它会直接复用。否则，它会从官方二进制缓存下载。
+
+第四，Nix 会启动一个新的 shell 。 这个 shell 里，PATH 会被临时扩展，让用户可以调用安装进来的包。比如我们在上面写的:
+
+```shell
+ocaml
+ocamlc
+utop
+...
+```
+
+这些工具不会被安装进 `/usr/bin` ，也不会污染系统全局环境。它们位于 `/nix/store/...` 中，在当前 nix shell 中可见。
+
+第五，如果写了 `shellHook` ，它会在进入shell时执行。比如我们上面写的：
+
+
+```nix
+shellHook = ''
+  echo "CS3110 OCaml environment"
+  echo "OCaml: $(ocamlc -version)"
+  echo "Try: utop"
+'';
+```
+
+所以进入环境时就会看到:
+
+```text
+CS3110 OCaml environment
+OCaml: 5.3.0
+Try: utop
+```
+
+然后命令行提示符会变成： `[用户名@archlinux cs3110-ocaml-nix]` ，表示已经在 Nix 开发环境中。
+
+## Double-Check OCaml: Nix 版本的检查方式
+
+CS3110 官方的检查方式是 `utop` 能直接运行，OPAM switch 名称正确，编译器版本正确，并且不需要每次 `eval $(opam env)`
+
+在 Nix 路线中，可以检查:
+
+```shell
+nix develop
+which ocamlc
+ocamlc -version
+which utop
+utop
+```
+
+以及可以检查 LSP 和格式化工具：
+
+```shell
+which ocamllsp
+which ocamlformat
+which menhir
+which odoc
+```
+
+
