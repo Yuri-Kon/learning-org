@@ -1,0 +1,6 @@
+#+title: OCaml 学习目录索引
+* 学习资源索引
+** 参考书目和网址
+- [[file:lpo.pdf][Learn Programming with OCaml]]
+  - 本书分为三个部分。第一个是介绍OCaml,面向初学者,无论是编程初学者,还是刚接触OCaml。通过小型程序,读者将学习编程和OCaml的基本概念。第二部分和第三部分致力于算法的基本概念,应使读者能够以结构化且高效的方式编写程序。算法概念直接以OCaml的语法形式呈现,书中的任何代码片段均可在线获取。
+- [[https:cs3110.github.io/textbook/cover.html][OCaml Programming: Correct + Efficient + Beautiful]] 

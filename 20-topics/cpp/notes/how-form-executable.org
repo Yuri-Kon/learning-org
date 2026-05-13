@@ -72,7 +72,7 @@ add_executable(mini_wafer_engne
 
 #+begin_src shell :exports code
 cmake -S . -B build
-camke --build build
+cmake --build build
 #+end_src
 
 这里的意思是：第一行表示当前目录是 ~.~ ，构建目录是 ~build~ 。其中， 可以理解为:
@@ -127,7 +127,7 @@ C++ 里有一个重要概念: *translation unit, 翻译单元* 。可以粗略�
 那么我们的 ~Matrix.h~ 头文件可以这样写:
 
 #+begin_src C++
-  #pragma one
+  #pragma once
 
   #include <cstddef>
   #include <vector>
@@ -144,7 +144,7 @@ C++ 里有一个重要概念: *translation unit, 翻译单元* 。可以粗略�
 
   private:
     std::size_t rows_;
-    std::size_t cols;
+    std::size_t cols_;
     std::vector<double> data_;
   };
 #+end_src
@@ -379,7 +379,7 @@ data_ = rows * cols 个 double，每个值都是 intial_value
 第三，边界检查：
 
 #+begin_src C++
-  if (rows >= rows_ || col >= cols_) {
+  if (row >= rows_ || col >= cols_) {
     throw std::out_of_range("Matrix index out of range");
    }
 #+end_src
@@ -458,7 +458,7 @@ target_include_directories(mini_wafer_engine
 
 然后这一句的意思是，告诉CMake：编译这个目标时，编译器要能在 ~cpp~ 目录下找头文件。
 
-这里的 ~PRIVARE~ 表示：这个 include 路径只对 ~mini_wafer_engine~ 自己有效，不会传递给依赖它的其他目标。CMake 官方文档汇总， ~PRIVARE~ 和 ~PUBLIC~ 会填充当前 target 的 ~INCLUDE_DIRECTORIES~ 属性， ~PUBLIC~ 和 ~INTERFACE~ 会填充 ~INTERFACE_INCLUDE_DIRECTORIES~ 属性；也就是 ~PRIVATE~ 只影响当前目标的编译。
+这里的 ~PRIVATE~ 表示：这个 include 路径只对 ~mini_wafer_engine~ 自己有效，不会传递给依赖它的其他目标。CMake 官方文档汇总， ~PRIVARE~ 和 ~PUBLIC~ 会填充当前 target 的 ~INCLUDE_DIRECTORIES~ 属性， ~PUBLIC~ 和 ~INTERFACE~ 会填充 ~INTERFACE_INCLUDE_DIRECTORIES~ 属性；也就是 ~PRIVATE~ 只影响当前目标的编译。
 
 这一句话的意思翻译过来就是：
 

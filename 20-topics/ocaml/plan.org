@@ -1,0 +1,748 @@
+#+title: OCaml Learning Plan
+#+author: yurikon
+#+startup: overview
+#+tags: ocaml plan cs3110 lpo
+
+* 总体安排
+
+计划周期：12 周。
+
+主线：
+- 每周以 CS3110 为主教材。
+- 每周配合 LPO 中相近主题做程序实践。
+- 每周至少完成一个小产出：代码、笔记、对比总结或测试。
+
+学习节奏建议：
+- 每周 4 天学习，每天 1.5 到 2 小时。
+- 每周 1 天整理笔记。
+- 每周 1 天写小程序或补测试。
+- 每周允许 1 天缓冲。
+
+每周固定动作：
+1. 阅读 CS3110 对应章节。
+2. 阅读 LPO 对应小节。
+3. 在 utop 中手敲关键代码。
+4. 用 dune 建一个小练习。
+5. 写一页 org 总结。
+6. 提炼“这和 Python / Java / Lisp / Nix 有什么关系”。
+
+* 每周复盘模板
+
+** 本周学习内容
+
+- CS3110:
+- LPO:
+- 额外资料:
+
+** 本周掌握的概念
+
+- 概念 1:
+- 概念 2:
+- 概念 3:
+
+** 本周完成的代码
+
+- 文件 / 项目:
+- 运行方式:
+- 遇到的问题:
+
+** 与 Python / Java 的对比
+
+- Python:
+- Java:
+
+** 与 Lisp / Nix 的联系
+
+- Lisp:
+- Nix:
+
+** 本周仍然不清楚的问题
+
+- 问题 1:
+- 问题 2:
+- 问题 3:
+
+** 下周调整
+
+- 需要加强:
+- 可以跳过:
+- 需要重读:
+* Week 0: 环境准备与学习仓库
+
+** 目标
+
+建立 OCaml 学习环境，保证之后所有学习都可以落到代码。
+
+** 参考内容
+
+CS3110:
+- Preface / Installing OCaml
+- Chapter 2.1 The OCaml Toplevel
+- Chapter 2.2 Compiling OCaml Programs
+
+LPO:
+- Chapter 1 The Working Environment
+- 1.1 The Compiler and the Interpreter
+- 1.2 A First OCaml Program
+- 1.3 Programming Environments
+- 1.4 Installing OCaml Libraries
+
+** 任务
+
+- 确认 opam 已安装。
+- 确认 dune、ocaml-lsp-server、ocamlformat、utop 已安装。
+- 创建学习仓库 ocaml-learning。
+- 创建第一个 dune 项目 hello_ocaml。
+- 在 utop 中测试：
+  - 整数表达式
+  - 字符串表达式
+  - 简单函数
+  - let 绑定
+- 在编辑器中确认 LSP 生效。
+
+** 产出
+
+- notes/00-environment.org
+- projects/hello_ocaml
+- 能运行：
+  - dune build
+  - dune exec ./hello_ocaml.exe
+  - utop
+
+** 检查问题
+
+- ocamlc 和 ocamlopt 有什么区别？
+- dune 解决了什么问题？
+- utop 和编译执行分别适合什么场景？
+- OCaml 程序为什么不一定有 Java 式 main 函数？
+
+* Week 1: OCaml 基础语法与表达式思维
+
+** 目标
+
+从命令式语言的“语句顺序执行”切换到 OCaml 的“表达式求值”思维。
+
+** 参考内容
+
+CS3110:
+- Chapter 2 The Basics of OCaml
+- 2.3 Expressions
+- 2.4 Functions
+- 2.6 Printing
+- 2.7 Debugging
+- 2.9 Exercises
+
+LPO:
+- 2.1 Leap Years
+- 2.2 The Monte-Carlo Method
+- 2.3 Drawing a Cardioid，若 Graphics 暂时麻烦，可只读代码结构
+
+** 任务
+
+- 学习 let 绑定。
+- 学习 let ... in ... 局部绑定。
+- 学习函数定义。
+- 学习 if 表达式。
+- 学习基本类型：
+  - int
+  - bool
+  - string
+  - char
+  - float
+  - unit
+- 理解 int 运算和 float 运算符不同：
+  - +
+  - +.
+  - *
+  - *.
+- 写 leap_year.ml。
+- 写 approx_pi.ml。
+- 用 dune 管理项目。
+
+** 产出
+
+- notes/01-basics.org
+- exercises/lpo/leap_year.ml
+- exercises/lpo/approx_pi.ml
+- comparisons/ocaml-vs-python-basics.org
+
+** 检查问题
+
+- if then else 为什么要求两个分支类型相同？
+- let () = ... 常见于什么场景？
+- unit 和 void 有什么相似与差异？
+- OCaml 为什么区分 int 运算和 float 运算？
+- Python / Java 中哪些隐式转换在 OCaml 中不会发生？
+
+* Week 2: 函数、递归、尾递归
+
+** 目标
+
+掌握 OCaml 中函数的基本模型，理解递归是函数式编程的核心循环方式。
+
+** 参考内容
+
+CS3110:
+- Chapter 2.4 Functions
+- Chapter 3 中涉及 list 的递归部分
+- Chapter 4 前的递归基础内容
+
+LPO:
+- 2.4 The Mandelbrot Set
+- 2.8 Reversing the Order of Lines in a Text
+- 2.8 Additional Information: Call Stack, Tail Calls
+
+** 任务
+
+- 学习普通函数。
+- 学习递归函数 let rec。
+- 学习互递归 and。
+- 学习函数调用优先级。
+- 理解尾递归。
+- 写 factorial 的普通递归和尾递归版本。
+- 写 Fibonacci 的普通递归、尾递归、带 memo 版本。
+- 阅读 LPO 的 tac.ml，理解递归打印 list。
+- 实验一个可能 stack overflow 的非尾递归函数。
+
+** 产出
+
+- notes/02-recursion.org
+- exercises/recursion/factorial.ml
+- exercises/recursion/fibonacci.ml
+- exercises/lpo/tac.ml
+
+** 检查问题
+
+- let rec 为什么必须显式写 rec？
+- 尾递归为什么可以避免栈增长？
+- 所有递归都适合改成尾递归吗？
+- Java / Python 中循环和 OCaml 递归的关系是什么？
+- Lisp 为什么也非常强调递归？
+
+* Week 3: List、Tuple、Record、Pattern Matching
+
+** 目标
+
+开始用“数据结构的形状”组织程序，而不是只用 class / dict / object 思维组织程序。
+
+** 参考内容
+
+CS3110:
+- Chapter 3 Data and Types
+- 3.1 Lists
+- 3.4 Records and Tuples
+- 3.5 Advanced Pattern Matching
+- 3.7 Options
+- 3.9 Algebraic Data Types
+
+LPO:
+- 2.6 Drawing a Curve
+- 2.8 Reversing the Order of Lines in a Text
+- 2.12 Playing a Musical Score
+
+** 任务
+
+- 学习 list 构造：
+  - []
+  - ::
+  - [a; b; c]
+- 学习 tuple。
+- 学习 record。
+- 学习 pattern matching。
+- 学习 wildcard pattern。
+- 学习 option。
+- 重写一组 list 函数：
+  - length
+  - sum
+  - append
+  - rev
+  - nth_opt
+- 用 record 表示学生、课程、日期等简单数据。
+- 用 variant 表示音乐符号或表达式 AST。
+
+** 产出
+
+- notes/03-data-and-types.org
+- projects/list_utils
+- exercises/adt/music_score.ml
+- exercises/adt/simple_expr.ml
+
+** 检查问题
+
+- tuple 和 record 分别适合什么情况？
+- pattern matching 为什么适合处理 list？
+- option 相比 null 有什么优势？
+- ADT 和 Java enum / sealed class 有什么关系？
+- Python dataclass 能模拟 OCaml record 吗？
+
+* Week 4: Variant、Algebraic Data Types、树结构
+
+** 目标
+
+理解代数数据类型是函数式编程中进行领域建模的核心工具。
+
+** 参考内容
+
+CS3110:
+- 3.2 Variants
+- 3.9 Algebraic Data Types
+- 3.11 Example: Trees
+- 3.12 Example: Natural Numbers
+- 3.14 Exercises
+
+LPO:
+- 2.12 Playing a Musical Score
+- 2.13 Quadtrees
+- 2.14 Solving the N-Queens Problem，先阅读思想，不要求完全掌握
+
+** 任务
+
+- 用 variant 表示：
+  - 颜色
+  - 命令
+  - 表达式
+  - JSON-like value
+  - 二叉树
+- 实现 tree_size。
+- 实现 tree_height。
+- 实现 tree_map。
+- 实现 tree_fold。
+- 阅读 quadtree 的表示方式。
+- 写一个简单 expression evaluator：
+  - Int
+  - Bool
+  - Add
+  - Mul
+  - Eq
+  - If
+
+** 产出
+
+- notes/04-adt.org
+- exercises/tree/binary_tree.ml
+- exercises/tree/quadtree.ml
+- projects/mini_expr_v1
+
+** 检查问题
+
+- 什么是 constructor？
+- constructor 带参数和不带参数有什么区别？
+- ADT 为什么适合表达 AST？
+- pattern matching 如何保证情况覆盖？
+- Nix 表达式树和 AST 有什么联系？
+
+* Week 5: 高阶函数、Map、Filter、Fold
+
+** 目标
+
+把“遍历 + 操作”的重复模式抽象成高阶函数。
+
+** 参考内容
+
+CS3110:
+- Chapter 4 Higher-Order Programming
+- 4.1 Higher-Order Functions
+- 4.2 Map
+- 4.3 Filter
+- 4.4 Fold
+- 4.5 Beyond Lists
+- 4.6 Pipelining
+- 4.7 Currying
+
+LPO:
+- 2.9 Converting Integers from an Arbitrary Base
+- 2.9 Additional Information: Polymorphism, fold_left, fold_right
+
+** 任务
+
+- 学习匿名函数 fun x -> ...
+- 学习函数作为参数。
+- 学习函数作为返回值。
+- 学习 map / filter / fold。
+- 学习 fold_left / fold_right。
+- 学习 pipeline operator。
+- 学习 currying。
+- 学习 partial application。
+- 把 Week 3 的 list_utils 用 fold 改写一部分。
+- 写 radix_converter。
+
+** 产出
+
+- notes/05-higher-order.org
+- exercises/higher_order/fold_examples.ml
+- projects/radix_converter
+- comparisons/ocaml-hof-vs-python.org
+
+** 检查问题
+
+- map 抽象了什么模式？
+- filter 抽象了什么模式？
+- fold 为什么强大？
+- fold_left 为什么通常更适合大 list？
+- 柯里化为什么能提高函数组合能力？
+
+* Week 6: 可变性、数组、循环、异常
+
+** 目标
+
+理解 OCaml 中命令式特性的边界：什么时候使用可变性，什么时候坚持不可变建模。
+
+** 参考内容
+
+CS3110:
+- Chapter 6 Mutability
+- 6.1 Refs
+- 6.2 Mutable Fields
+- 6.3 Arrays and Loops
+
+LPO:
+- 2.2 The Monte-Carlo Method
+- 2.5 Sieve of Eratosthenes
+- 2.7 Copying a File
+- Chapter 4 Arrays
+- 4.1 Resizeable Arrays
+- 4.2 Bit Vectors
+- 4.4 Persistent Arrays
+
+** 任务
+
+- 学习 ref。
+- 学习 ! 和 :=。
+- 学习 mutable record field。
+- 学习 array。
+- 学习 for / while。
+- 学习 exception。
+- 写 sieve.ml。
+- 写 copy_file.ml。
+- 对比 list 和 array 的适用场景。
+- 记录 OCaml 中 side effect 的类型表现。
+
+** 产出
+
+- notes/06-mutability.org
+- exercises/lpo/sieve.ml
+- exercises/lpo/copy_file.ml
+- comparisons/list-vs-array.org
+
+** 检查问题
+
+- ref 本质上是什么？
+- array 和 list 在内存与复杂度上有什么差异？
+- 为什么 side effect 通常返回 unit？
+- 异常和 option / result 的使用边界是什么？
+- 在 Python / Java 里哪些代码迁移到 OCaml 时应当避免过度可变？
+
+* Week 7: 模块、签名、封装、编译单元
+
+** 目标
+
+掌握 OCaml 的程序组织方式，为之后理解大型函数式程序和 Nix module 思想打基础。
+
+** 参考内容
+
+CS3110:
+- Chapter 5 Modular Programming
+- 5.1 Module Systems
+- 5.2 Modules
+- 5.3 Modules and the Toplevel
+- 5.4 Encapsulation
+- 5.5 Compilation Units
+- 5.7 Module Type Constraints
+- 5.8 Includes
+
+LPO:
+- 2.10 Breakout without Bricks
+- Additional Information: Separate Compilation and Linking
+- Interfaces
+- Modules
+
+** 任务
+
+- 学习 module。
+- 学习 module type。
+- 学习 .ml 和 .mli。
+- 学习 compilation unit。
+- 学习 open。
+- 学习 include。
+- 写 Stack 模块：
+  - stack.mli
+  - stack.ml
+- 写 Queue 模块。
+- 为模块隐藏内部表示。
+- 用 dune 编译多文件项目。
+
+** 产出
+
+- notes/07-modules.org
+- projects/stack_module
+- projects/queue_module
+- comparisons/ocaml-module-vs-java-package.org
+
+** 检查问题
+
+- .mli 文件有什么作用？
+- abstract type 如何隐藏实现？
+- module type 和 Java interface 有什么相似与差异？
+- compilation unit 和 module 的关系是什么？
+- 为什么封装能提高程序可靠性？
+
+* Week 8: 函子、抽象类型、Set/Map
+
+** 目标
+
+理解 OCaml 模块系统最有特色的部分：通过模块参数化模块。
+
+** 参考内容
+
+CS3110:
+- 5.4 Encapsulation
+- 5.6 Functional Data Structures
+- 5.9 Functors
+- 5.11 Exercises
+
+LPO:
+- 2.11 Logo Turtle
+- 2.14 Solving the N-Queens Problem
+- Chapter 5 Sets and Dictionaries
+- 5.1 Binary Search Trees
+- 5.2 AVL Trees
+- 5.3 Hash Tables
+- 5.4 Prefix Trees
+- 5.5 Patricia Trees
+
+** 任务
+
+- 学习 abstract type。
+- 学习 private type。
+- 学习 functor。
+- 使用 Set.Make。
+- 使用 Map.Make。
+- 实现一个 OrderedType。
+- 写一个简单 frequency_counter。
+- 阅读 LPO 的 Logo Turtle，理解 functor 如何参数化角度表示。
+- 阅读 N-Queens 中 Set.Make 的使用。
+
+** 产出
+
+- notes/08-functors.org
+- exercises/modules/set_map_demo.ml
+- projects/frequency_counter
+- exercises/lpo/n_queens_reading_notes.org
+
+** 检查问题
+
+- functor 和普通函数的类比在哪里？
+- Set.Make 为什么需要一个带 compare 的模块？
+- abstract type 如何维护不变量？
+- OCaml 的模块参数化和 Java 泛型有什么差异？
+- functor 对大型程序复用有什么价值？
+
+* Week 9: 函数式数据结构、持久化、共享
+
+** 目标
+
+真正理解函数式编程中“不可变但高效”的原因。
+
+** 参考内容
+
+CS3110:
+- 5.6 Functional Data Structures
+- Chapter 9 Data Structures
+- 9.1 Hash Tables
+- 9.2 Amortized Analysis
+- 9.3 Red-Black Trees
+- 9.5 Memoization
+- 9.6 Persistent Arrays
+- 9.7 Two-Three Trees
+
+LPO:
+- 2.14 Solving the N-Queens Problem
+- Chapter 6 Queues
+- 6.1 Imperative Queues
+- 6.2 Persistent Queues
+- 6.3 Imperative Priority Queues
+- 6.4 Persistent Priority Queues
+- Chapter 9 Zippers
+
+** 任务
+
+- 学习 persistent data structure。
+- 学习 sharing。
+- 学习摊还分析直觉。
+- 实现 persistent stack。
+- 实现 persistent queue。
+- 阅读 zippers。
+- 用图示记录 list append、cons、sharing。
+- 对比 Python list、Java ArrayList、OCaml list。
+
+** 产出
+
+- notes/09-persistence.org
+- projects/persistent_stack
+- projects/persistent_queue
+- notes/zipper_notes.org
+- comparisons/persistence-vs-mutation.org
+
+** 检查问题
+
+- 为什么不可变数据结构仍然可以高效？
+- sharing 避免了什么复制？
+- list 适合什么操作？
+- queue 如何用两个 list 实现？
+- zippers 解决了什么问题？
+
+* Week 10: 正确性、测试、规格、证明
+
+** 目标
+
+把“能运行”提升为“能说明为什么正确”。
+
+** 参考内容
+
+CS3110:
+- Chapter 8 Correctness
+- 8.1 Specifications
+- 8.2 Function Documentation
+- 8.3 Module Documentation
+- 8.4 Testing and Debugging
+- 8.5 Black-box and Glass-box Testing
+- 8.6 Randomized Testing with QCheck
+- 8.7 Proving Correctness
+- 8.8 Structural Induction
+- 8.9 Equational Specification
+
+LPO:
+- 每章 Exercises 中选择和当前项目相关的题目
+- Chapter 3 OCaml Concepts: A Closer Look
+- 3.3 Analyzing the Execution Time of a Program
+
+** 任务
+
+- 学习 specification。
+- 给已有函数写文档。
+- 使用 OUnit 测试 list_utils。
+- 使用 QCheck 做简单性质测试。
+- 为 append / rev 写性质。
+- 学习结构归纳证明。
+- 为 persistent_queue 写测试。
+
+** 产出
+
+- notes/10-correctness.org
+- tests/list_utils_test.ml
+- tests/queue_test.ml
+- tests/qcheck_demo.ml
+- notes/structural_induction.org
+
+** 检查问题
+
+- 测试和证明分别解决什么问题？
+- specification 应该描述实现细节吗？
+- black-box testing 和 glass-box testing 各适合什么场景？
+- 结构归纳为什么适合 list / tree？
+- 函数式代码为什么更适合等式推理？
+
+* Week 11: 解释器、求值模型、类型检查
+
+** 目标
+
+进入“语言如何运行”的层面，为 Lisp / Nix 的表达式求值打基础。
+
+** 参考内容
+
+CS3110:
+- Chapter 10 Interpreters
+- 10.1 Example: Calculator
+- 10.2 Parsing
+- 10.3 Substitution Model
+- 10.4 Environment Model
+- 10.5 Type Checking
+- 10.6 Type Inference
+
+LPO:
+- Chapter 3 OCaml Concepts: A Closer Look
+- 3.1 Type-Checking Algorithm
+- 3.2 Runtime Model
+
+** 任务
+
+- 定义表达式 AST。
+- 实现 calculator evaluator。
+- 实现带变量的 environment。
+- 实现 let。
+- 实现 if。
+- 实现简单 type_check。
+- 记录 substitution model 和 environment model 的差异。
+- 对照 Nix：
+  - attrset
+  - let expression
+  - lazy evaluation，先做概念记录，不要求实现
+
+** 产出
+
+- notes/11-interpreters.org
+- projects/mini_interpreter
+- notes/environment_model.org
+- notes/type_checking_intro.org
+- comparisons/ocaml-and-nix-evaluation.org
+
+** 检查问题
+
+- AST 和源代码是什么关系？
+- eval 函数的输入和输出是什么？
+- environment 如何表示变量绑定？
+- type_check 为什么可以在运行前发现错误？
+- 解释器学习如何帮助理解 Lisp 宏和 Nix 配置？
+
+* Week 12: 综合复盘与迁移总结
+
+** 目标
+
+把 OCaml 学习沉淀为可复用的编程思想，并总结到 Python / Java / Lisp / NixOS 的迁移路径。
+
+** 参考内容
+
+CS3110:
+- 回顾 Chapter 2 到 Chapter 10
+- 选择性阅读 Curry-Howard Correspondence
+
+LPO:
+- 回顾 Part I
+- 选择性阅读 Part II / III 中自己薄弱的数据结构章节
+- Chapter 11 Dynamic Programming and Memoization
+- Chapter 12 Sorting Algorithms
+- Chapter 13 Graph Algorithms
+
+** 任务
+
+- 整理全部笔记。
+- 把所有小项目补充 README。
+- 给每个项目写“函数式思想体现在哪里”。
+- 选择一个最终项目完善：
+  - mini_interpreter
+  - persistent_queue
+  - n_queens
+  - radix_converter
+- 写四份迁移总结：
+  - OCaml 对 Python 编程的启发
+  - OCaml 对 Java 编程的启发
+  - OCaml 对 Lisp 学习的帮助
+  - OCaml 对 NixOS 配置理解的帮助
+
+** 产出
+
+- notes/12-summary.org
+- comparisons/ocaml-vs-python.org
+- comparisons/ocaml-vs-java.org
+- comparisons/ocaml-and-lisp.org
+- comparisons/ocaml-and-nix.org
+- 一个整理后的 final_project
+
+** 检查问题
+
+- 我现在如何解释函数式编程？
+- 我如何解释不可变数据的价值？
+- 我如何解释类型系统对程序设计的帮助？
+- 我如何解释 OCaml 模块系统？
+- 我之后学习 Lisp / NixOS 时应当重点关注哪些概念？
+

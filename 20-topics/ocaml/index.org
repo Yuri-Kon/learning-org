@@ -1,0 +1,420 @@
+#+title: OCaml 学习总览
+#+startup: overview
+#+tags: ocaml functional_programming
+* OCaml 学习定位
+
+学习 OCaml 不是为了短期求职使用 OCaml，而是通过一门偏函数式、强类型、带有成熟模块系统的语言，系统理解函数式编程思想，并反过来扩展我对其他语言的理解。
+
+OCaml 在我这条路径中的作用：
+
+1. 帮助我从命令式编程思维转向表达式式、类型驱动、数据建模驱动的思想
+2. 帮助我理解不可变编程、递归、模式匹配、高阶函数、柯里化、代数数据类型
+3. 帮助我理解模块、签名、抽象类型、函子等大型程序组织方式
+4. 帮助我理解函数式数据结构、持久化、结构共享、尾递归、求值模型
+5. 为之后学习 Lisp、Emacs Lisp、Scheme、Nix语言提供准备
+6. 让Python / Java 中的函数式写法、不可变建模、类型抽象、组合式程序设计变得更自然
+* 主参考资料
+** 主线教材：CS3110
+
+用途：
+- 系统理解函数式编程思想
+- 理解 OCaml 的语言语义
+- 理解数据与类型、模块系统、高阶函数、可变性、正确性、解释器、类型推导
+- 建立 “程序如何被语言解释”的视角
+** 辅助教材：Learn Programming with OCaml
+用途：
+- 用具体程序把 OCaml 写熟
+- 通过算法和数据结构理解 OCaml 的表达方式
+- 对照 Python / Java 已有知识，重新理解数组、列表、树、集合、字典、图、动态规划、排序等概念
+- 训练把 “算法思想” 写成 OCaml 风格代码
+
+
+重点章节：
+- Part I: Programming with OCaml
+  - Chapter 1: The Working Environment
+  - Chapter 2: First Steps with OCaml
+  - Chapter 3: OCaml Concepts: A Closer Look
+- Part II: Data Structures
+  - Chapter 4: Arrays
+  - Chapter 5: Sets and Dictionaries
+  - Chapter 6: Queues
+  - Chapter 7: Graphs
+  - Chapter 8: Disjoint Sets
+  - Chapter 9: Zippers
+- Part III: Algorithmic Techniques and Applications
+  - Chapter 10: Arithmetic
+  - Chapter 11: Dynamic Programming and Memoization
+  - Chapter 12: Sorting Algorithms
+  - Chapter 13: Graph Algorithms
+* 学习总目标
+** 第一层：会写 OCaml
+完成后应当能够：
+- 使用 opam / dune / utop / ocaml-lsp-server 搭建项目
+- 看懂 ~.ml~ / ~.mli~ / ~dune~ 等文件
+- 使用 ~let~ / ~let in~ / ~function~ / ~match~ / ~type~ / ~module~ / ~module type~ / ~functor~
+- 熟悉 ~list~ / ~array~ / ~option~ / ~result~ / ~record~ / ~variant~ / ~tuple~
+- 能写递归、尾递归、 ~map~ / ~fliter~ / ~fold~ 风格程序
+- 能写简单命令行程序
+- 能用 dune 创建、编译、运行项目
+- 能写简单单元测试
+** 第二层：理解函数式编程思想
+完成后应当能解释：
+- 为什么函数式语言强调表达式
+- 为什么不可变数据有助于推理
+- 什么是递归和尾递归
+- 什么是模式匹配，为什么它比 ~if-esls~ 更适合结构化数据
+- 什么是代数数据类型
+- 什么是高阶函数
+- 什么是柯里化和部分应用
+- 什么是 ~fold~ ，以及为什么 ~fold~ 可以表达很多递归模式
+- 什么是持久化数据结构
+- 什么是结构共享
+- 什么是抽象类型、模块签名和函子
+- 什么是类型推导
+** 第三层：迁移到 Lisp / NixOS / Python / Java
+完成后应当能够建立以下联系：
+- OCaml 的 list / recursion / pattern matching 与 Lisp 的 list processing。
+- OCaml 的 expression-oriented style 与 Nix 的表达式式配置。
+- OCaml 的 immutability / persistence 与 Nix store、derivation、声明式配置。
+- OCaml 的 module / signature / functor 与 Java interface / generic / package 的差异。
+- OCaml 的 higher-order function 与 Python 中 map/filter/reduce、decorator、callback 的联系。
+- OCaml 的 ADT 与 Java sealed class / enum / record 的联系。
+- OCaml 的 type inference 与 Python 动态类型、Java 显式类型之间的差异。
+
+
+
+* 学习路线总览
+
+** Phase 0: 环境与最小项目
+
+目标：
+- 装好 OCaml 工具链。
+- 能运行 utop。
+- 能用 dune 创建项目。
+- 能在编辑器中获得 LSP 支持。
+
+参考：
+- CS3110 Chapter 2: The Basics of OCaml
+- LPO Chapter 1: The Working Environment
+
+产出：
+- 一个 ocaml-learning 仓库。
+- 一个 hello_ocaml dune 项目。
+- 一份环境配置笔记。
+
+** Phase 1: 表达式、函数、类型基础
+
+目标：
+- 适应 OCaml 的表达式式语法。
+- 理解 let、函数、类型推导、基本类型。
+- 理解 if 是表达式。
+
+参考：
+- CS3110 Chapter 2
+- LPO 2.1 Leap Years
+- LPO 2.2 Monte-Carlo Method
+- LPO 2.3 Drawing a Cardioid
+
+产出：
+- leap_year.ml
+- approx_pi.ml
+- 若不方便使用 Graphics，可以改写为纯命令行版本。
+
+** Phase 2: 数据建模：list / tuple / record / variant
+
+目标：
+- 理解函数式语言里“先设计数据，再写函数”的风格。
+- 掌握 tuple、record、variant、option、list、pattern matching。
+- 能写结构化递归。
+
+参考：
+- CS3110 Chapter 3: Data and Types
+- LPO 2.6 Drawing a Curve
+- LPO 2.8 Reversing the Order of Lines in a Text
+- LPO 2.12 Playing a Musical Score
+- LPO 2.13 Quadtrees
+
+产出：
+- list_utils.ml
+- simple_ast.ml
+- music_score.ml
+- quadtree.ml
+
+** Phase 3: 高阶函数与递归模式
+
+目标：
+- 掌握 map / filter / fold。
+- 理解函数作为值。
+- 理解匿名函数、部分应用、柯里化。
+- 能把普通递归改写成 fold。
+- 能区分 fold_left / fold_right。
+
+参考：
+- CS3110 Chapter 4: Higher-Order Programming
+- LPO 2.9 Converting Integers from an Arbitrary Base
+- LPO 2.8 中关于 tail call 的部分
+
+产出：
+- higher_order_notes.org
+- fold_exercises.ml
+- radix_converter.ml
+
+** Phase 4: 可变性与命令式特性
+
+目标：
+- 理解 OCaml 支持命令式写法，但默认鼓励不可变建模。
+- 掌握 ref、mutable record fields、array、for、while。
+- 理解 side effect、unit、evaluation order。
+
+参考：
+- CS3110 Chapter 6: Mutability
+- LPO 2.2 Monte-Carlo Method
+- LPO 2.5 Sieve of Eratosthenes
+- LPO Chapter 4 Arrays
+
+产出：
+- sieve.ml
+- mutable_vs_immutable.org
+- array_exercises.ml
+
+** Phase 5: 模块系统与程序组织
+
+目标：
+- 掌握 module、module type、.ml、.mli、compilation unit。
+- 理解封装、抽象类型、私有类型。
+- 初步理解 functor。
+- 能用 dune 组织多文件项目。
+
+参考：
+- CS3110 Chapter 5: Modular Programming
+- LPO 2.10 Breakout without Bricks
+- LPO 2.11 Logo Turtle
+- LPO Chapter 5 Sets and Dictionaries
+
+产出：
+- stack.mli / stack.ml
+- set_demo.ml
+- turtle_functor.ml
+- module_system_notes.org
+
+** Phase 6: 函数式数据结构与持久化
+
+目标：
+- 理解 persistent data structure。
+- 理解 sharing。
+- 理解不可变 list 为什么适合头部插入。
+- 理解树、集合、字典、队列、优先队列。
+- 能对照 Java/Python 的可变容器理解差异。
+
+参考：
+- CS3110 Chapter 5.6 Functional Data Structures
+- CS3110 Chapter 9 Data Structures
+- LPO Chapter 5 Sets and Dictionaries
+- LPO Chapter 6 Queues
+- LPO Chapter 9 Zippers
+- LPO 2.14 N-Queens Problem
+
+产出：
+- persistent_stack.ml
+- persistent_queue.ml
+- bst.ml
+- zipper_notes.org
+- n_queens.ml
+
+** Phase 7: 正确性、测试与规格
+
+目标：
+- 理解 specification。
+- 使用 OUnit / QCheck 做测试。
+- 理解 black-box / glass-box testing。
+- 初步理解结构归纳证明和等式推理。
+
+参考：
+- CS3110 Chapter 8: Correctness
+- LPO 中每章 exercises 选择性完成
+
+产出：
+- tests/
+- spec_notes.org
+- qcheck_demo.ml
+- 为前面写过的数据结构补测试。
+
+** Phase 8: 解释器、求值模型与类型推导
+
+目标：
+- 理解语言实现的基本结构。
+- 理解 AST、parser、substitution model、environment model。
+- 理解 type checking 和 type inference 的基本思想。
+- 为 Lisp / Nix 表达式求值建立基础。
+
+参考：
+- CS3110 Chapter 10: Interpreters
+- LPO Chapter 3: OCaml Concepts: A Closer Look
+
+产出：
+- mini_expr_interpreter.ml
+- env_model_notes.org
+- type_inference_notes.org
+
+* 推荐仓库结构
+
+#+begin_src text
+ocaml-learning/
+├── index.org
+├── plan.org
+├── notes/
+│   ├── 01-basics.org
+│   ├── 02-data-and-types.org
+│   ├── 03-higher-order.org
+│   ├── 04-modules.org
+│   ├── 05-mutability.org
+│   ├── 06-persistence.org
+│   ├── 07-correctness.org
+│   └── 08-interpreters.org
+├── exercises/
+│   ├── cs3110/
+│   └── lpo/
+├── projects/
+│   ├── hello_ocaml/
+│   ├── list_utils/
+│   ├── radix_converter/
+│   ├── persistent_queue/
+│   ├── mini_interpreter/
+│   └── n_queens/
+└── comparisons/
+    ├── ocaml-vs-python.org
+    ├── ocaml-vs-java.org
+    ├── ocaml-and-lisp.org
+    └── ocaml-and-nix.org
+#+end_src
+
+* 每阶段检查问题
+
+** Basics
+
+- OCaml 中 if 为什么必须有统一的返回类型？
+- let x = ... 和 let x = ... in ... 有什么区别？
+- unit 类型有什么意义？
+- 为什么函数调用不用括号？
+- int 和 float 为什么使用不同运算符？
+
+** Data and Types
+
+- tuple 和 record 的差异是什么？
+- variant 和 enum 的差异是什么？
+- option 相比 null 的优势是什么？
+- pattern matching 相比 if-else 的优势是什么？
+- list 为什么天然适合递归？
+
+** Higher-Order Programming
+
+- 什么是一等函数？
+- 什么是高阶函数？
+- map / filter / fold 分别抽象了什么递归模式？
+- fold_left 和 fold_right 的求值方向、栈使用有什么区别？
+- 柯里化为什么有助于组合？
+
+** Modular Programming
+
+- module 和 compilation unit 的关系是什么？
+- .mli 文件解决了什么问题？
+- abstract type 的价值是什么？
+- functor 和普通函数有什么相似与不同？
+- OCaml 模块系统和 Java interface 有什么差异？
+
+** Mutability
+
+- ref 是什么？
+- mutable field 和 ref 的关系是什么？
+- array 和 list 的使用场景有什么不同？
+- side effect 对程序推理有什么影响？
+- 为什么函数式语言依然需要可变性？
+
+** Persistence
+
+- 什么是 persistent data structure？
+- 什么是 sharing？
+- 为什么向 list 头部添加元素是 O(1)？
+- 为什么向 list 尾部添加元素通常要复制前面的结构？
+- 回溯问题为什么适合持久化数据结构？
+
+** Correctness
+
+- specification 和 implementation 的关系是什么？
+- black-box testing 和 glass-box testing 有什么区别？
+- randomized testing 适合什么场景？
+- 结构归纳为什么适合证明递归函数？
+- 等式推理依赖什么前提？
+
+** Interpreters
+
+- AST 是什么？
+- substitution model 如何解释变量？
+- environment model 如何解释变量？
+- type checking 和 type inference 有什么区别？
+- 解释器学习如何帮助理解 Lisp / Nix？
+
+* 最终项目建议
+
+** Project 1: list-utils
+
+目标：
+- 重新实现 List 中常见函数。
+- 练习递归、尾递归、高阶函数。
+
+内容：
+- length
+- append
+- rev
+- map
+- filter
+- fold_left
+- fold_right
+- find
+- exists
+- for_all
+
+** Project 2: persistent-queue
+
+目标：
+- 理解函数式队列。
+- 理解摊还分析的直觉。
+
+内容：
+- empty
+- is_empty
+- enqueue
+- dequeue
+- peek
+- to_list
+
+** Project 3: mini-radix-converter
+
+目标：
+- 练习字符串、列表、高阶函数、错误处理。
+
+内容：
+- 支持 2 到 36 进制。
+- 使用 option / result 处理错误。
+- 写测试。
+
+** Project 4: mini-interpreter
+
+目标：
+- 为 Lisp / Nix 语言理解做准备。
+
+内容：
+- AST 表示整数、布尔、变量、let、if、二元运算。
+- 实现 eval。
+- 实现 environment。
+- 可选：实现 type_check。
+
+** Project 5: n-queens
+
+目标：
+- 理解回溯、集合、持久化数据结构。
+
+内容：
+- 统计 N 皇后解数。
+- 输出一个解。
+- 对照命令式版本，分析状态管理差异。
