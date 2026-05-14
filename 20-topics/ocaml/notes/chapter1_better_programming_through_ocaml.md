@@ -1,3 +1,14 @@
+---
+title: OCaml 第一章：为什么要通过 OCaml 学习编程
+created: 2026-05-13
+course: CS3110
+tags:
+  - ocaml
+  - beginning
+  - functional-programming
+aliases:
+  - Better Programming Through OCaml
+---
 # 为什么要通过 OCaml 学习函数式编程
 
 这一阶段核心是建立三个判断标准：OCaml 中程序主要由表达式构成；函数是一等值；不可变性是默认思维。CS3110 把函数式语言的核心抽象归结为数序而函数：同样输入得到同样输出，函数无状态，并且函数可以作为输入和输出被传递。它还指出，命令式语言依赖可变状态和副作用，而可变性会破坏引用透明性，使程序更难推理。
