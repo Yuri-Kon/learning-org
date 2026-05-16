@@ -1,6 +1,7 @@
 ---
 title: OCaml 第二章：OCaml 基础
 created: 2026-05-14
+updated: 2026-05-16
 course: CS3110
 topics:
   - ocaml
@@ -47,9 +48,9 @@ utop
 
 ## expression
 
-OCaml 语法中最主要的构成单位是表达式；命令式语言的程序主要由 commands 构成，函数式语言的程序主要由 expressions 构成。表达式的核心任务是被求值为 value。value 是一种 **“已经没有剩余计算要做的表达式”** 。所以所有 **值** 都是表达式。但不是所有表达式都是值。比如 `2`, `true` , `yay!` 是值；`1 + 2` 是表达式，但它还需要计算，计算结果才是值 `3`。
+OCaml 语法中最主要的构成单位是表达式；命令式语言的程序主要由 commands 构成，函数式语言的程序主要由 expressions 构成。表达式的核心任务是被求值为 value。value 是一种 **“已经没有剩余计算要做的表达式”** 。所以所有 **值** 都是表达式。但不是所有表达式都是值。比如 `2`, `true`, `yay!` 是值；`1 + 2` 是表达式，但它还需要计算，计算结果才是值 `3`。
 
-这个区别非常关键。之前熟悉的 Python和Java 往往让我们把程序理解成 “一步步执行命令”，而 OCaml 会训练我们把程序理解成 “表达式如何求值”：
+这个区别非常关键。之前熟悉的 Python 和 Java 往往让我们把程序理解成 “一步步执行命令”，而 OCaml 会训练我们把程序理解成 “表达式如何求值”：
 
 ```ocaml
 let x = 1 in
@@ -150,6 +151,61 @@ not true;;
 > [!IMPORTANT]
 > 这里，`&&` 和 `||` 是短路运算。也就是说， `false && e` 不会继续求值 `e` ， `true || e` 也不会继续求值 `e` 。这和 Java , Python 中的短路逻辑类似。
 
+#### 关于逻辑运算符
+
+可以这样理解， OCaml 中 `||` 和 `&&` 是 `bool` 类型专用的短路逻辑运算符，它们的左右操作都必须是 `bool` ，其结果也一定是 `bool` 。
+
+我们可以把 `||` 看成一个普通函数，只是写法特殊：
+
+```ocaml
+(||) true false
+```
+
+它等价于：
+
+```ocaml
+true || false
+```
+而由于它的类型是：
+
+```ocaml
+bool -> bool -> bool
+```
+
+因此，它一定要求第一个参数是 `bool`, 第二个参数也是 `bool` 。
+
+比如：
+
+```ocaml
+3 > 1 && 4 < 5
+n = 0 || odd (n - 1)
+```
+
+这些都可以，因为左右两边的值都是 `bool`
+
+但是下面这些在 Java 、 Python 中常见的不可以：
+
+```ocaml
+1 || 2
+"hello" && "world"
+[] || [1; 2; 3]
+```
+
+OCaml 不会像 C、Python、JavaScript 那样把 `0` 、空字符串、空列表自动当作真假值。它要求我们显式写出布尔条件。
+
+比如不能写：`if xs then...` ，如果 `xs` 是列表，则应该写：
+
+```ocaml
+if xs <> [] then ...
+```
+或者更常见地使用模式匹配：
+
+```ocaml
+match xs with
+| [] -> ...
+| _ :: _ -> ...
+```
+
 ### `char` 和 `string`
 
 字符 `char` 用单引号：
@@ -238,7 +294,7 @@ let () = assert (square 0 = 0)
 let () = assert (square -2 = 4)
 ```
 
-这里的 `let () = ...` ，是因为 `assert (..)` 成功是返回 `()` ，也就是 `unit` 值；`let () =` 表示 “我知道右边应该是 unit，并且我不需要给它命名”。这在 OCaml 中很常见，尤其是测试、打印、初始化这类有副作用的代码。
+这里的 `let () = ...` ，是因为 `assert (..)` 成功是返回 `()` ，也就是 `unit` 值；`let () =` 表示 “我知道右边应该是 unit ，并且我不需要给它命名”。这在 OCaml 中很常见，尤其是测试、打印、初始化这类有副作用的代码。
 
 ## `if`
 
@@ -260,6 +316,8 @@ if 3 + 5 > 2 then "yay!" else "boo!";;
 
 这里的 `if 'a' = 'b' then 1 else 2` 就是一个表达式。它在这里的值是2，所以整个表达式的值是 `6`。
 
+### `if` 的语义
+
 `if` 的动态语义是：先求值 guard ，也就是 `if` 后面的条件。如果 guard 是 `true` ，求值 `then` 分支。如果 guard 是 `false` ，求值 `else` 分支。没有被选中的分支不会求值。 CS3110 把这种描述为 evaluation rules。
 
 `if` 的静态语义是：guard 必须是 `bool`；`then` 分支和 `else` 分支必须有同一个类型 `t`；整个 `if` 表达式的类型就是这里的 `t` 。CS3110 把这种描述为 typing rules。
@@ -276,13 +334,15 @@ if true then 1 else 2;;
 if true then 1 else "no";;
 ```
 
-因为 `then` 分支是 `int` ，`else`  分支是 `string` 。编译器不会说 “反正 guard 是 `true` ，所以 `else` 不会用到”。类型检查发生在编译期，它不按照运行时路径做这种特殊推理。教材也提醒，编译期类型检查时通常不知道 guard 运行时会是什么值。
+因为 `then` 分支是 `int` ，`else` 分支是 `string` 。编译器不会说 “反正 guard 是 `true` ，所以 `else` 不会用到”。类型检查发生在编译期，它不按照运行时路径做这种特殊推理。教材也提醒，编译期类型检查时通常不知道 guard 运行时会是什么值。
 
 这就是静态语义和动态语义的区别。动态语义回答“运行时怎么求值”；静态语义回答 “编译期怎么判断这个程序是否合法”。 CS3110 第二章开头已经说，语义分为 dynamic semantics 和 static semantics ，类型检查是静态语义中最重要的一种。
 
 ## `let`
 
 这部分非常重要。 `let` 是 OCaml 程序组织的基础。
+
+### `let definition` 和 `let expression`
 
 比如：
 
@@ -336,3 +396,186 @@ let x = 1 + 4 in x * 3
 ```
 
 这里是替换模型。是 CS3110 后续理解函数调用、作用域和解释器的核心。现在我们不必把它形式化，但要形成直觉： `let` 是把一个表达式的值绑定给名字，然后在 body 中使用这个名字。
+
+### `let` 的语义
+
+`let` 的静态语义是：如果 `e1: t1` ，并且在假设 `x: t1` 的情况下 `e2: t2` ，那么整个 `let x = e1 in e2` 的类型就是 `t2`
+
+比如：
+
+```ocaml
+let x = 1 + 2 in x * 3
+```
+
+`1 + 4 : int` ，所以 `x : int` 。在这个假设下，`x * 3 : int` ，因此整个表达式的类型是 `int` 。
+
+这里可以和 Nix 做一个很有意思的对照。Nix 官方文档把 “Names and values” 和 “functions” 作为语言基础内容。Nix 中的：
+
+```nix
+let
+  x = 42;
+int
+  x + 1
+```
+
+和 OCaml 中的:
+
+```ocaml
+lex x = 42 in x + 1
+```
+
+都体现了函数式语言的 “名字绑定 + 表达式求值” 的思维。区别在于： OCaml 是静态类型语言， Nix 是动态类型语言；OCaml 的类型错误很多在编译期时发现， Nix 的表达式错误通常在求值时暴露。
+
+## 函数
+
+> [!NOTE]
+> Methods and functions are not same idea.
+
+方法和函数不是同一类概念。方法是对象的组成部分，通常有隐式接收者，比如 Java 的 `this` 或 Python 的 `self` ；OCaml 这里讲的是函数，它们不是对象的组成部分，也没有隐式接收者。对于有面向对象背景的人，要小心这个术语差异。
+
+在 Java 中我们经常写：
+
+```Java
+account.deposit(100);
+```
+
+这里 `deposit` 是方法（method），它隐含 `account` 这个 receiver 。
+
+在 OCaml 我们写：
+
+```ocaml
+let deposit balance amount = balance + amount
+```
+
+这里 `deposit` 是函数，它显式接接收 `balance` 和 `amount` ，返回新的值。没有隐藏的 `this` ，也不会默认修改某个对象内部状态。
+
+### 递归与非递归函数
+
+非递归函数定义：
+
+```ocaml
+let f x = ...
+```
+
+递归函数定义：
+
+```ocaml
+let rec f x = ...
+```
+
+> [!NOTE]
+> 这里有些意外的是， OCaml 需要显式写出 `rec` 才能定义递归函数。而许多语言都可以默认调用自身。
+
+经典来自就是阶乘：
+
+```ocaml
+(** [fact n] is [n!].
+    Requires: [n >= 0]. *)
+let rec fact n = 
+  if n = 0 then 1 else n * fact(n - 1)
+```
+
+这里文档注释中的 `Requires` 是前置条件：调用者需要保证 `n >= 0` 。 `[fact n] is [n!]` 是描述的后置条件，也就是函数结果的意义。这里，通过 `rec` 来定义递归函数。
+
+再比如幂函数：
+
+```
+(** [pow x y] is [x] to the power of [y].
+    Requires: [y >= 0]. *)
+let rec pow x y =
+  if y = 0 then 1 else x * pow x (y - 1)
+```
+
+这里没有写任何类型，但是 OCaml 能推断出：
+
+```ocaml
+val pow : int -> int -> int = <fun>
+```
+
+这可以展示类型推导。因为 `y = 0` ，所以 `y` 是 `int` 。又因为 `if` 分支里有 `1` ，所以整个 `if` 返回 `int`（[[chapter2_ocaml_basics#`if` 的语义|可以参考这里]]）。因为使用 `*` ，所以参与运算的 输入的 `x` 也必须是 `int` ；所以函数类型是 `int` 。
+
+> [!summary] 与 Java 等的不同
+> 这就是 OCaml 类型推导的基本体验。我们不必像 Java 那样处处写类型，但它也不是动态类型。类型依旧存在，而且编译器会主动推导并检查。
+
+当然我们也可以手动写类型标注：
+
+```ocaml
+let rec pow (x : int) (y : int) : int = if y = 0 then 1 else x * pow x (y - 1)
+```
+
+CS3110 通常建议省略这些标注，因为让编译器推断更简洁；但在遇到不理解的类型错误时，显式标注可以帮助调试。
+
+### 函数定义的语义
+
+函数定义的语义可以用一句话理解：如果在假设参数 `x1 : t1`, `x2 : t2` ...... 的情况下，函数体 `e` 有类型 `u` ，那么函数 `f` 的类型就是： `t1 -> t2 -> ... -> u` 。递归函数多数有了一个假设：在检查函数体时，函数名 `f` 自己也在作用域内，所以可以在函数体中调用自己。
+
+这里需要引入一点后面的知识：
+
+函数体的类型 `u` 通常不是 “唯一的 **具体类型** ”，而是唯一的 **最一般类型**，也就是 principal type 。
+
+例如：
+
+```ocaml
+let id x = x
+```
+
+函数体 `x` 的类型并没有被固定为某一个具体类型：`int` , `float` , `bool` 等。 OCaml 会给出这样的推断：
+
+```ocaml
+val id : 'a -> 'a = <fun>
+```
+
+这里的 `'a` （单引号）是类型变量，表示 “对任何类型都成立”。所以它在编译期并不会固定到某一个具体的类型，而是一个多态类型。
+
+在递归中，还会有一种无限递归的情况：
+
+```ocaml
+let rec loop x = loop x
+```
+
+OCaml 会给它类型：
+
+```ocaml
+val id : 'a -> 'b = <fun>
+```
+
+这意味着：类型系统只保证 “如果这个表达式产生了值，那么这个值符合类型约束”。因此运行时会无限递归。它不保证一定会终止。
+
+### 互递归函数 mutually recursive functions
+
+使用 `and` 来使用互递归函数：
+
+```ocaml
+let rec even n = 
+  n = 0 || odd (n - 1)
+and odd n =
+  n <> 0 && even (n -1)
+```
+
+OCaml 类型推断为：
+
+```ocaml
+val even : int -> bool = <fun>
+val odd : int -> bool = <fun>
+```
+
+这里 `even` 和 `odd` 相互调用，所以必须放在同一个 `let rec  ... and ...` 的结构里。
+
+### 匿名函数
+
+OCaml 中函数可以没有名字：
+
+```ocaml
+fun x -> x + 1
+```
+
+返回如：
+
+```ocaml
+- : int -> int = <fun>
+```
+
+其中的 `-` 就表示 [[chapter1_better_programming_through_ocaml#小练习|没有名字]] 。这个函数的意思是：“接收 `x` ，返回 `x + 1` 的函数。
+
+> [!TIP]
+> CS3110 说匿名函数也叫 `lambda expressions`，这个术语来自 `labmda calculus` ，也就是一种和图灵机一样重要的计算模型

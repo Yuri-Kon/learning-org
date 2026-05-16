@@ -1,6 +1,7 @@
 ---
 title: OCaml 第一章：为什么要通过 OCaml 学习编程
 created: 2026-05-13
+updated: 2026-05-16
 course: CS3110
 tags:
   - ocaml
