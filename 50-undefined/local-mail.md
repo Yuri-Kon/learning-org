@@ -221,3 +221,4 @@ Sync Pull
 - `Create Near` 表示在远程存在、本地缺失的 mailbox 会在本地创建
 - `SyncState *` 表示把同步文件保存在对应 mailbox 中。同步状态用于记录 UID、已同步状态等信息。
 - `Expunge None` 表示同步时不主动删除状态。初期这样更安全。
+- `Sync Pull` 表示只从远程拉到本地。
