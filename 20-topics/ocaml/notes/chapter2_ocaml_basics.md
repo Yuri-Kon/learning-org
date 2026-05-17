@@ -579,3 +579,105 @@ fun x -> x + 1
 
 > [!TIP]
 > CS3110 说匿名函数也叫 `lambda expressions`，这个术语来自 `labmda calculus` ，也就是一种和图灵机一样重要的计算模型
+
+下面这两种写法语义等价:
+
+```ocaml
+let inc x = x + 1
+let inc = fun x -> x + 1
+```
+
+第一种更像普通函数定义，第二种更明确地表示: `inc` 是一个名字，它绑定到一个函数的值。这个角度非常重要，因为 OCaml 中函数就是值。 OCaml 官方文档也明确说，函数可以作为值使用，可以传给函数，也可以从函数返回。
+
+这会慢慢引出高阶函数。比如以后我们会写:
+
+```ocaml
+List.map (fun x -> x + 1) [1; 2; 3]
+```
+
+这里 `(fun x -> x + 1)` 没必要单独命名，因为它只在这一行作为参数传给 `List.map`
+
+### 函数调用
+
+函数调用，也就是 function application ，是 OCaml 的核心语义。
+
+OCaml 函数调用时不需要括号:
+
+```ocaml
+square 5
+add 2 3
+pow 2 10
+```
+
+这和 Java / Python 很不同:
+
+```Java
+square(5)
+add(2, 3)
+```
+
+OCaml 的语法更接近数学和 ML 系语言传统：函数名后跟参数，中间用空格。简化为:
+
+```ocaml
+e0 e1 e2 ... en
+```
+
+其中 `e0` 是函数， `e1` 到 `en` 是参数。静态语义是: 如果 `e0 : t1 -> ... -> tn -> u` ，并且每个参数类型匹配，那么整个函数应用的类型是 `u` 。动态语义是：先把函数表达式和参数表达式求值，再把参数值替换进函数体，最后求值函数体。
+
+函数应用和 `let` 表达式都涉及 substitution 。甚至:
+
+```ocaml
+let x = e1 in e2
+```
+
+可以看成:
+
+```ocaml
+(fun x -> e2) e1
+```
+
+它们语法不同，但语义等价。[[lambda_expressions#lambda 与 `let` 的关系|参见这里]] 。
+
+这个观察非常重要。它告诉我们， `let` 不只是 “变量赋值语法”，它可以被理解为匿名函数应用的语法糖。这样我们就可以慢慢理解为什么 OCaml 的语法核心很小，但是表达能力很强。
+
+## pipeline operator
+
+接下来是 pipeline operator , 也就是 `|>`
+
+假设:
+
+```ocaml
+let inc x = x + 1
+let square x = x * x
+```
+
+普通写法:
+
+```ocaml
+square (inc 5)
+```
+
+pipeline 写法:
+
+```ocaml
+5 |> inc |> square
+```
+
+这里的意思是： `|>` 的隐喻是把值从左到右送入管道。 `e1 |> e2` 等价于 `e2 e1` 。它的好处是当函数调用链变长时，阅读顺序更自然。
+
+比如:
+
+```ocaml
+5 |> inc |> square |> inc |> inc |> square
+```
+
+比下面这种括号嵌套更容易顺着读:
+
+```ocaml
+square (inc (inc (square (inc 5))))
+```
+
+这个写法和 [Unix shell 管道](https://en.wikipedia.org/wiki/Pipeline_(Unix))、 [Elixir 管道](https://elixirschool.com/en/lessons/basics/pipe_operator)、 [`F#` 管道](https://theburningmonk.com/2011/09/fsharp-pipe-forward-and-pipe-backward/) 都有类似直觉。这可以和 Nix 中 “表达式逐层组合” 的习惯联系起来：函数式代码经常不是 “中间变量到处改”，而是 “一个值经过一系列函数变化” 。
+
+
+
