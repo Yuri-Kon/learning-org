@@ -17,7 +17,7 @@ topics:
 
 $\lambda$ 演算的提出者是 Alonzo Church.它最初来自数理逻辑研究，目标是用一种形式系统描述函数、函数应用以及可计算性。而在 OCaml 中，匿名函数之所以也叫 `lambda expressions` ，是因为这个术语来自 `lambda calculus` ；在 $\lambda$ 演算中， OCaml 的 `func x -> e` 会写成 $\lambda x.e$ 
 
-## $\lambda$ 演算的核心
+## lambda 演算的核心
 
 基本只需要三种东西。
 
@@ -158,7 +158,7 @@ List.map (fun x -> x * x) [1; 2; 3; 4]
 
 从 $\lambda$ 演算上看，`List.map` 接收一个函数，然后把它应用到一组值上。这个思想就是函数式编程的核心之一。
 
-## 多参函数与 $\lambda$ 演算
+## 多参函数与 lambda 演算
 
 OCaml 中的多参函数也和 $\lambda$ 的关系很深。比如:
 
@@ -223,7 +223,7 @@ fun y -> 1 + y
 
 这正是 $\lambda$ 演算风格在 OCaml 中的直接体现。
 
-## $\lambda$ 与 `let` 的关系
+## lambda 与 `let` 的关系
 
 再看 `let` 。在 OCaml 中，
 
@@ -294,7 +294,7 @@ Haskell 中更接近 $\lambda$ 演算本身:
 
 这些语言里的 lambda 表达式，本质上都继承了同一个思想：**可以在需要函数的地方直接写一个函数值，而不一定先给它命名** 。
 
-但不同语言的 lambda 能力差异很大。 OCaml 、 Haskell 、 F# 这类函数式语言通常把函数作为一等值， lambda 、高阶函数、柯里化、类型推断都非常自然。 Python  、JavaScript 也把函数当成值，但是类型系统和求值模型不同。 Java 、 C++ 的 lambda 更多是为回调、集合处理、并发任务和函数式接口等场景服务。
+但不同语言的 lambda 能力差异很大。 OCaml 、 Haskell 、 `F#` 这类函数式语言通常把函数作为一等值， lambda 、高阶函数、柯里化、类型推断都非常自然。 Python  、JavaScript 也把函数当成值，但是类型系统和求值模型不同。 Java 、 C++ 的 lambda 更多是为回调、集合处理、并发任务和函数式接口等场景服务。
 
 ## 小结
 
