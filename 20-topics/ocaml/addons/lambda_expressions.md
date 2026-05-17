@@ -17,7 +17,17 @@ topics:
 
 $\lambda$ 演算的提出者是 Alonzo Church.它最初来自数理逻辑研究，目标是用一种形式系统描述函数、函数应用以及可计算性。而在 OCaml 中，匿名函数之所以也叫 `lambda expressions` ，是因为这个术语来自 `lambda calculus` ；在 $\lambda$ 演算中， OCaml 的 `func x -> e` 会写成 $\lambda x.e$ 
 
+## $\lambda$ 演算的核心
 
+基本只需要三种东西。
 
+第一种是变量，例如：
 
+```text
+x
+y
+n
+```
+
+第二种是
 
