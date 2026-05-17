@@ -157,7 +157,7 @@ pass show "$1" | head -n1
 `mbsync` 的配置文件是:
 
 ```
-~/.mbsync
+~/.mbsyncrc
 ```
 
 先创建本地邮箱目录：
@@ -172,3 +172,52 @@ Gmail 需要先在网页端开启 IMAP ，并使用应用专用密码。我们�
 ```conf
 AuthMechs LOGIN
 ```
+
+Gmail 配置如下:
+
+```conf
+IMAPAccount gmail
+Host imap.gmail.com
+User 你的邮箱地址
+PassCmd "mail-pass mail/gmail/app-password"
+TLSType IMAPS
+AuthMechs LOGIN
+
+IMAPStore gmail-remote
+Account gmail
+
+MaildirStore gmail-local
+Path ~/.local/share/mail/gmail
+Inbox ~/.local/share/mail/gmail/INBOX
+SubFolders Verbatim
+
+Channel gmail
+Far :gmail-remote:
+Near :gmail-local:
+Patterns INBOX Notes "[Gmail]/垃圾邮件" "[Gmail]/已删除邮件" "[Gmail]/已加星标" "[Gmail]/已发邮件" "[Gmail]/所有邮件" "[Gmail]/草稿" "[Gmail]/重要"
+Create Near
+SyncState *
+Expunge None
+Sync Pull
+```
+
+### 配置解释
+
+- `IMAPAccount gmail` 定义一个远程 IMAP 账户，名字叫 `gmail` 。
+- `Host imap.gmail.com` 是 Gmail 的 IMAP 服务器。
+- `User 邮箱名` 是登陆用户名。
+- `PassCmd` 这一行是执行命令获取密码。这样 `.mbsyncrc` 里就不会出现明文授权码。
+- `TLSType IMAPS` 表示使用 IMAPS ，也就是通过 TLS 加密到 993 端口。
+- `AuthMechs LOGING` 表示使用 LOGIN 认证机制。我们之前遇到过 `XOAUTH2` 报错，就让这一行后 Gmail 应用专用密码可以正常工作。
+- `IMAPStore gmail-remote` 定义远程邮箱存储。
+- `MaildirStore` 定义本地 `Maildir` 存储。
+- `Path ~/.local/share/mail/gmail` 是本地邮箱根目录。
+- `Inbox ~/.local/share/mail/gmail/INBOX` 指定本地 INBOX 目录。
+- `SubFolders Verbatim` 表示保留远程邮箱层级命名。比如 Gmail 的 `[Gmail]/所有邮件` 会在本地对应到: `~/.local/share/mail/gmail/[Gmail]/所有邮件` 。
+- `Channel gmail` 定义同步通道。
+- `Far :gmail-remote:` 表示远端是 `gmail-remote` 。
+- `Near :gmail-local:` 表示近端/本地是 `gmail-local` 。
+- `Patterns ...` 表示要同步哪些 mailbox 。`Patterns` 可以选择一组 mailbox, 同时 `INBOX` 不会被通配符自动匹配，因此需要手动写出。
+- `Create Near` 表示在远程存在、本地缺失的 mailbox 会在本地创建
+- `SyncState *` 表示把同步文件保存在对应 mailbox 中。同步状态用于记录 UID、已同步状态等信息。
+- `Expunge None` 表示同步时不主动删除状态。初期这样更安全。
