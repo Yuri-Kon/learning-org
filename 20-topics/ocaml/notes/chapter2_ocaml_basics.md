@@ -679,5 +679,93 @@ square (inc (inc (square (inc 5))))
 
 这个写法和 [Unix shell 管道](https://en.wikipedia.org/wiki/Pipeline_(Unix))、 [Elixir 管道](https://elixirschool.com/en/lessons/basics/pipe_operator)、 [`F#` 管道](https://theburningmonk.com/2011/09/fsharp-pipe-forward-and-pipe-backward/) 都有类似直觉。这可以和 Nix 中 “表达式逐层组合” 的习惯联系起来：函数式代码经常不是 “中间变量到处改”，而是 “一个值经过一系列函数变化” 。
 
+## 多态函数
 
+最简单的多态函数是 indentity function:
 
+```ocaml
+let id x = x
+```
+
+这里 OCaml 会推断类型:
+
+```ocaml
+val id: 'a -> 'a = <func>
+```
+
+`'a` 是类型变量，表示未知类型。[[chapter2_ocaml_basics#函数定义的语义|可以参考]] 。CS3110 解释说，类型变量总以单引号开头，常见有 `'a`、`'b`、`'c` 。因为 `id` 可以作用于很多类型，所以它是多态函数（polymorphic function）。
+
+例如:
+
+```ocaml
+id 42;;
+id true;;
+id "bigred";;
+```
+
+都可以实现。这和 Java 的范性可能有一点类似，但是体验不同。在Java里可能写：
+
+```java
+<T> T id(T x) {
+  return x;
+}
+```
+
+OCaml 通常不需要显示写范型函数。它通过类型推导发现这个函数对任何类型都成立。
+
+不过也可以把多态函数限制成更具体的类型:
+
+```ocaml
+let id_int (x: int) : int = x
+```
+
+此时如果 `id_int true` 就会报错。
+
+> [!tip] 承诺
+> CS3110 还给出了一个重要的行为视角: `'a -> 'a` 比 `int -> int` 承诺得更多。`id` 保证对任意输入都返回同类型输出；如果只需要一个 `int -> int` ，可以使用 `id` ，因为它当然也满足这个承诺。反过来，如果需要 `'a -> 'a` ，则不能用只支持整数的 `int -> int` 代替。
+
+这对理解类型系统很有帮助。类型不只是一个标签，它是一种“行为承诺”。类型越多态，表示这个函数越通用，也表示它**能做的事情反而越受限制**。因为比如 `'a -> 'a` 不能对 `x` 做加法。因为它不知道 `x` 是不是整数。多态给了函数更广泛的适用范围，同时也限制了函数体依赖的操作。
+
+## 部分应用 partial application
+
+我们举一个例子。定义:
+
+```ocaml
+let add x y = x + y
+```
+
+它的类型是:
+
+```ocaml
+int -> int -> int
+```
+
+我们之前把它理解为是“接受两个int，返回一个int”。但是CS3110进一步指出，[[lambda_expressions#多参函数与 lambda 演算|函数类型是右结合的]]:
+
+```ocaml
+int -> (int -> int)
+```
+
+也就是说，`add` 接受一个整数，返回一个新的函数（`int -> int`）；这个新函数再接受一个整数，最终返回结果。
+
+所以可以写：
+
+```ocaml
+let add5 = add 5
+```
+
+那么我们如果执行:
+
+```ocaml
+let add5 2
+```
+
+得到的结果是 `7`。
+
+**以上过程就是部分应用(partial application)** 。函数没有一次性拿到全部参数，也可以先拿到一部分参数，返回一个等待剩余参数的新函数。我们还可以进一步观看这个函数:
+
+```ocaml
+let addx x = fun y -> x + y
+```
+
+`addx` 和 `add` 从类型角度出发都是 `int -> int -> int` 。
