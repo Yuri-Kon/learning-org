@@ -1,0 +1,55 @@
+#    -*- mode: org -*-
+
+
+Archived entries from file /home/yurikon/Learning/org-learning/20-topics/ocaml/addons/tail_call.org
+
+
+* 判断一个函数是不是尾递归
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-06-01 一 18:47
+:ARCHIVE_FILE: ~/Learning/org-learning/20-topics/ocaml/addons/tail_call.org
+:ARCHIVE_CATEGORY: tail_call
+:ARCHIVE_ITAGS: ocaml recursion tail_call
+:END:
+
+判断标准很简单：看递归调用的结果返回后，还需不需要继续加工。
+
+
+* 尾递归的定义
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-06-01 一 18:48
+:ARCHIVE_FILE: ~/Learning/org-learning/20-topics/ocaml/addons/tail_call.org
+:ARCHIVE_CATEGORY: tail_call
+:ARCHIVE_ITAGS: ocaml recursion tail_call
+:END:
+
+尾递归指的是：递归调用时函数执行的最后一步。也就是说，函数调用自己之后，外层函数不需要做任何额外计算。
+
+例如:
+
+#+begin_src ocaml
+  let rec fact_aux n acc =
+    if n = 0 then acc
+    else fact_aux (n - 1) (n * acc)
+#+end_src
+
+我们调用 ~fact_aux 5 1~ ，计算过程是:
+
+#+begin_src ocaml
+  fact_aux 5 1
+  fact_aux 4 5
+  fact_aux 3 20
+  fact 2 60
+  fact 1 120
+  fact 0 120
+  120
+#+end_src
+
+这里每一步都可以直接进入下一次调用。当前这一层的函数已经没有后续工作要做，所以旧的调用栈帧可以被回收。
+
+*这就是尾递归的核心：递归调用之后没有“收尾工作”* 。
+
+CS3110 对尾递归的空间优势讲的很清楚：尾调用优化可以把递归算法的空间复杂度从 O(n) 降低到 O(1) ，也就是从每次调用占用一个栈帧，变成所有调用共用一个栈帧。
+
+
+
