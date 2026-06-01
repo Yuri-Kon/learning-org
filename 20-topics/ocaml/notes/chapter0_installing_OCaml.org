@@ -1,9 +1,9 @@
-#+title: Installing OCaml
-#+startup: overview
-
 :PROPERTIES:
 :ID: beebd9a7-f202-4920-8a74-4d6a9bdd27d2
 :END:
+#+title: Installing OCaml
+#+startup: overview
+
 * Installing OCaml
 :PROPERTIES:
 :CUSTOM_ID: installing-ocaml

@@ -1,11 +1,11 @@
+:PROPERTIES:
+:ID: 386054c9-e8f3-4c8d-a83b-5903fb95e174
+:END:
+
 #+title: OCaml 与 Nix 学习总览
 #+startup: overview
 #+tags: ocaml functional_programming nix reproducible_environment cs3110
 #+filetags: :ocaml:functional_programming:nix:reproducible_environment:cs3110:
-
-:PROPERTIES:
-:ID: 386054c9-e8f3-4c8d-a83b-5903fb95e174
-:END:
 
 * 总体定位
 

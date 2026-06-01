@@ -1,12 +1,12 @@
+:PROPERTIES:
+:ID: a1f628e1-ea48-4f89-822c-e5160f5253bf
+:END:
+
 #+title: OCaml 与 Nix 学习计划
 #+author: yurikon
 #+startup: overview
 #+tags: ocaml nix cs3110 lpo functional_programming reproducible_environment plan
 #+filetags: :ocaml:nix:cs3110:lpo:functional_programming:reproducible_environment:plan:
-
-:PROPERTIES:
-:ID: a1f628e1-ea48-4f89-822c-e5160f5253bf
-:END:
 
 * 总体安排
 

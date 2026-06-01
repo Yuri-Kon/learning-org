@@ -1,9 +1,9 @@
-#+title: 部分应用 partial application
-#+startup: overview
-
 :PROPERTIES:
 :ID: 9531b6cc-f91d-4dcf-9ae5-ec2db19fe919
 :END:
+#+title: 部分应用 partial application
+#+startup: overview
+
 * 部分应用 partial application
 :PROPERTIES:
 :CUSTOM_ID: 部分应用-partial-application

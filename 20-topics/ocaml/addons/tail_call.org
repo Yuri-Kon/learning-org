@@ -1,10 +1,10 @@
-#+title: 尾递归
-#+startup: overview
-#+filetags: :ocaml:recursion:tail_call:
-
 :PROPERTIES:
 :ID: f01aaee8-cddc-46bb-b399-ea5f323e43da
 :END:
+
+#+title: tail call 尾递归
+#+startup: overview
+#+filetags: :ocaml:recursion:tail_call:
 
 * 尾递归
 
@@ -64,3 +64,41 @@
 *这就是尾递归的核心：递归调用之后没有“收尾工作”* 。
 
 CS3110 对尾递归的空间优势讲的很清楚：尾调用优化可以把递归算法的空间复杂度从 O(n) 降低到 O(1) ，也就是从每次调用占用一个栈帧，变成所有调用共用一个栈帧。
+
+* 判断一个函数是不是尾递归
+
+判断标准很简单：看递归调用的结果返回后，还需不需要继续加工。
+
+** 不是尾递归
+
+#+begin_src ocaml
+  let sum lst =
+    match lst with
+    | [] -> 0
+    | x :: xs -> x + sum xs
+#+end_src
+
+这里:
+
+#+begin_src ocaml
+  x + sum xs
+#+end_src
+
+递归调用是 ~sum xs~ ，但它调用完成之后，还要做 ~x + ...~ ，所以它不是尾递归。
+
+展开一下:
+
+#+begin_src ocaml
+  sum [1;2;3]
+  = 1 + sum [2;3]
+  = 1 + (2 + sum [3])
+  = 1 + (2 + (3 + sum []))
+  = 1 + (2 + (3 + 0))
+  = 6
+#+end_src
+
+每一层都要等下一层返回。
+
+
+
+

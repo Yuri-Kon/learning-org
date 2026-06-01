@@ -1,14 +1,14 @@
-#+title: OCaml 第一章：为什么要通过 OCaml 学习编程
-#+startup: overview
-#+filetags: :ocaml:beginning:functional_programming:
-#+roam_alias: "Better Programming Through OCaml"
-
 :PROPERTIES:
 :ID: 71b9f4eb-dbf6-4c74-a1cb-c50814b84eb8
 :CREATED: 2026-05-13
 :UPDATED: 2026-05-16
 :COURSE: CS3110
 :END:
+#+title: OCaml 第一章：为什么要通过 OCaml 学习编程
+#+startup: overview
+#+filetags: :ocaml:beginning:functional_programming:
+#+roam_alias: "Better Programming Through OCaml"
+
 * 为什么要通过 OCaml 学习函数式编程
 :PROPERTIES:
 :CUSTOM_ID: 为什么要通过-ocaml-学习函数式编程

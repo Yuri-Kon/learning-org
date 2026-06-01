@@ -1,12 +1,12 @@
-#+title: labmda 表达式
-#+startup: overview
-#+filetags: :lambda:calculus:
-
 :PROPERTIES:
 :ID: 6de72040-d0ad-4c4d-8e4f-c2a8da11e52a
 :CREATED: 2026/5/16
 :UPDATED: 2026/5/16
 :END:
+#+title: labmda 表达式
+#+startup: overview
+#+filetags: :lambda:calculus:
+
 * lambda 演算 & lambda 表达式
 :PROPERTIES:
 :CUSTOM_ID: lambda-演算-lambda-表达式

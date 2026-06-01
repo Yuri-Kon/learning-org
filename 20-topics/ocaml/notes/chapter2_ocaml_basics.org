@@ -1,13 +1,13 @@
-#+title: OCaml 第二章：OCaml 基础
-#+startup: overview
-#+filetags: :ocaml:basics:functional_programming:
-
 :PROPERTIES:
 :ID: d46f3d1c-061c-4b97-bf11-dd8c183a911f
 :CREATED: 2026-05-14
 :UPDATED: 2026-05-16
 :COURSE: CS3110
 :END:
+#+title: OCaml 第二章：OCaml 基础
+#+startup: overview
+#+filetags: :ocaml:basics:functional_programming:
+
 * The Basics of OCaml
 :PROPERTIES:
 :CUSTOM_ID: the-basics-of-ocaml
