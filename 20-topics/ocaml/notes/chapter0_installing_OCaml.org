@@ -1,0 +1,231 @@
+#+title: Installing OCaml
+#+startup: overview
+
+:PROPERTIES:
+:ID: beebd9a7-f202-4920-8a74-4d6a9bdd27d2
+:END:
+* Installing OCaml
+:PROPERTIES:
+:CUSTOM_ID: installing-ocaml
+:END:
+内容来自于 [[https://cs3110.github.io/textbook/chapters/preface/install.html][CS3110 Installing OCaml]] 在这一节，我们将安装：
+
+- 一个 Unix 开发环境
+- OPAM：OCaml 包管理器
+- 一个包含 OCaml 编译器及若干软件包的 OPAM /switch/
+- 一个 Visual Studio Code 编辑器，支持 OCaml
+
+** 使用 Nix 安装
+:PROPERTIES:
+:CUSTOM_ID: 使用-nix-安装
+:END:
+项目目录位于 =org-learning/30-projects/cs3110-ocaml-nix/= ，我们将要在那里通过 Nix 配置 OCaml 环境
+
+确认 flakes 可用：
+
+#+begin_src shell
+nix flake --help
+nix develop --help
+#+end_src
+
+*** Install OPAM: 在 Nix 路线中如何处理
+:PROPERTIES:
+:CUSTOM_ID: install-opam-在-nix-路线中如何处理
+:END:
+CS3110 原文要求安装 OPAM, linux 用户需要参考 [[https://opam.ocaml.org/doc/Install.html][opam 官网的发行版说明]] 为了便于我们学习 Nix ，因此我们将采取 Nix-only 学习路线。即用 Nix 提供 =ocaml=、=utop=、=odoc=、=qcheck=、=biset_ppx=、=mehir=、=ocaml-lsp=、=ocamlformat= 等工具，这样可以在学习 OCaml 的同时理解 flake、devShell、依赖固定、项目级环境这些核心 Nix 概念。
+
+** Initialize OPAM: 在 Nix-only 路线中跳过
+:PROPERTIES:
+:CUSTOM_ID: initialize-opam-在-nix-only-路线中跳过
+:END:
+CS3110 官方要求执行：
+
+#+begin_src shell
+opam init --bare -a -y
+#+end_src
+
+并提醒不要在 =opam= 前加 =sudo=。
+
+在 Nix-only 路线中，这一步可以跳过，因为该环境激活由：
+
+#+begin_src shell
+nix develop
+#+end_src
+
+完成。 [[https://nix.dev/manual/nix/2.18/command-ref/new-cli/nix3-develop][Nix 官方手册说明]] ， =nix develop= 会启动一个 shell, 并提供接近 Nix 构建环境的交互式开发环境；默认会寻找 =devShells.<system>.default= 这样的 flake 输出。
+
+** Create an OPAM Switch: 用 flake devShell 代替
+:PROPERTIES:
+:CUSTOM_ID: create-an-opam-switch-用-flake-devshell-代替
+:END:
+CS3110 要求创建名为 =cs3110-2026sp= 的 switch ，并使用 =ocaml-base-complier.5.3.0= ，随后它要求安装这些包：
+
+#+begin_src shell
+opam install -y utop odoc ounit2 qcheck biset_ppx menhir ocaml-lsp-server ocamlformat
+#+end_src
+
+同时要求确认 =utop= 启动时使用的是 OCaml 5.3.0
+
+这里我们使用 Nix flakes 的写法。
+
+首先输入：
+
+#+begin_src shell
+nix flake init
+#+end_src
+
+这就会得到一个最小化的 =flake.nix= 文件，内容如：
+
+#+begin_src nix
+{
+  description = "A very basic flake";
+
+  inputs = {
+    nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
+  };
+
+  outputs = { self, nixpkgs }: {
+
+    packages.x86_64-linux.hello = nixpkgs.legacyPackages.x86_64-linux.hello;
+
+    packages.x86_64-linux.default = self.packages.x86_64-linux.hello;
+
+  };
+}
+#+end_src
+
+我们在其基础上修改：
+
+#+begin_src nix
+{
+  description = "CS3110 OCaml learning environment with Nix falkes";
+
+  inputs = {
+    nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
+  };
+
+  outputs =
+    { self, nixpkgs }:
+    let
+      system = "x86_64-linux";
+      pkgs = import nixpkgs { inherit system; };
+
+      ocamlPackages = pkgs.ocaml-ng.ocamlPackages_5_3;
+    in
+    {
+      devShells.${system}.default = pkgs.mkShell {
+        packages = with ocamlPackages; [
+          ocaml
+          findlib
+          dune_3
+          utop
+          odoc
+          ounit2
+          qcheck
+          bisect_ppx
+          menhir
+          ocaml-lsp
+          ocamlformat
+        ];
+
+        shellHook = ''
+          echo "CS3110 OCaml environment"
+          echo "OCaml: $(ocaml -version)"
+          echo "Try utop"
+        '';
+      };
+    };
+}
+#+end_src
+
+然后执行：
+
+#+begin_src shell
+nix develop
+#+end_src
+
+这里会在当前目录读取 =flake.nix= ，寻找里面定义的默认开发环境。具体来说， Nix 会优先查找：
+
+#+begin_src nix
+devShells.<你的系统架构>.default
+#+end_src
+
+比如目前的机器是在 Linux_x86.64 ，那么就是：
+
+#+begin_src nix
+devShells.x86_64-linux.default
+#+end_src
+
+*** 执行 =nix develop= 后大致会发生的事情
+:PROPERTIES:
+:CUSTOM_ID: 执行-nix-develop-后大致会发生的事情
+:END:
+第一，Nix 会解析 =flake.nix= ，它会看到:
+
+#+begin_src nix
+inputs = {
+  nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+};
+#+end_src
+
+这表示 OCaml、utop、dune、ocaml-lsp等包都从 =nixpkgs= 这个输入中获取。flake 会通过 =flake.lock= 固定输入版本，从而让之后再次进入环境时尽量取得同一套依赖。Nix 官方文档说明，flake 使用 =flake.nix= 声明输入和输出，并通过 lock file 记录依赖版本。
+
+第二，如果这是第一次运行， Nix 会生成或更新 =flake.lock= ，这会固定当前 =nixpkgs= 版本
+
+第三，Nix 会检查这些包本地是否存在。如果 =nix/store= 中已经存在对应版本，它会直接复用。否则，它会从官方二进制缓存下载。
+
+第四，Nix 会启动一个新的 shell 。 这个 shell 里，PATH 会被临时扩展，让用户可以调用安装进来的包。比如我们在上面写的:
+
+#+begin_src shell
+ocaml
+ocamlc
+utop
+...
+#+end_src
+
+这些工具不会被安装进 =/usr/bin= ，也不会污染系统全局环境。它们位于 =/nix/store/...= 中，在当前 nix shell 中可见。
+
+第五，如果写了 =shellHook= ，它会在进入shell时执行。比如我们上面写的：
+
+#+begin_src nix
+shellHook = ''
+  echo "CS3110 OCaml environment"
+  echo "OCaml: $(ocamlc -version)"
+  echo "Try: utop"
+'';
+#+end_src
+
+所以进入环境时就会看到:
+
+#+begin_src text
+CS3110 OCaml environment
+OCaml: 5.3.0
+Try: utop
+#+end_src
+
+然后命令行提示符会变成： =[用户名@archlinux cs3110-ocaml-nix]= ，表示已经在 Nix 开发环境中。
+
+** Double-Check OCaml: Nix 版本的检查方式
+:PROPERTIES:
+:CUSTOM_ID: double-check-ocaml-nix-版本的检查方式
+:END:
+CS3110 官方的检查方式是 =utop= 能直接运行，OPAM switch 名称正确，编译器版本正确，并且不需要每次 =eval $(opam env)=
+
+在 Nix 路线中，可以检查:
+
+#+begin_src shell
+nix develop
+which ocamlc
+ocamlc -version
+which utop
+utop
+#+end_src
+
+以及可以检查 LSP 和格式化工具：
+
+#+begin_src shell
+which ocamllsp
+which ocamlformat
+which menhir
+which odoc
+#+end_src

@@ -1,0 +1,187 @@
+#+title: 部分应用 partial application
+#+startup: overview
+
+:PROPERTIES:
+:ID: 9531b6cc-f91d-4dcf-9ae5-ec2db19fe919
+:END:
+* 部分应用 partial application
+:PROPERTIES:
+:CUSTOM_ID: 部分应用-partial-application
+:END:
+partical application 可被翻译为“部分应用”或“部分实参应用”。它的意思是：一个函数原本需要多个参数，但我们先给它一部分参数，得到一个“等待剩余参数的新参数”。在OCaml中这非常自然，因为OCaml默认把多实参函数理解为“一层一层接收参数的函数”，也就是 [[file:./lambda_expressions.org::#多参函数与-lambda-演算][crried function]]。CS3110对此的解释是: =let add x y = x + y= 、=let add x = fun y -> x + y= 、=let add = fun x -> fun y -> x + y= 在语义上是等价的。
+
+例如:
+
+#+begin_src ocaml
+let add x y = x + y
+#+end_src
+
+它的类型会被推断为:
+
+#+begin_src ocaml
+val add : int -> int -> int
+#+end_src
+
+这可以读成:
+
+#+begin_src ocaml
+int -> (int -> int)
+#+end_src
+
+也就是说，=add= 先接收一个 =int= ，返回一个新的函数；这个新函数再接收一个 =int=，最后返回 =int= 。所以:
+
+#+begin_src ocaml
+let add3 = add 3
+#+end_src
+
+这里 =add 3= 不会报错说参数不够，因为它 *合法地返回了一个函数* ：
+
+#+begin_src ocaml
+val add3 : int -> int
+#+end_src
+
+然后:
+
+#+begin_src ocaml
+add3 10
+#+end_src
+
+结果是 =13= 。
+
+OCaml 官方文档也说明，curried function 是默认形式，因为它允许 partial application，而且写法上不需要额外的括号、逗号，也不需要对 tuple 做模式匹配。
+
+** partial application 和 currying 的区别
+:PROPERTIES:
+:CUSTOM_ID: partial-application-和-currying-的区别
+:END:
+要注意 partial application 和 currying 的区别。Currying 指的是把“接收多个参数的函数”转换成“一连串一次只接收一个参数的函数”。Partial application 指的是已经有这样一个函数之后，先给它一部分参数，得到另一个函数。这个过程是可以叉开的，比如说我们上面的例子:
+
+#+begin_src ocaml
+let add x y = x + y
+let add3 = add 3
+#+end_src
+
+=add= 这种多参数函数的形式体现 currying；=add 3= 这个动作体现 partial applicatin。CS3110也把 =t1 -> t2 -> t3= 解释为 curried function，并指出这种形式可以被部分应用。
+
+** 右结合
+:PROPERTIES:
+:CUSTOM_ID: 右结合
+:END:
+右结合，就是当一个符号连续出现时，默认从右往左加括号。一般例子是:
+
+#+begin_src text
+a ~ b ~ c
+#+end_src
+
+如果=~=是左结合，就解释为: =(a ~ b) ~ c=。
+
+如果 =~= 是 右结合，就解释为： =a ~ (b ~ c)= 。
+
+OCaml 中函数类型箭头 =->= 是右结合的，所以: =int -> int -> int= 的实际含义是:
+
+=int -> (int -> int)= 。
+
+同时 OCaml 也明确说明，函数类型是 right associative. OCaml 参考手册构造类型也把 =->= 标记为 right associative.
+
+这和 partial application 的关系非常紧密。因为：
+
+#+begin_src ocaml
+int -> int -> int
+#+end_src
+
+被解释为: =int -> (int -> int)= ，所以上面的 =add : int -> int -> int= 的真实结构就是我们前面所说的，给一个 =int= ，返回一个 =int -> int= 的函数。于是 =add 3= 得到的是一个函数完全合理。
+
+函数应用本身一般会按 *左结合* 理解：
+
+#+begin_src ocaml
+add 3 10
+#+end_src
+
+等价于:
+
+#+begin_src ocaml
+(add 3) 10
+#+end_src
+
+这正好和函数类型的 *右结合* 对应起来：类型上 =add : int -> (int -> int)= ，表达式上先算 =add 3= 得到函数，再把 =10= 传递过去。
+
+** partial application 的应用
+:PROPERTIES:
+:CUSTOM_ID: partial-application-的应用
+:END:
+OCaml 中的 partial application 很常用于高阶函数，比如 =List.map=:
+
+#+begin_src ocal
+let add1 x = x + 1
+List.map add1 [1; 2; 3]
+#+end_src
+
+也可以写成：
+
+#+begin_src ocaml
+List.map ((+) 1) [1; 2; 3]
+#+end_src
+
+#+begin_quote
+[!important] 因为 =(+)= 是函数: =(+) : int -> int -> int= ，所以 =(+)= 是一个 =int -> int= 的函数。也就可以用于高阶函数。
+#+end_quote
+
+在 pipeline 中也很常见:
+
+#+begin_src ocaml
+[1; 2; 3]
+|> List.map ((+) 1)
+#+end_src
+
+OCaml 官方高阶函数文档提到，由于 OCaml 默认 currying，部分应用函数很适合和 pipeline 配合，把最后一个参数留给管道传入。
+
+但并非所有 “多个值” 的函数都能自然 partial application 。比如：
+
+#+begin_src ocaml
+let add_pair (x, y) = x + y
+#+end_src
+
+它的类型是： =int * int -> int=
+
+这表示它接受的是一个 =pair= ，所以就不能写 =add_pair 3= 。因为 3 不是 =(int * int)= 。如果想部分应用，应该写成 curried 的形式。或者手动转换：
+
+#+begin_src ocaml
+let curried_add x y = add_pari (x, y)
+#+end_src
+
+** 其他语言中的 Partial Application
+:PROPERTIES:
+:CUSTOM_ID: 其他语言中的-partial-application
+:END:
+其他语言中也有类似思想。Haskell 和 OCaml 很接近，函数默认curried,因此 =add 3= 会自然得到一个新函数。
+
+Python 默认函数不是 curried ，但标准库提供 =functools.partial=
+
+#+begin_src python
+from functools import partial
+
+def add(x, y):
+    return x + y
+
+add3 = partial(add, 3)
+print(add3(10))
+#+end_src
+
+=partial()= 会 “冻结” 一部分位置参数或关键字参数，返回一个签名更简单的新callable
+
+JavaScript 中常见方式是=bind=:
+
+#+begin_src javascript
+function add(x, y) {
+    return x + y;
+}
+
+const add3 = add.bind(null, 3);
+console.log(add3(10));
+#+end_src
+
+** 小结
+:PROPERTIES:
+:CUSTOM_ID: 小结
+:END:
+总的来说， OCaml 里的 parital application 是右结合让类型推断变成 =a -> (b -> c)= ，函数应用左结合让 =f x y= 变成 =(f x) y= 。这两条规则在一起，就形成了 OCaml 中非常自然的 “先给一部分参数，再得到新函数” 的编程方式。

@@ -1,6 +1,11 @@
 #+title: OCaml 与 Nix 学习总览
 #+startup: overview
 #+tags: ocaml functional_programming nix reproducible_environment cs3110
+#+filetags: :ocaml:functional_programming:nix:reproducible_environment:cs3110:
+
+:PROPERTIES:
+:ID: 386054c9-e8f3-4c8d-a83b-5903fb95e174
+:END:
 
 * 总体定位
 
@@ -33,6 +38,20 @@
 - Nixpkgs OCaml 文档: [[https://nixos.org/manual/nixpkgs/stable/#ocaml][OCaml in Nixpkgs]]
 - Nix Pills: [[https://nixos.org/guides/nix-pills/][Nix Pills]]
 - NixOS Wiki - Flakes: [[https://wiki.nixos.org/wiki/Flakes][Flakes - NixOS Wiki]]
+
+* 笔记索引
+
+** 章节笔记
+
+- [[file:notes/chapter0_installing_OCaml.org][Installing OCaml]]
+- [[file:notes/chapter1_better_programming_through_ocaml.org][OCaml 第一章：为什么要通过 OCaml 学习编程]]
+- [[file:notes/chapter2_ocaml_basics.org][OCaml 第二章：OCaml 基础]]
+
+** 补充笔记
+
+- [[file:addons/lambda_expressions.org][labmda 表达式]]
+- [[file:addons/partial_allication.org][部分应用 partial application]]
+- [[file:addons/tail_call.org][尾递归]]
 
 * 学习原则
 
