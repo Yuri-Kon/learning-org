@@ -337,7 +337,7 @@ OCaml 的 ~if~ 是表达式：
 if 3 + 5 > 2 then "yay!" else "boo!";;
 #+end_src
 
-这里，它不是 Java/Python 中那种主要用于控制流程的 statement。CS3110 明确指出，OCaml 的 =if-then-else= 和其他 *表达式* 一样，可以放在任何需要表达式的位置；它类似其他语言中的三元表达式。
+这里，它不是 Java/Python 中那种主要用于控制流程的 statement。CS3110 明确指出，OCaml 的 ~if-then-else~ 和其他 *表达式* 一样，可以放在任何需要表达式的位置；它类似其他语言中的三元表达式。
 
 例如：
 
@@ -347,13 +347,13 @@ if 3 + 5 > 2 then "yay!" else "boo!";;
 
 这里的 ~if 'a' ~ 'b' then 1 else 2~ 就是一个表达式。它在这里的值是2，所以整个表达式的值是 ~6~。
 
-** ~if= 的语义
+** ~if~ 的语义
 :PROPERTIES:
 :CUSTOM_ID: if-的语义
 :END:
-~if~ 的动态语义是：先求值 guard ，也就是 ~if~ 后面的条件。如果 guard 是 ~true~ ，求值 =then~ 分支。如果 guard 是 ~false~ ，求值 ~else= 分支。没有被选中的分支不会求值。 CS3110 把这种描述为 evaluation rules。
+~if~ 的动态语义是：先求值 guard ，也就是 ~if~ 后面的条件。如果 guard 是 ~true~ ，求值 ~then~ 分支。如果 guard 是 ~false~ ，求值 ~else~ 分支。没有被选中的分支不会求值。 CS3110 把这种描述为 evaluation rules。
 
-~if~ 的静态语义是：guard 必须是 ~bool~；=then~ 分支和 ~else~ 分支必须有同一个类型 ~t~；整个 ~if~ 表达式的类型就是这里的 ~t= 。CS3110 把这种描述为 typing rules。
+~if~ 的静态语义是：guard 必须是 ~bool~；~then~ 分支和 ~else~ 分支必须有同一个类型 ~t~；整个 ~if~ 表达式的类型就是这里的 ~t~ 。CS3110 把这种描述为 typing rules。
 
 所以这个合法：
 
@@ -367,7 +367,7 @@ if true then 1 else 2;;
 if true then 1 else "no";;
 #+end_src
 
-因为 =then~ 分支是 ~int~ ，~else~ 分支是 ~string~ 。编译器不会说 “反正 guard 是 ~true~ ，所以 ~else= 不会用到”。类型检查发生在编译期，它不按照运行时路径做这种特殊推理。教材也提醒，编译期类型检查时通常不知道 guard 运行时会是什么值。
+因为 ~then~ 分支是 ~int~ ， ~else~ 分支是 ~string~ 。编译器不会说 “反正 guard 是 ~true~ ，所以 ~else~ 不会用到”。类型检查发生在编译期，它不按照运行时路径做这种特殊推理。教材也提醒，编译期类型检查时通常不知道 guard 运行时会是什么值。
 
 这就是静态语义和动态语义的区别。动态语义回答“运行时怎么求值”；静态语义回答 “编译期怎么判断这个程序是否合法”。 CS3110 第二章开头已经说，语义分为 dynamic semantics 和 static semantics ，类型检查是静态语义中最重要的一种。
 

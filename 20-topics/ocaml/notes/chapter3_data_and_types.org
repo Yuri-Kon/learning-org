@@ -1,0 +1,31 @@
+:PROPERTIES:
+:ID:       109c4984-1bfa-4c1a-8b0b-5e45979dde09
+:END:
+#+title: Data and Types
+* 列表、不可变数据与模式匹配
+:PROPERTIES:
+:ID:       7caa7afc-4c2f-4308-bd85-2a7cc94860cd
+:END:
+
+我们已经完成了第二章。第二章的核心问题是：OCaml 如何计算表达式，如何推导函数类型，递归与尾递归如何工作。
+
+第三章开始处理一个更深的问题：
+
+#+begin_quote
+程序中的数据应当具有怎样的结构 \\
+我们如何根据数据本身的结构编写程序
+#+end_quote
+
+[[https:cs3110.github.io/textbook/chapters/data/intro.html][CS3110 第三章]] 名为 *Data and Types*  ，它会依次介绍列表、变体、单元测试、记录、元组、高级模式匹配、类型别名、 ~option~ 、关联列表、代数数据类型、异常、树与自然数。教材特别强调，代数数据类型是 OCaml 中非常重要的能力；列表、 ~option~ 和异常都可以在这一框架中理解。
+
+第三章内容较多，我们会按教材顺序分成若干讲完整学习。这一讲对应教材的 [[https://cs3110.github.io/textbook/chapters/data/lists.html][3.1 Lists]] ，以及这里有 [[eww:https://cs3110.github.io/textbook/chapters/data/lists.html][eww 版本]] 。同时会额外补充内部表示、时间复杂度、结构共享、类型推导，以及它与后续章节的关系。
+-----
+* 为什么从列表开始？
+
+教材开头给出了这样一句话：
+
+#+begin_quote
+An OCaml list is a sequence of values all of which have the same type.
+#+end_quote
+
+也就是说，一个 OCaml 列表是一系列具有相同类型的值。OCaml 列表使用单向列表实现。
