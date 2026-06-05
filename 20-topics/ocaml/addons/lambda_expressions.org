@@ -238,6 +238,7 @@ fun y -> 1 + y
 ** lambda 与 =let= 的关系
 :PROPERTIES:
 :CUSTOM_ID: lambda-与-let-的关系
+:ID:       2dc73b6b-48bb-4128-9bc6-94fc5c93b833
 :END:
 再看 =let= 。在 OCaml 中，
 

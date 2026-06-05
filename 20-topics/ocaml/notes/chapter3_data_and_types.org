@@ -20,7 +20,7 @@
 
 第三章内容较多，我们会按教材顺序分成若干讲完整学习。这一讲对应教材的 [[https://cs3110.github.io/textbook/chapters/data/lists.html][3.1 Lists]] ，以及这里有 [[eww:https://cs3110.github.io/textbook/chapters/data/lists.html][eww 版本]] 。同时会额外补充内部表示、时间复杂度、结构共享、类型推导，以及它与后续章节的关系。
 -----
-* 为什么从列表开始？
+** 为什么从列表开始？
 
 教材开头给出了这样一句话：
 
@@ -29,3 +29,414 @@ An OCaml list is a sequence of values all of which have the same type.
 #+end_quote
 
 也就是说，一个 OCaml 列表是一系列具有相同类型的值。OCaml 列表使用单向列表实现。
+
+比如:
+
+#+begin_src ocaml
+  [1; 2; 3]
+#+end_src
+
+它的类型是:
+
+#+begin_src ocaml
+  - : int list = [1; 2; 3]
+#+end_src
+
+下面的列表也合法:
+
+#+begin_src ocaml
+  ["red"; "green"; "blue"]
+#+end_src
+
+类型是 ~string list~ ，而下面的列表则无法通过类型检查：
+
+#+begin_src ocaml
+  [1; "hello"; true]
+#+end_src
+
+因为三个元素分别属于 ~int~ , ~string~  和 ~bool~ ，无法形成同一种元素类型。
+
+列表并不只是一个常见容器。它是理解函数式编程数据结构的第一个重要入口。我们会从中接触到四个相互关联的概念：
+
+1. 数据可以通过构造器逐层建立
+2. 数据结构可以保持不可变
+3. 程序可以通过模式匹配拆解数据
+4. 递归函数通常与数据结构的递归定义对应
+
+
+这些思想会贯穿之后的树、抽象语法树、编译器中间表示、解释器，以及更一般的代数数据类型。
+** 列表的三种书写方式
+
+#+begin_src ocaml
+  []
+  e1 :: e2
+  [e1; e2; ...; en]
+#+end_src
+
+第一种表示空列表。
+
+第二种是用 ~::~ 运算符向列表头部添加元素:
+
+#+begin_src ocaml
+  1 :: [2; 3]
+#+end_src
+
+第三种是最常见的方括号语法:
+
+#+begin_src ocaml
+  [1; 2; 3]
+#+end_src
+
+其中元素用分号分隔。
+*** ~nil~ 与 ~cons~
+
+空列表 ~[]~ 通常读作 nil . ~::~ 通常读作 cons 。
+
+这两个词来自 Lisp 。 ~cons~ 原本表示构造一个新的内存对象。在 OCaml 中，可以把：
+
+#+begin_src ocaml
+  x :: xs
+#+end_src
+
+理解为：
+
+#+begin_quote
+将元素 ~x~ 放到 ~xs~ 的最前面，产生一个新列表。
+#+end_quote
+
+例如:
+
+#+begin_src ocaml
+  3 :: []
+#+end_src
+
+会得到 ~[3]~ 。
+
+列表的第一个元素称为 head ，剩余列表称为 tail 。
+
+对于 ~[1; 2; 3]~ ，head 是 ~1~ ， tail 是 ~[2; 3]~
+** 右结合：列表为什么从右侧构建
+
+~::~ 是右结合运算符。
+
+因此：
+
+#+begin_src ocaml
+  1 :: 2 :: 3 ::[]
+#+end_src
+
+会按照下面的方式理解：
+
+#+begin_src ocaml
+  1 :: (2 :: (3 :: []))
+#+end_src
+
+而不会被理解成 ~((1 :: 2) :: 3) :: []~ ，原因很直接。 ~::~ 右侧必须是一个列表。
+
+如果把列表视为链式结构:
+
+#+begin_src ocaml
+  1 -> 2 -> 3 -> []
+#+end_src
+
+右结合的构造过程就很自然。
+** 语法糖与去糖
+
+方括号写法只是一种更方便的形式：
+
+#+begin_src ocaml
+  [1; 2; 3]
+#+end_src
+
+它会还可以改写为：
+
+#+begin_src ocaml
+  1 :: 2 :: 3 :: []
+#+end_src
+
+这两段代码表示相同的列表。
+
+这种为了方便阅读而提供的表层语法称为 syntactic sugar ，即“语法糖”。将语法糖转换为更基础形式的过程称为 desugaring ，即“去糖”。
+
+这里需要建立一个习惯：
+
+#+begin_quote
+当某种语法显得神秘时，可以尝试寻找它更原始的形式。
+#+end_quote
+
+比如我们之前提到的，[[id:2dc73b6b-48bb-4128-9bc6-94fc5c93b833][lambda 与 =let= 的关系]] ：
+
+#+begin_src ocaml
+  let f x = e
+#+end_src
+
+可以理解为：
+
+#+begin_src ocaml
+  let f = fun x -> e
+#+end_src
+
+此外， ~function~ 关键字也可以展开成匿名函数和 ~match~ 表达式。理解去糖过程，可以帮助我们区分语言的核心机制与便利写法。
+** 列表的类型: ~'a list~
+*** ~list~ 是类型构造器
+假设有：
+
+#+begin_src ocaml
+  [1; 2; 3]
+#+end_src
+
+它的类型是：
+
+#+begin_src ocaml
+  int list
+#+end_src
+
+字符串列表 ~["a"; "b"]~ 的类型是 ~string list~ ；布尔列表 ~[true, false]~ 的类型是 ~bool list~ 。这里的 ~list~ 本身并不是一个完整类型。因为你无法声明一个值仅仅具有类型 ~list~ 。 ~list~ 需要接收一个元素类型，才能形成完整类型。这被称为 *type constructor* ，即类型构造器。
+
+可以暂时把它类比成作用于类型的函数：
+
+#+begin_example
+list int -> int list
+list string -> string list
+list bool -> bool list
+#+end_example
+
+这类类型应当从右往左阅读，比如 ~int list~ 应当读作 “整数的列表” ，而 ~int list list~ 应当读作 “整数列表的列表”。
+
+例如:
+
+#+begin_src ocaml
+  [[1; 2]; [3; 4]; []]
+#+end_src
+
+类型是 ~int list list~ 。
+*** 为什么空列表是 ~'a list~
+
+~utop~ 中， ~[]~ 的类型是:
+
+#+begin_src ocaml
+  - : 'a list = []
+#+end_src
+
+~'a~ 是类型变量，它表示某个尚未确定的类型。空列表没有任何元素，因此无法根据元素推断其具体类型。它可以在不同语境下成为不同类型的列表。
+
+例如:
+
+#+begin_src ocaml
+  1 :: []
+#+end_src
+
+推导结果为 ~int list~ 。因为 ~1~ 是 ~int~ ，所以空列表在这一语境中被具体化为 ~int list~ 。
+
+列表构造的类型规则概括为：
+
+#+begin_quote
+[] : 'a list
+
+如果 e1 : t ，并且 e2 : t list ，
+那么 e1 :: e2 : t list
+#+end_quote
+
+也就是说， ~元素 :: 同类元素组成的列表~ 会得到同一类型的列表。
+*** 一个常见的类型错误
+
+下面的代码会报错：
+
+#+begin_src ocaml
+  1 :: [true; false]
+#+end_src
+
+右侧的类型是 ~bool list~ ，根据 ~::~ 的规则，左侧必须是 ~bool~ ，但实际上左侧是 ~1 : int~ 。因此无法统一类型。
+** 列表的真实结构：一种递归数据
+
+OCaml 官方标准库文档直接展示了列表类型的结构：
+
+#+begin_src ocaml
+  type 'a list =
+    | []
+    | (::) of 'a * 'a list
+#+end_src
+
+官方 API 将它写作一个具有两个分支的类型：空列表 ~[]~ ，或者由一个元素与另一个列表组成的 ~(::)~ 。
+
+这句话非常关键。它表明：
+
+*一个列表只能有两种可能* 。它要么是一个空列表，要么是 *一个元素+剩余列表* 。也就是说，列表的定义是递归的：
+
+#+begin_src ocaml
+  list = empty
+  | element :: list
+#+end_src
+
+例如， ~[1; 2; 3]~ 内部可以理解为:
+
+#+begin_example
+(::)
+|-- 1
+|--(::)
+    |-- 2
+    |--(::)
+        |-- 3
+	|-- []
+#+end_example
+
+因此，列表并不是连续的数组，更接近一串首位相连的节点。这会直接影响操作成本：
+
+| 操作                   | 大致时间复杂度 | 原因                   |
+|------------------------+----------------+------------------------|
+| 在头部添加元素 ~x::xs~ | ~O(1)~         | 只需要创建一个新节点   |
+| 取得头部               | ~O(1)~         | 第一个节点直接可见     |
+| 取得尾部               | ~O(1)~         | 节点中保存着尾部引用   |
+| 查找第 ~n~ 个元素      | ~O(n)~         | 必须沿着链逐个前进     |
+| 计算长度               | ~O(n)~         | 必须遍历整个列表       |
+| 在末尾追加元素         | 通常是 ~O(n)~  | 需要复制前面的链式路径 |
+
+
+Python 的 ~list~ 更接近动态数组，因此它的随机访问 ~xs[100]~ 通常很高效。而 OCaml 的列表是单向列表，因此 ~List.nth xs 100~ 需要从头向后访问。
+
+因此，在 OCaml 中频繁按索引访问列表通常值得警惕。后续学习数组、序列与更复杂数据结构时，我们会更系统地处理这个问题。
+** 动态语义：列表如何求值
+
+在 [[id:d46f3d1c-061c-4b97-bf11-dd8c183a911f][OCaml 第二章：OCaml 基础]] 中，我们已经区分了静态语义和动态语义:
+
+- 动态语义：列表如何求值
+- 静态语义：表达式是否具有合法类型、以及它的类型是什么
+
+  对于列表，教材引入了一个用于描述语义的符号：
+
+  #+begin_quote
+e ===> v
+  #+end_quote
+
+
+它表示：
+
+#+begin_quote
+表达式 ~e~ 求值为值 ~v~
+#+end_quote
+
+这是教材用来解释语言的元符号，并非 OCaml 代码。
+
+例如:
+
+#+begin_src ocaml
+  [1 + 2; 3 * 4;]
+#+end_src
+
+可以被分析为:
+
+#+begin_example
+1 + 2 ===> 3
+3 * 4 ===> 12
+#+end_example
+
+因此 ~[1 + 2; 3 * 4;] ===> [3; 12]~ 。
+
+那么对于 ~::~ ，规则可以写成:
+
+#+begin_quote
+如果 e1 ===> v1 \\
+并且 e2 ===> v2 \\
+那么 e1 :: e2 ===> v1 :: v2 \\
+#+end_quote
+
+比如:
+
+#+begin_src ocaml
+  (1 + 2) :: [4 * 5]
+#+end_src
+
+求值为：
+
+#+begin_src ocaml
+  3 :: [20]
+#+end_src
+
+也就是: ~[3; 20]~ 。
+
+
+-----
+** 使用模式匹配读取列表
+
+列表只有两种构造形式：
+
+- ~[]~
+-  ~h::t~
+
+
+因此拆解列表时也应该对应着两种情况。比如我们进行列表求和:
+
+#+begin_src ocaml
+  let rec sum xs =
+  match xs with
+  | [] -> 0
+  | x :: rest -> x + sum rest
+#+end_src
+
+类型是:
+
+#+begin_src ocaml
+  val sum : int list -> int = <fun>
+#+end_src
+
+调用 ~sum [1; 2; 3]~ 执行过程为：
+
+#+begin_example
+sum [1; 2; 3]
+= 1 + sum [2; 3]
+= 1 + 2 + sum [3]
+= 1 + 2 + 3
+= 6
+#+end_example
+*** ~match ... with~
+
+上面的列表求和中使用到了 ~match ... with~ 的语法，一般语法如下：
+
+#+begin_src ocaml
+  match expression with
+    | pattern1 -> result1
+    | pattern2 -> result2
+    | ...
+#+end_src
+
+可以先理解为：
+1. 先计算 ~expression~
+2. 从上到下检查每一个模式
+3. 找到第一个能够匹配的模式
+4. 将模式中的变量绑定到对应部分
+5. 计算该分支右侧的表达式
+
+
+对于这个匹配：
+
+#+begin_src ocaml
+  match [10; 20; 30] with
+  | [] -> 0
+  | x :: rest -> x
+#+end_src
+
+，第二个模式:
+
+#+begin_src ocaml
+  x :: rest
+#+end_src
+
+会匹配到:
+
+#+begin_src ocaml
+  [10; 20; 30]
+#+end_src
+
+并产生绑定：
+
+#+begin_example
+x -> 10
+rest -> [20; 30]
+#+end_example
+
+所以整个表达式的结果是 ~10~ 。
+
+教材将模式匹配概括为两个相互关联的任务：判断模式与值是否具有相同形状，以及建立变量绑定。
+**** 扩展延伸
+
+与 ~Shell~ 的 ~case ... in ...~ 的对比可以参照这里： [[id:1b794026-5684-40c3-a605-285c5829b2c4][OCaml 和 Shell 的模式匹配]]
