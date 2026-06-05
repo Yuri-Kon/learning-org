@@ -1,0 +1,135 @@
+#+title: TypeScrpite 学习规划
+* 前置准备
+- 环境安装：
+  - 安装 Node.js + pnpm
+  - 可选 Bun 了解
+    - Bun 是 Node.js 的替代品，内置包管理、打包和运行速度更快，但生态成熟度稍低。
+    - Bun 可以运行 TypeScript 原生代码，省去 tsc 编译步骤。
+- 阶段产物：
+  - 能运行 ~tsc --init~ 初始化项目。
+  - 创建第一个 ~.ts~ 文件并执行。
+
+
+-----
+* 第一章：TypeScript 基础语法
+
+- 学习范围
+  - 变量声明: ~let~ ~const~ 类型注解
+  - 基本类型： ~string~, ~number~, ~boolean~, ~null~, ~undefined~
+  - 数组与元组
+  - 枚举
+  - 函数与参数类型、返回类型
+  - 接口基础
+- 阶段产物：
+  - 一个小程序：计算用户输入数组的和、打印枚举状态、演示数组和元组。
+- 演示实例：
+  #+begin_src typescript-ts
+    enum Color { Red, Green, Blue }
+    function greet(name: string): string {
+      return `Hello, ${name}`;
+    }
+  #+end_src
+
+
+-----
+* 第二章：类型系统深入
+- 学习范围
+  - 联合类型 & 交叉类型
+  - 类型别名 (~type~)
+  - 可选属性 & 默认参数
+  - 字面量类型
+  - 类型推导
+  - ~any~, ~unknown~, ~never~, ~void~, ~object~
+- 阶段产物：
+  - 创建一个函数处理不同类型输入并返回特定类型结果
+  - 编写类型安全的配置对象示例
+
+
+-----
+* 第三章：对象与类
+- 学习范围：
+  - 类与继承
+  - 接口与类的实现
+  - 访问修饰符： ~public~, ~private~, ~protected~
+  - ~readonly~ 属性
+  - 抽象类
+- 阶段产物：
+  - 一个简单的用户管理类
+    - ~User~ 类，有 ~name~, ~age~ 属性
+    - 子类 ~AdminUser~ 增加权限方法
+
+
+-----
+* 第四章：函数式与泛型
+- 学习范围：
+  - 泛型函数与泛型类
+  - 泛型约束
+  - 高阶函数
+  - 类型推断与泛型结合
+- 阶段产物：
+  - 泛型数组处理函数
+  - 一个泛型栈或队列实现
+
+
+-----
+* 第五章：模块化与项目结构
+- 学习范围：
+  - ESModule 与 CommomJS
+  - ~import~ / ~export~
+  - 项目文件结构建议
+  - 使用 pnpm 管理依赖
+  - 配置 ~tsconfig.json~
+- 阶段产物：
+  - 一个小型项目：
+    - ~src/~ 下有多个模块
+    - 运行 ~pnpm build~ 编译并执行
+
+
+-----
+* 第六章：高级类型与工具类型
+- 学习范围：
+  - 条件类型、映射类型
+  - 工具类型： ~Partial~, ~Readonly~, ~Record~, ~Pick~, ~Omit~
+  - 索引类型、键值映射
+- 阶段产物：
+  - 实现类型安全的配置对象修改函数
+  - 使用工具类型实现增删改查操作
+
+
+-----
+* 第七章：TypeScript 与 Node
+- 学习范围：
+  - Node.js 核心模块类型支持
+  - 异步处理：Promise, async/await
+  - 文件操作、HTTP 请求
+  - TypeScript 对 Node 的类型声明
+- 阶段产物：
+  - 一个简单的 CLI 工具：
+    - 读取 JSON 文件
+    - 打印用户信息
+    - 支持命令行参数
+
+
+-----
+* 第八章：TypeScript 与 Bun 体验
+- 学习范围：
+  - Bun 特性：高速运行、内置 TS 支持、原生 ESModule
+  - Bun 与 Node 项目兼容性差异
+  - 如何在 Bun 中直接运行 TS 文件
+- 阶段产物：
+  - 将 CLI 工具在 Bun 下运行
+  - 使用 Bun 安装第三方依赖并执行
+
+
+-----
+* 第九章：综合练习与项目
+- 学习范围：
+  - 综合运用类型系统、泛型、类、模块化
+  - 小型项目：命令行任务管理器或简易API服务
+  - 产物可使用 Node 或 Bun 运行
+- 阶段产物：
+  - 完整的 TypeScript 项目：
+    - 分模块组织
+    - 类型安全
+    - 异步操作处理
+    - 可在 Node / Bun 下执行
