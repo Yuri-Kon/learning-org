@@ -1,7 +1,7 @@
 :PROPERTIES:
 :ID:       109c4984-1bfa-4c1a-8b0b-5e45979dde09
 :END:
-#+title: Data and Types
+#+title: OCaml 第三章: Data and Types
 * 列表、不可变数据与模式匹配
 :PROPERTIES:
 :ID:       7caa7afc-4c2f-4308-bd85-2a7cc94860cd
@@ -440,3 +440,170 @@ rest -> [20; 30]
 **** 扩展延伸
 
 与 ~Shell~ 的 ~case ... in ...~ 的对比可以参照这里： [[id:1b794026-5684-40c3-a605-285c5829b2c4][OCaml 和 Shell 的模式匹配]]
+
+-----
+** 模式与表达式
+模式与表达式看起来相似，但作用个不同。下面是一个表达式:
+
+#+begin_src ocaml
+  x :: xs
+#+end_src
+如果它出现在等号右侧，含义通常是:
+
+#+begin_quote
+使用已有的值 ~x~ 和 ~xs~ 构造一个新列表。
+#+end_quote
+例如:
+
+#+begin_src ocaml
+  let x = 1
+  let xs = [2; 3]
+  let ys = x :: xs
+#+end_src
+此时， ~ys = [1; 2; 3]~ 。
+
+而下面则是一个模式：
+
+~x :: xs~ ，如果它出现在 ~match~ 分支左侧，含义是：
+
+#+begin_quote
+尝试将一个非空列表拆解为头部和尾部，并给这两个部分命名。
+#+end_quote
+
+例如:
+
+#+begin_src ocaml
+  match [1; 2; 3] with
+  | [] -> 0
+  | x :: xs -> x
+#+end_src
+此时， ~x~ 会绑定到 ~1~ ， ~xs~ 会绑定到 ~[2; 3]~ 。
+
+同样的表面形式，在不同语法位置中承担不同角色：
+
+| 位置               | 含义     |
+|--------------------+----------|
+| 表达式中的 ~x::xs~ | 构造列表 |
+| 模式中的 ~x::xs~   | 拆解列表 |
+
+这是一种高度对称的设计。构造数据时使用的构造器；拆解数据时使用相同形状的模式。
+
+-----
+** 通配符 ~_~
+考虑一个计算列表长度的函数：
+
+#+begin_src ocaml
+  let rec length xs =
+    match xs with
+    | [] -> 0
+    | x :: rest -> 1 + length rest
+#+end_src
+其中变量 ~x~ 绑定后没有在右侧使用。这里 ~OCaml~ 会允许使用通配符 ~_~ 表示:
+
+#+begin_quote
+这里必须存在一个值，但不需要为它命名。
+#+end_quote
+
+因此可以写成:
+#+begin_src ocaml
+  let rec length xs =
+    match xs with
+    | [] -> 0
+    | _ :: rest -> 1 + length rest
+#+end_src
+类型是: ~val length : 'a list -> int~ 。这里为什么是 ~'a list -> int~ 而不是 ~int list -> int~ ，因为函数从未检查元素的具体值，也没有对元素执行加法、比较等限制类型的操作。无论列表元素是整数、字符串、布尔值还是其他结构，它都只会计算节点数量。
+
+例如:
+
+#+begin_src ocaml
+  length [1; 2; 3]
+  length ["a"; "b"]
+  lenght [true; false; true]
+#+end_src
+都成立。
+-----
+** 模式匹配与结构递归
+
+考虑上面的函数，这个函数与列表的定义严格对应：
+- 列表要么是 ~[]~
+- 列表要么是 ~_::rest~
+
+函数也有两个分支：
+- 如果是 ~[]~ ，返回0
+- 如果是 ~_::rest~ ，返回 ~1 + length rest~
+
+
+这被称为 structural recursion ，即结构递归。
+
+它与自然数递归非常相似：
+- 自然数要么是0
+- 要么是 1 + n
+
+
+于是阶乘可以写成:
+
+#+begin_src ocaml
+  let rec fact n =
+    if n = 0 then 1
+    else n * fact (n - 1)
+#+end_src
+列表长度则写成:
+#+begin_src ocaml
+  let rec length xs =
+    | [] -> 0
+    | _ :: rest -> 1 + length rest
+#+end_src
+递归与归纳法之间具有深刻联系。
+
+后面我们学习正确性证明时，会看到：
+- 对自然数递归定义的函数，通常使用数学归纳法证明
+- 对列表递归定义的函数，通常使用结构归纳法证明
+- 对树递归定义的函数，证明也会沿树结构进行
+
+
+程序结构、数据结构与证明结构会逐渐统一起来。
+
+-----
+** 列表拼接 ~@~
+
+我们可以手动实现两个列表的拼接:
+
+#+begin_src ocaml
+  let rec append xs ys =
+  match xs with
+  | [] -> ys
+  | x :: rest -> x :: append rest ys
+#+end_src
+
+如果输入 ~append [1; 2] [3; 4]~ ，计算过程为：
+
+#+begin_quote
+append [1; 2] [3; 4] \\
+= 1 :: append [2] [3; 4] \\
+= 1 :: (2 :: append [] [3; 4]) \\
+= 1 :: (2 :: [3; 4]) \\
+= [1; 2; 3; 4]
+#+end_quote
+OCaml 提供了中缀运算符 ~@~ 用于两个列表的拼接，因此也可以写:
+
+~[1; 2] @ [3; 4]~
+*** 拼接的成本取决于左侧列表
+为什么右侧列表可以直接复用，而左侧列表需要重新建立？
+
+因为原有链条最终会指向 ~[]~ ，新链条需要指向 ~[3; 4]~ 。由于列表不可变，原链条不能原地修改，于是需要创建：
+
+#+begin_quote
+新节点 1 -> 新节点 2 -> 原节点 3 -> 原节点 4 -> []
+#+end_quote
+所以 ~xs @ ys~ 通常需要遍历并复制 ~xs~ 的链式路径，时间复杂度是 ~O(lenght xs)~ 。这会影响变成习惯。
+
+比如下面的递归方法通常低效：
+
+#+begin_src ocaml
+  let rec bad_reverse xs =
+  match xs with
+  | [] -> []
+  | x :: rest -> bad_reverse rest @ [x]
+#+end_src
+
+原因是每一层递归都会执行一次追加，反复遍历已有列表，容易形成平方级开销。
