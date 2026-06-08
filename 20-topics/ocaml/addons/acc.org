@@ -1,0 +1,761 @@
+:PROPERTIES:
+:ID:       e109dd55-3ab0-43bf-813e-6f07841421d1
+:END:
+#+title: 尾递归中的累加器
+尾递归中难以理解的地方，通常并非语法，而是难以判断：
+
+#+begin_quote
+累加器 ~acc~ 在每一轮递归中，究竟代表什么
+#+end_quote
+只要能用一句准确的话描述累加器的含义，尾递归函数通常已经写完一半了。下面下从最简单的数值问题开始，逐步深入列表、顺序问题与多个累加器。
+
+* 为什么普通递归需要等待
+具体可以参见 [[id:2c282804-0599-40a6-90ae-246246c6ba2e][尾递归]]。这里简单叙述一下：
+
+先看普通阶乘：
+
+#+begin_src ocaml
+  let rec fact n =
+    if n = 0 then 1
+    else n * fact (n - 1)
+#+end_src
+
+计算 ~fact 4~ 时，展开过程为：
+
+#+begin_quote
+fact 4 \\
+= 4 * fact 3 \\
+= 4 * (3 * fact 2) \\
+= 4 * (3 * (2 * fact 1)) \\
+= 4 * (3 * (2 * (1 * fact 0))) \\
+= 4 * (3 * (2 * (1 * 1))) \\
+= 24
+#+end_quote
+
+每次调用 ~fact (n - 1)~ ，函数还要继续完成一次乘法。这些尚未完成的操作会形成调用栈。当输入较大时，栈会不断增长。
+
+-----
+
+* 累加器的核心思想
+
+上面阶乘函数的尾递归版本如下:
+
+#+begin_src ocaml
+  let fact_tr n =
+    let rec aux n acc=
+      if n = 0 then acc
+      else aux (n - 1) (acc * n)
+    in
+    aux n 1
+#+end_src
+
+计算 ~fact_tr 4~ 的展开过程如下:
+
+#+begin_quote
+aux 4 1 \\
+-> aux 3 (1 * 4) \\
+-> aux 3 4 \\
+-> aux 2 (4 * 3) \\
+-> aux 2 12 \\
+-> aux 1 (12 * 2) \\
+-> aux 1 24 \\
+-> aux 0 (24 * 1) \\
+-> aux 0 24 \\
+-> 24 \\
+#+end_quote
+每一轮递归调用都直接返回下一轮的结果。递归调用外侧没有遗留的乘法、加法或其他操作，因此当前函数调用完成参数计算后，已经不再需要保留自己的执行栈。
+
+** 累加器可以理解为“已经完成的工作”
+在 ~aux n acc~ 中：
+- ~n~ 表示还有哪些数字没有处理
+- ~acc~ 表示已经完成的部分结果
+
+
+对于 ~fact_tr 4~:
+
+| 当前调用   | 尚未处理的部分 | 已经完成的部分 |
+|------------+----------------+----------------|
+| ~aux 4 1~  | ~4*3*2*1~      | ~1~            |
+| ~aux 3 4~  | ~3*2*1~        | ~4~            |
+| ~aux 2 12~ | ~2*1~          | ~4*3~          |
+| ~aux 1 24~ | ~1~            | ~4*3*2~        |
+| ~aux 0 24~ | 无             | ~4*3*2*1~      |
+
+当前尚未处理部分为空时，累加器就是最终结果。
+
+** 累加器需要有一句明确的定义
+比如写尾递归函数时，可以先写出一句话：
+
+#+begin_quote
+在 ~aux n acc~ 中， ~acc~ 保存已经处理过的元素产生的结果。
+#+end_quote
+
+对于阶乘，可以写得更明确一些：
+
+#+begin_quote
+在 ~aux n acc~ 中， ~acc~ 保存从原始输入开始，知道 ~n+1~ 为止已经乘过的数字之积
+#+end_quote
+这种在递归过程中始终成立的表述，通常称为 *不变式* ，也就是 *invariant* 。
+
+累加器并非随意增加的参数，它是一种显式保存中间状态的方法。
+
+-----
+
+* 只有一个累加器的数值问题
+** 示例1：计算 ~1+2+...+n~
+
+普通递归版本:
+
+#+begin_src ocaml
+  let rec sum n =
+    if n = 0 then 0
+    else n + sum (n - 1)
+#+end_src
+
+尾递归版本:
+
+#+begin_src ocaml
+  let sum n =
+    let rec aux n acc =
+      if n = 0 then acc
+      else aux (n - 1) (acc + n)
+    in
+    aux n 0
+#+end_src
+这里累加器描述为:
+
+#+begin_quote
+~acc~ 保存已经处理过的数字之和 。
+#+end_quote
+
+关于初始值：
+
+这里的初始值指的是 ~in~ 赋值的 ~acc~ 的值，该值就是未进行任何处理的数字和。那么显然， ~0~ 作为初始值是很合理的，因此 ~0~ 是加法的单位元:
+
+#+begin_quote
+0 + x = x
+#+end_quote
+
+那么同理，在阶乘里， ~1~ 作为初始值也是合理的:
+
+#+begin_quote
+1 * x = x
+#+end_quote
+** 示例2：计算 ~x~ 的 ~n~ 次方
+普通阶乘版本:
+
+#+begin_src ocaml
+  let rec pow x n =
+    if n = 0 then 1
+    else x * pow x (n - 1)
+#+end_src
+
+尾递归的版本:
+
+#+begin_src ocaml
+  let pow_tr x n =
+    let rec aux n acc =
+      if n = 0 then acc
+      else aux (n - 1) (x *. acc)
+    in
+    aux n 1.0
+#+end_src
+
+这里累加器的选择是：
+#+begin_quote
+计算需要乘的个数。 ~acc~ 中保存的是已经计算出的部分幂。
+#+end_quote
+** 示例3：计算从 ~a~ 到 ~b~ 的整数之和
+普通递归的版本：
+#+begin_src ocaml
+  let rec range_sum a b =
+    if a > b then 0
+    else a + sum_ab (a + 1) b
+#+end_src
+
+尾递归版本:
+#+begin_src ocaml
+  let range_sum_tr a b =
+    let rec aux current acc =
+      if current > b then acc
+      else aux (current + 1) (acc + current)
+    in
+    aux a 0
+#+end_src
+** 示例4：从 ~a~ 到 ~b~ 的乘积
+#+begin_src ocaml
+  let range_product_tr a b =
+    let rec aux current acc =
+      if current > b then acc
+      else aux (current + 1) (acc * current)
+    in
+    aux a 1
+#+end_src
+
+示例3 和示例4 的初始值都是约定空范围内没有数字时的情况。
+
+-----
+* 列表中的累加器
+** 示例5：计算列表长度
+普通递归版本:
+
+#+begin_src ocaml
+  let rec length list =
+    match list with
+      | [] -> 0
+      | _ :: rest -> 1 + length rest
+#+end_src
+
+计算 ~length ["a"; "b"; "c"]~ 展开为：
+
+#+begin_quote
+1 + length ["b"; "c"] \\
+1 + (1 + length ["c"]) \\
+1 + (1 + (1 + length [])) \\
+3 \\
+#+end_quote
+
+尾递归版本:
+
+#+begin_src ocaml
+  let length_tr list =
+    let rec aux list acc =
+      match list with
+      | [] -> acc
+      | _ :: rest -> aux rest (acc + 1)
+    in
+    aux list 0
+#+end_src
+
+计算过程:
+
+#+begin_quote
+aux ["a"; "b"; "c"] 0 \\
+→ aux ["b"; "c"] 1 \\
+→ aux ["c"] 2 \\
+→ aux [] 3 \\
+→ 3 \\
+#+end_quote
+
+累加器的含义是:
+
+#+begin_quote
+~acc~ 保存已经处理过的元素数量。
+#+end_quote
+** 示例6：计算整数列表的总和
+
+#+begin_src ocaml
+  let sum_list_tr lst =
+    let rec aux lst acc =
+      match lst with
+      | [] -> acc
+      | head :: tail -> aux tail (head + acc)
+    in
+    aux lst 0
+#+end_src
+
+调用 ~sum_list_str [3; 7; 2; 5]~ ，过程：
+
+#+begin_quote
+aux [3; 7; 2; 5] 0 \\
+→ aux [7; 2; 5] 3 \\
+→ aux [2; 5] 10 \\
+→ aux [5] 12 \\
+→ aux [] 17 \\
+→ 17 \\
+#+end_quote
+
+-----
+* 列表反转：顺序问题
+OCaml 通过 ~::~ 在列表头部添加元素，比如 ~1 :: [2; 3]~ ，结果是 ~[1; 2; 3]~ 。在列表头部添加元素通常是常数时间操作，因此构造列表时经常从头部添加。
+** 示例7：尾递归反转列表
+
+先看普通反转:
+
+#+begin_src ocaml
+  let rec rev lst =
+    match lst with
+    | [] -> []
+    | head :: tail -> rev tail @ [head]
+#+end_src
+
+这里 ~@~ 的意思是连接两个列表。
+
+考虑尾递归：
+
+#+begin_src ocaml
+  let rev_tr lst =
+    let rec aux lst acc =
+      match lst with
+      | [] -> acc
+      | head :: tail -> aux tail (head :: tail)
+    in
+    aux lst []
+#+end_src
+
+这里累加器的含义是：
+
+#+begin_quote
+~acc~ 保存已经处理过的元素，并且顺序与原列表相反。
+#+end_quote
+
+注意， ~head :: acc~ 自然会把当前元素放在累加器最前面，因此顺序会反转。
+
+-----
+** 尾递归 ~map~
+
+~map~ 映射函数在处理之后通常需要再进行反转。
+
+考虑普通递归函数:
+
+#+begin_src ocaml
+  let rec map f lst =
+    match lst with
+      | [] -> []
+      | head :: tail -> f head :: map f tail
+#+end_src
+
+这里 ~map~ 的含义是，对列表中所有元素应用 ~f~ 函数处理。
+
+比如: ~map (fun x -> x * 2) [1; 2; 3]~ 结果是 ~[2; 4; 6]~ 。
+
+这个函数并非尾递归，因为在递归调用返回之后，还需要继续执行 ~f head :: ...~ ，导致函数栈不会被回收。
+
+尝试加入累加器：
+
+#+begin_src ocaml
+  let map_rev f lst =
+    let rec aux lst acc =
+      match lst with
+      | [] -> acc
+      | head :: tail -> aux tail (f head :: acc)
+    in
+    aux lst []
+#+end_src
+
+比如我们执行 ~aux [1; 2; 3]~:
+
+#+begin_quote
+aux [1; 2; 3] [] \\
+→ aux [2; 3] [2] \\
+→ aux [3] [4; 2] \\
+→ aux [] [6; 4; 2] \\
+→ [6; 4; 2] \\
+#+end_quote
+
+会发现顺序反了。因为我们在处理时运用到的方法和反转列表一致，都是对其进行自然从头插入。为了保留原顺序，我们可以在最后调用 ~List.rev~:
+
+#+begin_src ocaml
+  let map_rev f lst =
+    let rec aux lst acc =
+      match lst with
+      | [] -> List.rev acc
+      | head :: tail -> aux tail (f head :: acc)
+    in
+    aux lst []
+#+end_src
+
+现在再调用 ~map_tr (fun x -> x * 2) [1; 2; 3]~ 就会返回 ~[2; 4; 6]~ 了。
+
+这里累加器的含义是：
+
+#+begin_quote
+~acc~ 保存已经映射完成的元素，但排列顺序暂时相反。
+#+end_quote
+
+这种 “先反向累计，再统一处理” 的思想在 OCaml 的列表处理中非常常见。
+
+标准库中也提供了相关函数：
+
+#+begin_src ocaml
+  List.rev_map
+#+end_src
+它直接返回反向映射后的结果。
+** 示例8：统计正数数量
+
+#+begin_src ocaml
+  let count_positive lst =
+    let rec aux lst acc =
+      match lst with
+      | [] -> acc
+      | head :: tail ->
+         if head > 0 then aux tail (acc + 1)
+         else aux tail acc
+    in
+    aux lst 0
+#+end_src
+** 示例9：尾递归实现 ~filter~
+
+编写:
+#+begin_src ocaml
+  val filter_tr : ('a -> bool) -> 'a list -> a' list
+#+end_src
+
+#+begin_src ocaml
+  let filter_tr f lst =
+    let rec aux lst acc =
+      match lst with
+      | [] -> List.rev acc
+      | head :: tail ->
+         if f head then aux tail (head :: acc)
+         else aux tail acc
+    in
+    aux lst []
+#+end_src
+
+-----
+
+* 多个累加器
+一个函数可以携带多个中间状态。斐波那契数列就是典型例子。
+
+普通递归版本：
+
+#+begin_src ocaml
+  let rec fib n =
+    if n <= 1 then n
+    else fib (n - 1) + fib (n - 2)
+#+end_src
+
+这个实现会重复大量结果。例如，计算 ~fib 5~ 时， ~fib 3~ 、 ~fib 2~ 等值会被多次计算。更适合的尾递归版本如下：
+
+#+begin_src ocaml
+  let fib_tr n =
+    let rec aux n a b =
+      if n = 0 then a
+      else aux (n - 1) b (a + b)
+    in
+    aux n 0 1
+#+end_src
+计算 ~fib_tr 5~ 过程是：
+
+| 调用        | ~a~       | ~b~       |
+|-------------+-----------+-----------|
+| ~aux 5 0 1~ | ~F_0 = 0~ | ~F_1 = 1~ |
+| ~aux 4 1 1~ | ~F_1 = 1~ | ~F_2 = 1~ |
+| ~aux 3 1 2~ | ~F_2 = 1~ | ~F_3 = 2~ |
+| ~aux 2 2 3~ | ~F_3 = 2~ | ~F_4 = 3~ |
+| ~aux 1 3 5~ | ~F_4 = 3~ | ~F_5 = 5~ |
+| ~aux 0 5 8~ | ~F_5 = 5~ | ~F_6 = 8~ |
+
+这里有两个累加器：
+- ~a~ 保存当前的斐波那契数
+- ~b~ 保存下一个斐波那契数
+
+
+每一轮向前推进一步： ~(a,b) -> (b, a + b)~ 。
+
+** 示例10：同时计算列表长度与总和	
+编写: ~val sum_and_length : int list -> int * int~ 。比如: ~sum_and_length [4; 7; 2] = (13, 3)~ 。
+
+#+begin_src ocaml
+  let sum_and_length lst =
+    let rec aux lst sum_acc length_acc =
+      match lst with
+      | [] -> (sum_acc, length_acc)
+      | head :: tail -> aux tail (head + sum_acc) (1 + length_acc)
+    in
+    aux lst 0 0
+#+end_src
+
+这里使用两个累加器: ~sum_acc~ 记录当前已经累加的和， ~length_acc~ 记录当前处理的长度。
+
+** 示例11：拆分奇数和偶数
+编写： ~val partition_even_and_odd : int list -> int list * int list~
+
+例如: ~partition_even_and_odd [1; 2; 3; 4; 5; 6] = ([2; 4; 6], [1; 3; 5])~ 。
+
+#+begin_src ocaml
+  let partition_even_and_odd lst =
+    let rec aux lst even_acc odd_acc =
+      match lst with
+      | [] -> (List.rev even_acc, List.rev odd_acc)
+      | head :: tail ->
+         if head mod 2 = 0 then aux tail (head :: even_acc) odd_acc
+         else aux tail even_acc (head :: odd_acc)
+    in
+    aux lst [] []
+#+end_src
+
+这里累加器的描述是:
+- ~even_acc~ 记录当前处理的偶数列表
+- ~odd_acc~ 记录当前处理的奇数列表
+
+
+同时在终止条件里，使用 ~List.rev~ 反转列表，因为尾递归得到的列表是反序的。如果对元素顺序不做要求，则没必要反转。
+
+-----
+
+* 操作顺序是否可以改变
+
+并非所有递归函数都能机械地将运算移入累加器。
+
+观察减法:
+
+#+begin_src ocaml
+  let rec sub_chain n =
+    if n = 0 then 0
+    else n - sub_chain (n - 1)
+#+end_src
+
+例如:
+
+#+begin_quote
+sub_chain 3 \\
+= 3 - sub_chain 2 \\
+= 3 - (2 - sub_chain 1) \\
+= 3 - (2 - (1 - sub_chain 0)) \\
+= 3 - (2 - (1 - 0)) \\
+= 2 \\
+#+end_quote
+
+这里，如果照搬求和的累加器写法的话:
+
+#+begin_src ocaml
+  let sub_chain_wrong n =
+    let aux n acc =
+      if n = 0 then acc
+      else aux (n - 1) (acc - n)
+    in
+    aux n 0
+#+end_src
+
+结果会变成 ~0 - 3 - 2 - 1 = -6~ 。原因在于:
+
+#+begin_quote
+a + (b + c) = (a + b) + c
+#+end_quote
+
+加法满足结合率，而减法通常不满足:
+
+#+begin_quote
+a - (b - c) != (a - b) - c
+#+end_quote
+
+因此，累加器改写过程中需要留意：
+- 运算是否满足结合率
+- 元素顺序是否发生改变
+- 初始值是否合理
+- 列表构造是否导致反转
+
+
+对于更复杂的情况，可以使用 ~continuation~ ，也就是延续函数。这个概念可以稍后单独学习。
+
+-----
+
+* 如何检查一个尾递归函数
+可以使用四项检查。
+
+1. 递归调用是否处于最后一步？
+   
+   尾递归形式：
+   #+begin_src ocaml
+     aux tail new_acc
+   #+end_src
+   普通递归形式:
+   #+begin_src ocaml
+     head + aux tail acc
+   #+end_src
+   下面这个函数也不是尾递归:
+   #+begin_src ocmal
+     List.rev (aux tail acc)
+   #+end_src
+   因为递归返回后还要执行 ~List.rev~ 。
+2. 基础情况是否直接返回累加器？
+   
+   常见形式:
+   #+begin_src ocaml
+     | [] -> acc
+   #+end_src
+   或：
+   #+begin_src ocaml
+     if n = 0 then acc
+   #+end_src
+3. 累加器的初始值是否合理？
+   | 操作       | 常用初始值            |
+   |------------+-----------------------|
+   | 加法       | ~0~                   |
+   | 乘法       | ~1~                   |
+   | 计数       | ~0~                   |
+   | 构造列表   | ~[]~                  |
+   | 字符串拼接 | ~""~ ，还需要考虑性能 |
+   | 布尔“或”   | ~false~               |
+   | 布尔“且”   | ~true~                |
+4. 是否能准确说明累加器含义？
+
+   如果很难描述累加器含义，代码中通常还有尚未厘清的问题。
+
+-----
+
+* 扩展练习
+
+** 练习1：复制列表中的元素
+
+#+begin_src ocaml
+  let duplicate lst =
+    let rec aux lst acc =
+      match lst with
+        | [] -> List.rev acc
+        | head :: tail -> aux tail (head :: head :: acc)
+    in
+    aux lst []
+#+end_src
+
+这里， ~acc~ 的含义是当前已经复制后的列表。
+
+** 练习2：只取前 ~n~ 个元素
+
+#+begin_src ocaml
+  let take n lst =
+    if n < 0 then invalid_arg "Number must not be negative"
+    else
+      let rec aux n lst acc =
+        if n = 0 then List.rev acc
+        else
+          match lst with
+          | [] -> List.rev acc
+          | head :: tail -> aux (n - 1) tail (head :: acc)
+      in
+      aux n lst []
+#+end_src
+
+这里， ~acc~ 代表当前已经被取出来的元素组成的列表，并且顺序暂时与原列表相反； ~lst~ 保存尚未检查的剩余元素， ~n~ 表示还需要取出多少个元素。
+
+终止条件也有两个：
+- ~n = 0~ 说明已经取够元素
+- ~lst = []~ 说明列表已经耗尽
+
+** 练习3：计算平均值
+
+#+begin_src ocaml
+  let average lst =
+    let rec aux lst count_acc sum_acc =
+      match lst with
+      | [] -> if count_acc = 0 then None
+              else Some (sum_acc /. float_of_int count_acc)
+      | head :: tail -> aux tail (count_acc + 1) (sum_acc +. head)
+    in
+    aux lst 0 0.0
+#+end_src
+
+这里， ~count_acc~ 用于记录当前有多少元素； ~sum_acc~ 用于记录当前的总和。
+
+** 练习4：将相邻重复元素压缩为一个
+#+begin_src ocaml
+  let compress_tr lst =
+    let rec aux lst acc =
+      match lst with
+      | [] -> List.rev acc
+      | head :: tail ->
+         match acc with
+         | previous :: _ when previous = head ->
+            aux tail acc
+         | _ ->
+            aux tail (head :: acc)
+    in
+    aux lst  []
+#+end_src
+
+这里累加器的含义是：
+
+~acc~ 保存已经处理过的部分列表压缩后的结果，但顺序暂时与原列表相反。 ~acc~ 的头部都是最近一次保留下来的元素。
+
+这里的模式匹配中使用到了 ~when~ ，含义是：只有在列表匹配成功，且 ~when~ 后的守卫条件成立时，才进入这个分支。
+
+之前的例题中，累加器主要用于保存结果。这一题中，累加器同时承担两种结果：
+1. 保存已经构造出的部分结果
+2. 为下一轮判断提供上下文
+
+
+这是一种很常见的算法设计方式。当需要根据 “前面发生过什么” 决定如何处理当前元素时，可以先检查已有的累加器中是否已经保存了所需的信息。
+
+** 练习5：将相邻重复元素分组
+
+比如：
+
+#+begin_src ocaml
+  pack [1; 1; 2; 2; 3; 1; 1];
+  (* [[1; 1]; [2; 2]; [3]; [1; 1]] *)
+#+end_src
+
+如果以状态的思想去理解的话，这个题目要维护两个状态。我们需要判断取出的头元素是否属于已经有的子组列表中，头列表的元素。
+
+因此，需要维护两个状态。一个是我们需要得到的结果，即已经分组的列表构成的列表；另一个是当前分组的列表。
+
+#+begin_src ocaml
+  let pack lst =
+    let rec aux lst current_group group_acc =
+      match lst with
+      | [] ->
+         (match current_group with
+         | [] -> List.rev group_acc
+         | _ -> List.rev (current_group :: group_acc))
+      | x :: xs ->
+         match current_group with
+         | [] ->
+            aux xs [x] group_acc
+         | y :: _ ->
+            if x = y then
+              aux xs (x :: current_group) group_acc
+            else
+              aux xs [x] (current_group :: group_acc)
+    in
+    aux lst [] [] |> List.map List.rev
+#+end_src
+
+这里为什么需要在尾部还要执行 ~List.map List.rev~ 呢？
+
+因为这段实现里同时使用了两层头插法： ~x :: current_group~ 以及 ~current_group :: group_acc~ 。
+
+头插法效率高，但是会让顺序反转。这里需要分别处理两层反转：
+1. 子列表内部的元素顺序
+2. 子列表之间的元素顺序
+
+
+尾部的 ~List.map List.rev~ 的意思是：对结果中的每一个子列表执行一次 ~List.rev~ 。
+
+我们的源代码中， ~List.rev (current_group :: group_acc)~ 只会反转最外层的列表，不会自动反转内部的每个子列表。因此，需要依次对每个子列表内部进行翻转处理。
+
+** 练习6：游程编码 Run-Length Encoding
+
+在 练习4 的基础上，不只要删除重复元素，还要记录每个元素连续出现了多少次。
+
+#+begin_src ocaml
+  encode ["a"; "a"; "a"; "b"; "c"; "c"; "a"; "a"]
+#+end_src
+
+应当得到：
+
+#+begin_src ocaml
+  [(3, "a"); (1, "b"), (2, "c"), (2, "a")]
+#+end_src
+
+考虑维护的状态：
+- 当前的元素 ~current_element~
+- 当前元素出现的数量 ~current_count~
+- 当前得到的列表 ~acc~
+
+
+#+begin_src ocaml
+  let encode lst =
+    let rec aux lst current_element current_count acc =
+      match lst with
+      | [] ->
+         (match current_element with
+         | None ->  List.rev acc
+         | Some y -> List.rev ((current_count, y) :: acc))
+      | x :: xs ->
+         match current_element with
+         | None -> aux xs (Some x) (current_count + 1) acc
+         | Some y ->
+            if x = y then aux xs (Some x) (current_count + 1) acc
+            else aux xs (Some x) 1 ((current_count, y) :: acc)
+    in
+    aux lst None 0 []
+#+end_src
+
+内部函数 ~aux~ 的各个参数的含义:
+
+- ~lst~ 尚未处理的元素
+- ~current_element~ 当前正在统计的元素；尚未开始时为 None
+- ~current_count~ 当前元素连续出现的次数
+- ~acc~ 已经完成统计的分组
