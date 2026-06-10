@@ -1,0 +1,54 @@
+#    -*- mode: org -*-
+
+
+Archived entries from file /home/yurikon/Learning/org-learning/20-topics/ocaml/notes/chapter3_data_and_types.org
+
+
+* 穷尽性检查
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-06-07 日 17:29
+:ARCHIVE_FILE: ~/Learning/org-learning/20-topics/ocaml/notes/chapter3_data_and_types.org
+:ARCHIVE_OLPATH: 列表、不可变数据与模式匹配
+:ARCHIVE_CATEGORY: chapter3_data_and_types
+:END:
+模式匹配的一个重要优点是，编译器会检查你是否覆盖了所有情况。考虑:
+
+#+begin_src ocaml
+  let head xs =
+    match xs with
+    | x :: _ -> x
+#+end_src
+
+那么这个函数遗漏了 ~[]~ 的情况，编译器就会自己给出警告:
+
+#+begin_quote
+Warning 8 [partial-match]: \\
+this pattern-matching is not exhaustive.
+#+end_quote
+
+教材强调，这种检查有助于防止运行时出现 ~Match_failure~ 。
+
+更完整的写法是：
+
+#+begin_src ocaml
+  let head_opt xs =
+    match xs with
+    | [] -> None
+    | x :: _ -> Some x
+#+end_src
+
+穷尽性检查非常重要。如果以后定义变体类型:
+
+#+begin_src ocaml
+  type color =
+    | Red
+    | Green
+    | Blue
+#+end_src
+
+然后写:
+#+begin_src ocaml
+  match color with
+    | Red -> ...
+    | Green -> ...
+#+end_src

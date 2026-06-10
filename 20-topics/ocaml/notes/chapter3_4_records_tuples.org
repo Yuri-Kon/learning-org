@@ -1,0 +1,328 @@
+:PROPERTIES:
+:ID:       e6c5fae3-20c0-406b-84bb-25bae46be854
+:END:
+#+title: Records and Tuples
+* Records and Tuples
+
+单链表是一种很棒的数据结构。但是如果你想对几个元素进行修复，而不是整个无限大的数字呢？或者如果你想要这些元素具有不同的类型呢？如果你想要通过名字而不是数字去访问元素呢？列表 (Lists) 并不能轻易实现以上任何一种。作为替代， OCaml 程序员通常使用 records 和 tuples (记录 和 元组) 。
+* Records
+
+记录是由多种其他类型的数据组合而成，每一种类型都被命名 (named) 。 OCaml 的记录非常类似 C 中的结构体。这有一个例子，关于一个 record 类型的定义: ~mon~ ，同时复用了我们在 [[id:f3715a29-2c9c-456b-8169-9e948b18e098][Variants 类型表达 “有限种可能性”]] 中定义的 ~ptype~ 类型。
+
+但是实际上， OCaml record 更接近 “带字段的乘积类型” 。 tuple 能组合多个值，但当多个字段类型相同或语义不同的时候，顺序很容易混淆； record 通过字段名解决这个问题，例如 ~date~ 用 ~{ day; month; year }~ 比 ~int * int * int~ 清晰得多。
+
+所以， record 的重点不是 “像 C struct” ，而是:
+#+begin_src ocaml
+  type date = {
+      day : int;
+      month : int;
+      year : int;
+    }
+#+end_src
+它定义的是一个新类型 ~date~ ，其值由三个具名字段组成。
+
+#+begin_src ocaml
+  type ptype = TNormal | TFire | TWater
+  type mon = {name : string; hp : int; ptype : ptype}
+#+end_src
+这个类型定义了带有三个字段 (fields) 的记录，三个字段分别是 ~name~, ~hp~, ~ptype~ 。每一个字段的类型也被定义。注意到 ~ptype~ 既可以用作类型名称，也可以用作字段名称；在 OCaml 中，它们的命名空间是不同的。
+
+我们可以通过书写 ~record expression~ 来构建带有值 (~value~) 的记录类型：
+
+#+begin_src ocaml
+  {name = "Charmander"; hp = 39; ptype = TFire}
+#+end_src
+
+在定义 record 类型时，我们在字段的名称和值之间写的是 ~:~ ；在书写表达式时，我们使用 ~=~ 。
+
+我们可以使用 ~.~ 去访问 record 类型中的字段:
+
+#+begin_src ocaml
+  let c ={name = "Charmander"; hp = 39; ptype = TFire};;
+  c.hp;;
+#+end_src
+它们的结果分别是:
+#+begin_example
+  val c : mon = {name = "Charmander"; hp = 39; ptype = TFire}
+  - : int = 39
+#+end_example
+
+我们同样可以使用模式匹配以访问记录的字段:
+#+begin_src ocaml
+  match c with {name = n; hp = h; ptype = t} -> h
+#+end_src
+#+begin_example
+- : int = 39
+#+end_example
+这里的 ~n~, ~h~, 和 ~t~ 都是模式变量。如果你想为字段和模式变量使用相同的名称的话，这里提供一种语法糖:
+#+begin_src ocaml
+  match c with {name; hp; ptype} -> hp
+#+end_src
+~{name; hp; ptype}~ 是 ~{name = name; hp = hp; ptype = ptype}~ 的语法糖。每一个这样的子表达式中，等号左侧的标识符是字段的名字，等号右侧的标识符是模式变量。
+** Record syntax
+一个 record expression 写成:
+#+begin_src ocaml
+  {f1 = e1; ...; fn = en}
+#+end_src
+Record 表达式中的 ~fi = ei~ 的表达式的顺序无关紧要。比如， ~{f = e1; g = e2}~ 和 ~{g = e2; f = e1}~ 是完全等价的。
+
+通过以下方式访问record 的字段:
+#+begin_src ocaml
+  e.f
+#+end_src
+这里的 ~f~ 必须是一个字段名字的标识符，而不是表达式。这一限制和其他具有类似特性的语言一致，比如 Java 的字段名。如果你确实想要计算应该访问哪一个标识符，那么合适的数据结构是 ~map~ 映射（或者称为 ~dictionary~ / ~association list~ / ~hash table~ 等等）。
+** Record 字段顺序
+Record 字段顺序，其构造和模式中顺序无关，运行时布局仍然有顺序。
+
+LPO 明确指出， record 的字段顺序在书写上不重要。例如:
+#+begin_src ocaml
+  let d1 = { day = 14; month = 2; year = 2014 }
+  let d2 = { month = 2; year = 2014; day = 14}
+#+end_src
+二者是同一个 ~date~ 值。但并不意味着运行时没有布局顺序。编译器会根据类型定义确定字段在内存中的位置，例如:
+#+begin_src ocaml
+  type point = {
+      x : int;
+      y : int;
+    }
+#+end_src
+运行时可以把它布局为类似:
+#+begin_example
+block:
+  field 0 -> x
+  field 1 -> y
+#+end_example
+当我们写 ~p.x~ 时，编译器知道 ~x~ 对应第几个字段槽位，于是生成相应的访问代码。
+** 动态语义
+Record 的动态语义可以概括为: 构造、访问、复制。
+- 如果在 ~1...n~ 中的每一个 ~i~ 都能求值: ~ei ==> vi~ ，那么 ~{f1 = e1; ...; fn = en} ==> {f1 = v1; ...; fn = vn}~ 。
+- 如果 ~e ==> {...; fn = v; ...}~ 那么 ~e.f ==> v~ 。
+*** 构造 Record
+#+begin_src ocaml
+  { name = "Charmander"; hp = 39; ptype = TFire }
+#+end_src
+动态上会先计算字段表达式:
+#+begin_example
+"name"
+39
+TFire
+#+end_example
+然后再构建一个 record 值。
+** 静态语义
+
+record 类型必须先定义才能使用。这样可以使 OCaml 进行更准确的类型推断。而如果在未定义的情况下直接使用 record 类型，则无法达到这种效果。
+
+类型检查的规则是:
+- 如果对于所有的 ~i~ 取值于 ~1...n~ ，均成立 ~e1 : t1~ ，且 ~t~ 被定义为 ~{f1 : t1; ...; fn : tn}~ 那么 ~{f1 = e1; ...; fn = en} : t~ 。请注意，record 表达式中提供的字段集必须是作为 record 类型一部分所定义的完整字段集（但关于记录复制，请参见下文）。
+- 若 ~e : t1~ 且 ~t1~ 被定义为 ~{...; f : t2; ...}~ ，则 ~e.f : t2~ 。
+
+** 记录复制 Record Copy
+
+由于OCaml 中的 record 是默认不可变的，你不能直接修改已有 record 字段。因此希望修改一个字段时，实际上需要创建一个新的字段。
+
+这里需要补充，Record 默认不可变，但是 “顶层字段不可变”。需要进一步区分:
+#+begin_src ocaml
+  type player = {
+      name : string;
+      scores : int array;
+    }
+#+end_src
+
+这里 ~player~ 的字段 ~scores~ 不能被重新赋值，但 ~scores~ 指向的数组本身是可变的：
+#+begin_src ocaml
+
+  let p = { name = "Alice"; scores = [|10; 20|] }
+
+  (* 不允许：字段不可变 *)            
+  p.scores <- [|0; 0|]
+
+  (* 允许：数组本身可变 *)
+  p.scores.(0) <- 99
+#+end_src
+
+因此， OCaml record 的不可变性是 *字段绑定不可变* ，不是自动深度不可变。
+
+这点非常关键。不可变 record 只能保证 ~p.name~ 和 ~p.scores~ 这两个字段本身不能被替换；但如果字段内部是 ~array~, ~ref~, ~mutable record~, ~hash table~ 等可变结构，仍然可能发生副作用。
+
+-----
+
+OCaml 还提供了一种语法用于根据旧记录构建新记录:
+#+begin_src ocaml
+  {e with f1 = e1; ...; fn = en}
+#+end_src
+这不会修改原记录，而是构建一个具有新值的新记录。在 ~with~ 之后提供的字段集不必是类型记录中完整的字段集。在新复制的记录中，任何未在 ~with~ 中提供的字段，都会直接从原记录中复制过来。
+
+例如:
+#+begin_src ocaml
+  type point = {
+      x : int;
+      y : int;
+    }
+  let p1 = { x = 1; y = 2}
+
+  let p2 = { p1 with x = 10}
+#+end_src
+
+我们就会得到:
+#+begin_src ocaml
+  p1 = { x = 1; y = 2}
+  p2 = { x = 10; y = 2}
+#+end_src
+这里只有 ~x~ 被修改，其他字段继承于 ~p1~ 。
+
+Record Copy 是一种语法糖，等价于:
+
+#+begin_src ocaml
+  { f1 = e1; ...; fn = en; g1 = e.g1; ...; gn = e.gn}
+#+end_src
+只不过这样写十分麻烦。比如下面的类型:
+#+begin_src ocaml
+  type student = {
+      name : string;
+      age : int;
+      grade = s.grade;
+      major : float;
+      email : string;
+    }
+#+end_src
+若只是改年龄:
+#+begin_src ocaml
+  let older = { s with age = s.age + 1}
+#+end_src
+否则就得写:
+#+begin_src ocaml
+  let older =
+    {
+      name = s.name;
+      age = s.age + 1;
+      grade = s.grade;
+      major = s.major;
+      email = s.email;
+    }
+#+end_src
+显然 Record Copy 更方便。
+*** 同时更新多个字段
+可以一次更新多个字段:
+#+begin_src ocaml
+  let p2 =
+    { p1 with
+      x = 10;
+      y = 20
+    }
+#+end_src
+结果是:
+#+begin_src ocaml
+  { x =10; y = 20 }
+#+end_src
+*** 与函数式编程的关系
+Record Copy 是函数式编程中非常常见的模式。
+比如:
+
+#+begin_example
+old_state -> create new state -> return new state
+#+end_example
+例如:
+#+begin_src ocaml
+  type account = {
+      owner : string;
+      balance : int;
+    }
+  let deposit amount acc =
+    { acc with balance = acc.balance + amount }
+#+end_src
+使用:
+#+begin_src ocaml
+  let a1 =
+    { owner = "Alice"; balance = 100 }
+  let a2 = deposit 50  a1
+#+end_src
+得到:
+#+begin_src ocaml
+  a1 = { owner = "Alice"; balance = 100 }
+  a2 = { owner = "Alice"; balance = 150 }
+#+end_src
+旧值仍然存在。这种风格在函数式编程中都非常常见。
+*** 底层实现视角
+假设:
+#+begin_src ocaml
+  type point = {
+      x : int;
+      y : int;
+    }
+#+end_src
+record 在运行时是一个堆对象。
+
+#+begin_example
++-------+
+| x = 1 |
+| y = 2 |
++-------+
+#+end_example
+执行:
+#+begin_src ocaml
+  ( p with x = 10)
+#+end_src
+会分配一个新的 block:
+#+begin_example
+p
++-------+
+| x = 1 |
+| y = 2 |
++-------+
+
+p'
++--------+
+| x = 10 |
+| y = 2  |
++--------+
+#+end_example
+因此，时间复杂度 ~O(k)~ ，空间复杂度 ~O(k)~ 。其中 ~k~ 是 record 的字段数。
+*** Record Copy 是浅拷贝
+上述提到 ~{ p with x = 10 }~ 会创建新 record ，需要补充：它只复制字段槽位里的值。如果字段值本身是指针，复制的是指针，不会递归复制指向的数据。
+
+比如:
+#+begin_src ocaml
+  type student = {
+    name : string;
+    scores : int array;
+  }
+  let s1 = { name = "Alice"; scores = [|90; 95|]}
+  let s2 = { s1 with name = "Bob" }
+#+end_src
+这时如果 ~s2.scores.(0) <- 0~ ，那么 ~s1.socres.(0) = 0~ ， ~s2.scores.(0) = 0~ 。
+
+因为 ~s1~ 和 ~s2~ 共享同一个数组。
+
+所以 ~{ s1 with name = "Bob" }~ 意思是创建一个新的 record, 并复用旧的 record 中未显式替换掉字段值。它不是深度克隆。
+
+*** 与 mutable record 的区别
+OCaml 也允许可变字段:
+#+begin_src ocaml
+  type counter = {
+      mutable value : int;
+    }
+#+end_src
+此时:
+#+begin_src ocaml
+  let c = { value = 0 }
+  c.value <- 1
+#+end_src
+是原地修改。而:
+#+begin_src ocaml
+  type counter = {
+      value : int;
+    }
+
+  let c2 =
+    { c with value = 1 }
+#+end_src
+这样修改。
+** Record 的模式匹配
+我们将以下新模式形式添加到合法模式列表中:
+- ~{f1 = p1; ...; fn = pn}~
+
+
+同时我们将模式与值匹配并产生绑定的定义扩展如下:
+- 如果对于所有的 ~i...n~ ，都成立 ~pi~ 匹配 ~vi~ 并产生绑定 ~bi~，那么记录模式 ~{f1 = p1; ...; fn = pn}~ 匹配记录值 ~{f1 = v1; ...; fn = vn}~ 并产生绑定集 \[U_ib_i\] 。请注意，记录值可能比记录模式包含更多的字段。
+
+  作为语法糖，还提供了一种记录模式的另一形式： ~{f1; ...; fn}~ 。它会被展开为 ~{f1 = f1; ...; fn = fn}~ 。

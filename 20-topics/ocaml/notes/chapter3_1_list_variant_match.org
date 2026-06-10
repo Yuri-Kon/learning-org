@@ -2,6 +2,7 @@
 :ID:       109c4984-1bfa-4c1a-8b0b-5e45979dde09
 :END:
 #+title: OCaml 第三章: Data and Types
+
 * 列表、不可变数据与模式匹配
 :PROPERTIES:
 :ID:       7caa7afc-4c2f-4308-bd85-2a7cc94860cd
@@ -21,7 +22,7 @@
 第三章内容较多，我们会按教材顺序分成若干讲完整学习。这一讲对应教材的 [[https://cs3110.github.io/textbook/chapters/data/lists.html][3.1 Lists]] ，以及这里有 [[eww:https://cs3110.github.io/textbook/chapters/data/lists.html][eww 版本]] 。同时会额外补充内部表示、时间复杂度、结构共享、类型推导，以及它与后续章节的关系。
 -----
 
-** 为什么从列表开始？
+* 为什么从列表开始？
 
 教材开头给出了这样一句话：
 
@@ -66,7 +67,7 @@ An OCaml list is a sequence of values all of which have the same type.
 
 
 这些思想会贯穿之后的树、抽象语法树、编译器中间表示、解释器，以及更一般的代数数据类型。
-** 列表的三种书写方式
+* 列表的三种书写方式
 
 #+begin_src ocaml
   []
@@ -89,7 +90,7 @@ An OCaml list is a sequence of values all of which have the same type.
 #+end_src
 
 其中元素用分号分隔。
-*** ~nil~ 与 ~cons~
+** ~nil~ 与 ~cons~
 
 空列表 ~[]~ 通常读作 nil . ~::~ 通常读作 cons 。
 
@@ -116,7 +117,7 @@ An OCaml list is a sequence of values all of which have the same type.
 列表的第一个元素称为 head ，剩余列表称为 tail 。
 
 对于 ~[1; 2; 3]~ ，head 是 ~1~ ， tail 是 ~[2; 3]~
-** 右结合：列表为什么从右侧构建
+* 右结合：列表为什么从右侧构建
 
 ~::~ 是右结合运算符。
 
@@ -141,7 +142,7 @@ An OCaml list is a sequence of values all of which have the same type.
 #+end_src
 
 右结合的构造过程就很自然。
-** 语法糖与去糖
+* 语法糖与去糖
 
 方括号写法只是一种更方便的形式：
 
@@ -178,8 +179,8 @@ An OCaml list is a sequence of values all of which have the same type.
 #+end_src
 
 此外， ~function~ 关键字也可以展开成匿名函数和 ~match~ 表达式。理解去糖过程，可以帮助我们区分语言的核心机制与便利写法。
-** 列表的类型: ~'a list~
-*** ~list~ 是类型构造器
+* 列表的类型: ~'a list~
+** ~list~ 是类型构造器
 假设有：
 
 #+begin_src ocaml
@@ -211,7 +212,7 @@ list bool -> bool list
 #+end_src
 
 类型是 ~int list list~ 。
-*** 为什么空列表是 ~'a list~
+** 为什么空列表是 ~'a list~
 
 ~utop~ 中， ~[]~ 的类型是:
 
@@ -239,7 +240,7 @@ list bool -> bool list
 #+end_quote
 
 也就是说， ~元素 :: 同类元素组成的列表~ 会得到同一类型的列表。
-*** 一个常见的类型错误
+** 一个常见的类型错误
 
 下面的代码会报错：
 
@@ -248,7 +249,7 @@ list bool -> bool list
 #+end_src
 
 右侧的类型是 ~bool list~ ，根据 ~::~ 的规则，左侧必须是 ~bool~ ，但实际上左侧是 ~1 : int~ 。因此无法统一类型。
-** 列表的真实结构：一种递归数据
+* 列表的真实结构：一种递归数据
 
 OCaml 官方标准库文档直接展示了列表类型的结构：
 
@@ -296,7 +297,7 @@ OCaml 官方标准库文档直接展示了列表类型的结构：
 Python 的 ~list~ 更接近动态数组，因此它的随机访问 ~xs[100]~ 通常很高效。而 OCaml 的列表是单向列表，因此 ~List.nth xs 100~ 需要从头向后访问。
 
 因此，在 OCaml 中频繁按索引访问列表通常值得警惕。后续学习数组、序列与更复杂数据结构时，我们会更系统地处理这个问题。
-** 动态语义：列表如何求值
+* 动态语义：列表如何求值
 
 在 [[id:d46f3d1c-061c-4b97-bf11-dd8c183a911f][OCaml 第二章：OCaml 基础]] 中，我们已经区分了静态语义和动态语义:
 
@@ -306,7 +307,7 @@ Python 的 ~list~ 更接近动态数组，因此它的随机访问 ~xs[100]~ 通
   对于列表，教材引入了一个用于描述语义的符号：
 
   #+begin_quote
-e ===> v
+e ==> v
   #+end_quote
 
 
@@ -327,18 +328,18 @@ e ===> v
 可以被分析为:
 
 #+begin_example
-1 + 2 ===> 3
-3 * 4 ===> 12
+1 + 2 ==> 3
+3 * 4 ==> 12
 #+end_example
 
-因此 ~[1 + 2; 3 * 4;] ===> [3; 12]~ 。
+因此 ~[1 + 2; 3 * 4;] ==> [3; 12]~ 。
 
 那么对于 ~::~ ，规则可以写成:
 
 #+begin_quote
-如果 e1 ===> v1 \\
-并且 e2 ===> v2 \\
-那么 e1 :: e2 ===> v1 :: v2 \\
+如果 e1 ==> v1 \\
+并且 e2 ==> v2 \\
+那么 e1 :: e2 ==> v1 :: v2 \\
 #+end_quote
 
 比如:
@@ -357,7 +358,7 @@ e ===> v
 
 
 -----
-** 使用模式匹配读取列表
+* 使用模式匹配读取列表
 
 列表只有两种构造形式：
 
@@ -389,7 +390,7 @@ sum [1; 2; 3]
 = 1 + 2 + 3
 = 6
 #+end_example
-*** ~match ... with~
+** ~match ... with~
 
 上面的列表求和中使用到了 ~match ... with~ 的语法，一般语法如下：
 
@@ -438,12 +439,12 @@ rest -> [20; 30]
 所以整个表达式的结果是 ~10~ 。
 
 教材将模式匹配概括为两个相互关联的任务：判断模式与值是否具有相同形状，以及建立变量绑定。
-**** 扩展延伸
+*** 扩展延伸
 
 与 ~Shell~ 的 ~case ... in ...~ 的对比可以参照这里： [[id:1b794026-5684-40c3-a605-285c5829b2c4][OCaml 和 Shell 的模式匹配]]
 
 -----
-** 模式与表达式
+* 模式与表达式
 模式与表达式看起来相似，但作用个不同。下面是一个表达式:
 
 #+begin_src ocaml
@@ -490,7 +491,7 @@ rest -> [20; 30]
 这是一种高度对称的设计。构造数据时使用的构造器；拆解数据时使用相同形状的模式。
 
 -----
-** 通配符 ~_~
+* 通配符 ~_~
 :PROPERTIES:
 :ID:       ca55af89-b8e8-4cb0-a762-b3d185f690e4
 :END:
@@ -526,7 +527,7 @@ rest -> [20; 30]
 #+end_src
 都成立。
 -----
-** 模式匹配与结构递归
+* 模式匹配与结构递归
 
 考虑上面的函数，这个函数与列表的定义严格对应：
 - 列表要么是 ~[]~
@@ -568,7 +569,7 @@ rest -> [20; 30]
 程序结构、数据结构与证明结构会逐渐统一起来。
 
 -----
-** 列表拼接 ~@~
+* 列表拼接 ~@~
 
 我们可以手动实现两个列表的拼接:
 
@@ -591,7 +592,7 @@ append [1; 2] [3; 4] \\
 OCaml 提供了中缀运算符 ~@~ 用于两个列表的拼接，因此也可以写:
 
 ~[1; 2] @ [3; 4]~
-*** 拼接的成本取决于左侧列表
+** 拼接的成本取决于左侧列表
 为什么右侧列表可以直接复用，而左侧列表需要重新建立？
 
 因为原有链条最终会指向 ~[]~ ，新链条需要指向 ~[3; 4]~ 。由于列表不可变，原链条不能原地修改，于是需要创建：
@@ -627,7 +628,7 @@ OCaml 提供了中缀运算符 ~@~ 用于两个列表的拼接，因此也可以
 这个函数只在头部使用 ~::~ ，整体为线形时间。
 
 -----
-** 不可变列表与结构共享
+* 不可变列表与结构共享
 :PROPERTIES:
 :ID:       3dbbb463-1cb4-4054-bcae-f99930e0280a
 :END:
@@ -650,7 +651,7 @@ Lists are immutable
 #+end_src
 
 如果我们调用 ~inc_first [10; 20; 30]~ 得到 ~[11; 20; 30]~ ，原列表仍然是 ~[10; 20; 30]~ 。
-*** 这会复制整个列表吗？
+** 这会复制整个列表吗？
 不会。
 
 原列表可以写成:
@@ -669,7 +670,7 @@ Lists are immutable
 #+end_example
 
 新列表与原列表共享尾部。只需要创建一个新的头节点。这被称为 *structural sharing* ，即结构共享。教材说明，列表不可变使这种共享安全可行：共享节点不会被某一方突然改变，因此另一方观察到的数据也不会意外改变。
-*** 与命令式数据结构对比
+** 与命令式数据结构对比
 在 Java 中，可能会写：
 
 #+begin_src java
@@ -703,7 +704,7 @@ Lists are immutable
 之后学习持久化数据结构时，这一点会继续展开。所谓的 *persistent data structure* 指的是更新之后仍然可以继续使用旧版本的数据结构。OCaml 的不可变列表天然具有这一性质。
 
 -----
-** 为什么优先使用模式匹配
+* 为什么优先使用模式匹配
 OCaml 标准库提供:
 
 #+begin_src ocaml
@@ -742,7 +743,7 @@ OCaml 标准库提供:
 这种写法会迫使调用者处理空列表情况。
 
 -----
-** 深层模式匹配
+* 深层模式匹配
 :PROPERTIES:
 :ID:       e9693aa6-e57a-4021-b625-f942caae7311
 :END:
@@ -775,7 +776,7 @@ OCaml 标准库提供:
 模式同样可以使用方括号语法。
 
 -----
-** 穷尽性检查
+* 穷尽性检查
 :PROPERTIES:
 :ID:       b736d3db-bb1f-43d3-bef6-3d5b547f940a
 :END:
@@ -825,7 +826,7 @@ this pattern-matching is not exhaustive.
 这会让数据模型与业务逻辑保持同步。当类型新增一个分支时，遗漏处理逻辑的位置会立刻暴露出来。
 
 -----
-** 冗余分支检查
+* 冗余分支检查
 编译器还会发现永远无法到达的分支。
 
 例如:
@@ -854,7 +855,7 @@ this pattern-matching is not exhaustive.
 教材将无法使用的分支称为冗余分支，并说明这类警告通常意味着程序员的行为偏离了原本意图。
 
 -----
-** 容易被误解的模式匹配错误
+* 容易被误解的模式匹配错误
 
 考虑：
 
@@ -889,7 +890,7 @@ this pattern-matching is not exhaustive.
 #+end_quote
 
 -----
-** ~function~: 立即匹配的语法糖
+* ~function~: 立即匹配的语法糖
 下面的函数:
 
 #+begin_src ocaml
@@ -936,7 +937,7 @@ this pattern-matching is not exhaustive.
 #+end_src
 
 其中， ~x~ 是编译器隐式引入的参数。 OCaml 官方手册将 ~function~ 描述为一种产生单参数函数值的表达式：调用这个函数时，实参会依次参与各个模式匹配；多个模式都能匹配时，优先选择写在最前面的分支；没有任何分支匹配时，会抛出 ~Match_failure~ 。
-*** 为什么 ~funtion~ 被称为立即匹配
+** 为什么 ~funtion~ 被称为立即匹配
 
 观察 ~sum~ 的普通写法，这里的 ~xs~ 只出现了一次，后续真正参与计算是匹配后拆出来的 ~x~ 和 ~rest~ 。此时，单独给整个列表取名的价值有限。使用 ~function~ 可以省略这个临时名称。
 
@@ -958,7 +959,7 @@ this pattern-matching is not exhaustive.
 #+end_src
 
 ~function~ 并不仅仅局限于列表。凡是可以出现在 ~match~ 分支左侧的模式，通常也可以出现在 ~function~ 中。 OCaml 的模式通常还支持常量、元组、记录、变体、字符类型或模式以及带 ~when~ 的守卫。
-*** ~function~ 是一个表达式
+** ~function~ 是一个表达式
 
 理解这一点非常重要。 ~function~ 并非只能存在于 ~let~ 后面，它本身会产生一个函数值：
 
@@ -1003,7 +1004,7 @@ this pattern-matching is not exhaustive.
 #+end_src
 这与匿名函数的性质一致。 OCaml 官方文档也强调，匿名函数经常被作为参数传递给其他函数，例如 ~List.map (fun x -> x * x) ...~ 
 
-*** ~function~ 常见用法
+** ~function~ 常见用法
 
 最常见的用法是在管道中使用。在管道中使用 ~function~ 能够允许在不额外产生变量名的情况下清理匿名回调。考虑下面的例子：
 
@@ -1028,7 +1029,7 @@ this pattern-matching is not exhaustive.
 #+end_src
 
 ~function~ 经常与管道一起出现，因为管道表达式里经常需要一个短小的匿名回调。而这个回调又恰好只做模式匹配。
-*** ~funtion~ 和 ~fun~ 的关键区别
+** ~funtion~ 和 ~fun~ 的关键区别
 
 尽管 ~funtion~ 和 ~fun~ 看起来很像，但是它们的功能却截然不同。
 
@@ -1043,7 +1044,7 @@ this pattern-matching is not exhaustive.
 
 
 ~function~ 并没有引入新的计算能力，只是让 *接收一个参数，然后立即匹配它* 的代码更加紧凑。
-*** ~function~ 与多参数函数
+** ~function~ 与多参数函数
 
 “ ~function~ 只支持一个隐参数” 是正确的，但需要仔细理解。
 
@@ -1096,7 +1097,7 @@ this pattern-matching is not exhaustive.
 #+end_src
 
 这里， ~function~ 引入的隐参数 ~z~ 位于现有参数之后，因此可以将它视为最后一个参数。
-*** 什么时候是和使用 ~functin~
+** 什么时候是和使用 ~functin~
 通常具有三个特征:
 1. 函数只接受一个待分类处理的值，或者前面的参数已经显式写出
 2. 函数体一开始就对最后一个参数进行 ~match~
@@ -1105,7 +1106,7 @@ this pattern-matching is not exhaustive.
 
 -----
 
-** 列表求和与尾递归
+* 列表求和与尾递归
 
 我们之前在 [[id:ed9104dc-ab8c-4f8b-9d55-485260d38408][尾递归是什么]]中学习过尾递归，在 [[id:2c282804-0599-40a6-90ae-246246c6ba2e][尾递归]] 中也有详细的阐述。
 
@@ -1119,7 +1120,7 @@ OCaml 官方 ~List~ 模块文档也说明：
 
 -----
 
-** 列表推导式：OCaml 并不具有
+* 列表推导式：OCaml 并不具有
 
 Python 可以写:
 
@@ -1150,10 +1151,10 @@ OCaml 中可以写:
 
 -----
 
-** 与其他语言的列表对比
+* 与其他语言的列表对比
 
 
-*** Python
+** Python
 #+begin_src python
   xs = [1, 2, 3]
   xs[0] = 10
@@ -1171,7 +1172,7 @@ OCaml:
 二者表面都是用方括号，内部模型差异很大。
 
 
-*** Java
+** Java
 Java 通常需要库使用列表:
 
 #+begin_src java
@@ -1193,7 +1194,7 @@ OCaml 的模式匹配使链表递归更加直接:
   | x :: rest -> ...
 #+end_src
 
-*** Haskell
+** Haskell
 
 Haskell 的列表结构与 OCaml 很接近:
 
@@ -1205,7 +1206,7 @@ Haskell 的列表结构与 OCaml 很接近:
 Haskell 中构造器是 ~:~ ， OCaml 中构造器是 ~::~ 。两种语言都强调递归定义、模式匹配和高阶函数。
 
 
-*** Rust
+** Rust
 
 Rust 标准库常见容器:
 
@@ -1233,7 +1234,7 @@ Rust 标准库常见容器:
 
 -----
 
-** 第二章核心模型
+* 第二章核心模型
 
 一个 OCaml 列表的逻辑可以写成:
 #+begin_quote
@@ -1265,7 +1266,7 @@ list = \\
 
 -----
 
-** 与后续内容的连接
+* 与后续内容的连接
 
 下一节是 3.2 Variants 。在这一节，我们会发现列表并不是一个孤立的特殊机制。它可以被理解为一种预先定义好的递归变体类型。接下来我们会学习如何自己定义类似的结构。再往后，我们会把变体与记录、元组结合起来，建立更复杂的数据模型，并最终进入到树:
 
@@ -1278,483 +1279,3 @@ list = \\
 
 -----
 
-* Variants 类型表达 “有限种可能性”
-:PROPERTIES:
-:ID:       0f3a1156-c78e-411a-a34f-8cf6b448ef24
-:END:
-
-上一讲解中，我们学习了列表:
-
-#+begin_src ocaml
-  type 'a list =
-    | []
-    | (::) of 'a * 'a list
-#+end_src
-
-列表中的 ~[]~ 和 ~(::)~ 已经暗示了 OCaml 的一种核心思想：一个值可以具有若干种不同的形态。程序可以通过模式匹配判断当前遇到的是哪一种形态，并分别处理。
-
-这一讲正式学习 *variant types* ，通常翻译为 “变体类型” 或 “变体” 。它是 OCaml 数据建模能力的核心。后续的 ~option~ 、异常、递归树、编译器抽象语法树，以及更复杂的状态机模型，都会建立在变体类型之上。
-
-** 什么是变体类型
-#+begin_quote
-A variant is a data type representing a value that is one of several possibilities.
-#+end_quote
-
-也就是说，变体类型表示: 一个值属于若干种可能情况中的一种。
-
-例如，一周中的某天只可能属于七种情况之一:
-
-#+begin_src ocaml
-  type day =
-    | Sun
-    | Mon
-    | Tue
-    | Wed
-    | Thu
-    | Fri
-    | Sat
-#+end_src
-
-定义之后，我们可以创建一个值:
-#+begin_src ocaml
-  let d = Tue
-#+end_src
-在 ~utop~ 中我们可以看到:
-
-#+begin_src ocaml
-  val d : day = Tue
-#+end_src
-这里的 ~Tue~ 是一个值，它的类型是 ~day~ 。
-
-从数学集合的角度来看，可以把 ~day~ 暂时理解成:
-
-#+begin_quote
-day = { Sun, Mon, Tue, Wed, Thu, Fri, Sat }
-#+end_quote
-一个 ~day~ 类型的值只能落在这个集合之中。
-
-下面的写法无法通过类型检查:
-
-#+begin_src ocaml
-  let today : day = "Fri"
-#+end_src
-因为字符串 ~"Fri"~ 的类型是 ~string~ ，构造器 ~Fri~ 的类型才是 ~day~ 。
-
-
-** 为什么不直接使用字符串
-我们当然可以直接使用字符串记录星期：
-
-#+begin_src ocaml
-  let today = "Friday"
-#+end_src
-但字符串允许任意字符:
-#+begin_src ocaml
-  let today = "Friday"
-  let today = "星期八"
-  let today = ""
-#+end_src
-如果函数接收一个 ~string~ ，编译器只能确认它收到了字符串，无法确认该字符串确实表示有效星期。
-
-例如：
-#+begin_src ocaml
-  let is_weekend day =
-    day = "Saturday" || day = "Sunday"
-#+end_src
-类型为:
-#+begin_src ocaml
-  val is_weekend : string -> bool
-#+end_src
-调用者却可以传入:
-#+begin_src ocaml
-  is_weekend "Cat"
-#+end_src
-编译器不会阻止这件事情。 ~"Cat"~ 确实是一个字符串。
-
-而我们使用变体类型之后:
-
-#+begin_src ocaml
-  type day =
-    | Sun
-    | Mon
-    | Tue
-    | Wed
-    | Thu
-    | Fri
-    | Sat
-
-  let is_weekend day =
-    match day with
-    | Sat | Sun -> true
-    | Mon | Tue | Wed | Thu | Fri -> false
-#+end_src
-类型是:
-#+begin_src ocaml
-  val is_weekend : day -> bool = <fun>
-#+end_src
-
-调用 ~is_weekend Sat~ ，结果为 ~true~ 。
-
-而调用 ~is_weekend "Cat"~ ，会产生类型错误，因为函数只接受 ~day~:
-
-#+begin_quote
-Error: This constant has type string but an expression was expected of type day
-#+end_quote
-
-变体类型使 “合法取值范围” 进入类型系统。错误可以在编译期间暴露出来。
-
------
-
-** 构造器：用于建立变体值的名字
-在定义:
-#+begin_src ocaml
-  type day =
-    | Sun
-    | Mon
-    | Tue
-    | Wed
-    | Thu
-    | Fri
-    | Sat
-#+end_src
-之后， ~Sun~ , ~Mon~ , ~Tue~ 等名称称为 *constructors* ，即构造器。教材特别提醒这里的 constructor 与 Java 、 C++ 面向对象语境中的构造法方法含义不同。
-
-在 Java 中，我们会看到:
-#+begin_src java
-  new Student("Alice")
-#+end_src
-这里的构造器负责初始化一个对象。
-
-在 OCaml 的变体类型中，构造器负责标记哪一个值属于哪一种情况。这一讲中的构造器暂时不携带额外数据。它们本身已经是完整值。
-
-教材原文概括为:
-
-#+begin_quote
-A constructor is already a value.
-#+end_quote
-因此， ~Tue~ 无需继续计算，已经完成求值。
-
------
-
-** 变体类型的语法
-
-最简单的形式为:
-#+begin_src ocaml
-  type t =
-    | C1
-    | C2
-    | ...
-    | Cn
-#+end_src
-
-也可以写在同一行:
-#+begin_src ocaml
-  type t = C1 | C2 | ... | Cn
-#+end_src
-这里，
-- ~type~ 表示开始定义一个类型
-- ~t~ 是新类型的名称
-- ~C1~ 到 ~Cn~ 是构造器
-- ~|~ 可以读作 “或者”
-
-
-例如:
-
-#+begin_src ocaml
-  type direction =
-    | North
-    | South
-    | East
-    | West
-#+end_src
-可以读作:
-#+begin_quote
-一个 ~direction~ 类型的值，可以是 ~North~ , ~South~ , ~East~ 或 ~West~ 。
-#+end_quote
-构造器必须以 *大写字母开头* 。 OCaml 使用首字母区分构造器与普通变量。教材直接将这一点列入语法规则。
-
-因此，下面的定义合法:
-
-#+begin_src ocaml
-  type answer =
-    | Yes
-    | No
-    | Unknown
-#+end_src
-
-普通变量通常使用小写开头:
-#+begin_src ocaml
-  let answer = Yes
-#+end_src
-这里:
-- ~answer~ 是变量名
-- ~Yes~ 是构造器
-- ~Yes~ 是一个值
-- ~answer~ 绑定到该值
-
-
-这种大小写规则让模式匹配更容易阅读。看到 ~Tue~ 编译器知道它是构造器；看到 ~x~ 编译器知道它是模式变量。
-
------
-
-** 静态语义：构造器具有什么类型
-教材给出的静态语义可以概括为：
-
-#+begin_quote
-如果类型 t 的定义中包含构造器 C, \\
-那么 C : t 
-#+end_quote
-
-例如:
-
-#+begin_src ocaml
-  type direction =
-    | North
-    | South
-    | East
-    | West
-#+end_src
-那么:
-
-#+begin_quote
-  North : direction \\
-  South : direction \\ 
-  East : direction \\
-  West : direction
-#+end_quote
-这里的冒号表示“具有类型”。
-
-定义列表: ~[North; South; East]~ ，会得到:
-#+begin_src ocaml
-  - : direction list = [North; South; East]
-#+end_src
-
-因为列表中三个元素都具有类型 ~direction~ 。
-
------
-
-** 动态语义：构造器如何求值
-对于这一讲中的简单构造器，动态语义非常直接：
-
-#+begin_quote
-C ==> C
-#+end_quote
-也就是说，构造器已经是值，不再发生计算。
-
-下面的表达式:
-
-#+begin_src ocaml
-  let d = Tue in d
-#+end_src
-求值过程可以写为:
-#+begin_quote
-Tue ==> Tue \\
-d 绑定到 Tue \\
-d ==> Tue
-#+end_quote
-最终结果是 ~Tue~ 。这与整数常量类似: ~42~ 已经是值。
-
------
-
-** 使用模式匹配读取变体值
-读取变体值时，需要判断它属于哪一个构造器。 OCaml 使用模式匹配完成这一任务。
-
-比如:
-#+begin_src ocaml
-  let int_of_day d =
-    match d with
-    | Sun -> 1
-    | Mon -> 2
-    | Tue -> 3
-    | Wed -> 4
-    | Thu -> 5
-    | Fri -> 6
-    | Sat -> 7
-#+end_src
-
-类型为:
-#+begin_src ocaml
-  val int_of_day : day -> int
-#+end_src
-教材强调， OCaml 不会自动把构造器映射成整数。如果需要这种映射，必须显式指定。
-
------
-
-** 模式匹配的精确规则
-对于简单构造器，新增的模式形式是 ~C~ ，教材给出的匹配规则可以概括为:
-
-#+begin_quote
-模式 C 只匹配值 C ，不产生新的变量绑定
-#+end_quote
-
-例如:
-
-#+begin_src ocaml
-  match East with
-  | North -> "up"
-  | South -> "down"
-  | East -> "right"
-  | West -> "left"
-#+end_src
-
-结果为 ~"right"~ 。这里， ~East~ 模式只会匹配 ~East~ ，它不会匹配剩余的变体值，也不会引入新的变量。
-
-这与变量模式匹配形成对比，比如:
-
-#+begin_src ocaml
-  match East with
-  | x -> x
-#+end_src
-这里的 ~x~ 是一个变量模式，可以匹配任意 ~direction~ 值，并产生绑定: ~x -> East~ 。
-
------
-
-** 区分：构造器模式和变量模式
-考虑变体类型:
-
-#+begin_src ocaml
-  type answer =
-    | Yes
-    | No
-    | Unknown
-#+end_src
-下面函数含义明确:
-#+begin_src ocaml
-  let describe answer =
-    match answer with
-    | Yes -> "confirmed"
-    | No -> "rejected"
-    | Unknown -> "insufficient information"
-#+end_src
-其中， ~Yes~ 、 ~No~ 、 ~Unknown~ 是构造器模式。在匹配时只会根据输入匹配，而不会进行绑定。
-
-再看下面的函数:
-#+begin_src ocaml
-  let broken_describe answer =
-    match answer with
-    | yes -> "confirmed"
-    | no -> "rejected"
-    | unknown -> "insufficient information"
-#+end_src
-这段代码存在问题。这里，小写的 ~yes~ 会被理解为变量模式。变量模式可以匹配任何值，因此第一个分支就已经覆盖了所有输入。实际的行为将是:
-
-#+begin_src ocaml
-  broken_describe Yes
-  (* "confirmed" *)
-
-  broken_describe No
-  (* "confirmed" *)
-
-  broken_describe Unknown
-  (* "confirmed" *)
-#+end_src
-大小写并非风格偏好，而是直接参与语法分析，也直接影响程序含义。
-
------
-
-** 变体中的穷尽性检查
-
-我们在上一节讨论过 [[id:b736d3db-bb1f-43d3-bef6-3d5b547f940a][穷尽性检查]] ，在这里我们主要讨论变体类型中的穷尽性检查。
-
-考虑:
-
-#+begin_src ocaml
-  type traffic_light =
-    | Red
-    | Yellow
-    | Green
-#+end_src
-
-下面的函数遗漏了 ~Yellow~:
-
-#+begin_src ocaml
-  let action light =
-    match light with
-    | Red -> "stop"
-    | Green -> "go"
-#+end_src
-编译器会提醒:
-
-#+begin_quote
-Warning 8[partial-match]: \\
-this pattern-matching is not exhaustive. \\
-Here is an example of a case is not matched: \\
-Yellow
-#+end_quote
-这是变体类型非常重要的优势。
-
-如果使用字符串:
-
-#+begin_src ocaml
-  let action light =
-    if light = "red" then "stop"
-    else "go"
-#+end_src
-编译器无法知道 ~"yello"~ 是否应该被单独处理，也无法知道 ~"cat"~ 是否是非法输入。
-
-而我们如果使用变体的话，以后如果新增新状态:
-#+begin_src ocaml
-  type traffic_light =
-    | Red
-    | Red_yellow
-    | Yellow
-    | Green
-#+end_src
-已有模式匹配可能会缺少 ~Red_yello~ 。编译器会在遗漏处理的位置发出警告。
-
-这种能力对大型程序很有价值：类型定义成为合法情况的统一清单，模式匹配成为逐项处理清单。
-
------
-
-** 变体类型中的通配符 ~_~
-我们之前已经讨论过 [[id:ca55af89-b8e8-4cb0-a762-b3d185f690e4][通配符 ~_~]] 的定义和使用方式，现在我们放在变体类型中具体讨论一下什么时候适合使用 ~_~ 。
-
-比如，下面的函数只关注红灯:
-
-#+begin_src ocaml
-  let must_stop light =
-    match light with
-    | Red -> true
-    | _ -> false
-#+end_src
-类型为:
-#+begin_src ocaml
-  val must_stop : traffic_light -> bool = <fun>
-#+end_src
-这里， ~_~ 会匹配所有剩余情况，但不绑定名称。
-
-对于当前定义:
-
-#+begin_src ocaml
-  type traffic_light =
-    | Red
-    | Yellow
-    | Green
-#+end_src
-它相当于我们之前的写法。这两种写法都合法，但他们对未来修改的反应不同。
-
-假设增加:
-#+begin_src ocaml
-  | Brown
-#+end_src
-第一种写法仍然通过检查，此时 ~Brown~ 会落入 ~_~ 分支，结果为 ~false~ 。这个结果可能是符合意图的，也可能隐藏错误：
-#+begin_src ocaml
-  let must_stop light =
-    match light with
-    | Red -> true
-    | _ -> false
-#+end_src
-第二种写法会产生遗漏警告:
-#+begin_src ocaml
-  let must_stop light =
-    match light with
-    | Red -> true
-    | Yellow -> false
-    | Green -> false
-#+end_src
-因为新出现的 ~Broken~ 尚未处理。
-
-因此，通配符适合表达真正统一的剩余情况。如果每一种新增状态都值得重新审视，显式列出构造器通常更加稳妥。
-
------
-
-** 多个模式共享一个分支
