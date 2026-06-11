@@ -173,7 +173,8 @@ C++ 语言本身并未定义任何用于输入或输出的语句。相反，C++ 
 语句通常按顺序执行：块中的第一个语句最先执行，其次是第二个，以此类推。当然很少有程序能仅仅依靠顺序执行就解决问题。为解决这个问题，编程语言提供了各种控制流语句，从而支撑更加复杂的执行路径。
 
 
-*** The ~while~ Statement
+*** 控制流的本质
+
 ~while~ 语句会在给定条件为真时，反复执行同一段代码。比如:
 #+begin_src cpp
   #include <iostream.
@@ -190,4 +191,536 @@ C++ 语言本身并未定义任何用于输入或输出的语句。相反，C++ 
 编译然后运行该程序，就会得到输出:
 #+begin_quote
 Sum of 1 to 10 inclusive is 55
+#+end_quote
+这里比较重要的是，不要把控制流只当成语法。控制流有三种层次:
+
+
+C++ Primer 在这里引入三种最基本的控制结构:
+| 结构    | 用途                                   |
+|---------+----------------------------------------|
+| ~while~ | 条件为真时反复执行                    |
+| ~for~   | 常用于“初始化——判断——更新”的计数循环 |
+| ~if~    | 条件分支                               |
+
+*** ~while~: 先判断，再循环
+
+~while~ 的形式是:
+#+begin_src cpp
+  while (condition)
+    statement
+#+end_src
+执行模型是:
+#+begin_example
+判断 conditoin
+  如果为 true: 执行 statement, 然后回到 condition
+  如果为 false: 跳出循环
+#+end_example
+这点很重要: ~while~ 是先测试条件，再执行循环体。如果一开始条件就是 false ，循环体一次也不会执行。
+
+**** C++ 的 condition 到底是什么
+在 C++ 里， ~while(...)~ 里的 ~condition~ 不一定必须是 ~bool~ 类型。它可以是一个能被 “按语境转化为 bool” 的表达式。
+
+例如:
+#+begin_src cpp
+  while (val <= 10)
+#+end_src
+~val <= 10~ 的结果本身就是 ~bool~ 。
+
+但后面可能会出现:
+#+begin_src cpp
+  while (std::cin >> value)
+#+end_src
+这里， ~std::cin >> value~ 的结果不是 ~bool~ ，而是一个流对象引用。它之所以能够放在条件里，是因为标准输入流可以在条件语境中转化为表示 “流是否有效” 的布尔值。 C++11 之后，这通常通过类似 ~explicit operator bool()~ 的机制完成。
+
+也就是说， ~while (std::cin >> value)~ 并不会判断 ~value~ 的值，而是在判断:
+#+begin_quote
+这次输入是否成功。
+#+end_quote
+这正是 C++ IO 库设计巧妙的地方：输入操作既完成读取，又返回流本身，使得我们可以连续读取并检测状态。
+
+**** ~sum += val~ 和 ~++val~
+上述程序中的 ~sum += val;~ 等价于 ~sum = sum + val;~ 。但语义上要理解为把右边的值累加到左边的对象中。对于内置函数，二者几乎一样。但进入类型之后， ~+=~ 可以被用户自定义。
+
+~++val~ 是前置自增，等价于 ~val = val + 1~ 。这里用 ~++val~ 而不是 ~val++~ 是一种好习惯。对 ~int~ 来说差异可以优化掉，但对于迭代器、类类型来说，前置自增通常更加直接：修改对象并返回修改后的对象；而后置自增通常需要保留旧值，理论上可能多一次临时对象。
+
+这里我们暂且不深入，可以先理解为: 循环里如果不需要保留旧值，则优先写 ~++x~ 。
+
+*** ~for~: 把循环控制逻辑集中在头部
+我们可以改写上面的程序为:
+#+begin_src cpp
+  #include <iostream>
+
+  int main() {
+    int sum = 0;
+    for (int val = 1; val <= 10; ++val) {
+      sum += val;
+    }
+    std::cout << "Sum of 1 to 10 inclusive is " << sum << std::endl;
+
+    return 0;
+
+  }
+#+end_src
+~for~ 的形式是:
+
+#+begin_src cpp
+  for (init-statement; condition; expression)
+    statement
+#+end_src
+执行顺序是:
+1. 执行 init-statement ，只执行一次
+2. 判断 condition
+3. 如果 true ，执行循环体
+4. 执行 expression
+5. 回到第2步
+
+
+**** ~for~ 和 ~while~ 的区别
+从表达能力上来说，这两个可以互相改写。区别在于可读性。
+
+适合 ~for~ 的情况:
+#+begin_src cpp
+  for (int i = 0; i < n; ++i)
+#+end_src
+这种循环具有明确的起点、终点、步进。
+
+适合 ~while~ 的情况:
+#+begin_src cpp
+  while (std::cin >> value)
+#+end_src
+这种循环不按照次数进行，而是按照外部状态运行：只要输入成功就继续。
+
+所以我们可以形成一个判断:
+#+begin_quote
+如果循环的控制变量、终止条件、更新方式都很清楚，优先使用 ~for~ \\
+如果循环依赖某个状态是否持续成立，优先用 ~while~ 。
+#+end_quote
+
+**** ~for~ 里定义的变量作用域
+针对下面的例子:
+#+begin_src cpp
+  for (int val = 1; val <= 10; ++val)
+    sum += val;
+#+end_src
+这里的 ~val~ 只存在于 ~for~ 语句内部。循环结束后， ~std::cout << val~ 会报错，因为此时 ~val~ 已经不再作用域内了。
+
+这里是 C++ 比较强调的风格: 让变量尽量活在最小作用域内。
+
+这样有几个好处:
+1. 避免后续误用
+2. 增强可读性
+3. 给编译器更多优化空间
+4. 降低运行时的认知负担
+
+
+-----
+
+*** Reading an Unknown Number of Inputs
+
+这一节非常重要，它不是简单的输入循环，而是第一次展示 C++ 标准库抽象的力量。
+
+下面的程序:
+#+begin_src cpp
+  #include <iostream>
+
+  int main() {
+    int sum = 0, val = 0;
+    while (std::cin >> val)
+      sum += val;
+
+    std::cout << "Sum is: " << sum << std::endl;
+
+    return 0;
+  }
+#+end_src
+这里， ~std::cin >> val~ 会读取下一个整数并存入 ~val~ ，输入运算符返回左操作数，也就是 ~std::cin~ ，所以 ~while~ 条件实际上是在测试输入流状态。遇到 EOF 或非法输入时，流进入无效状态，条件为 false ，循环结束。
+
+对于 ~std::cin >> val~ 的理解:
+
+这段代码至少同时做了三件事情:
+1. 尝试从输入流读取一个整数
+2. 把独到的值写入到 ~val~
+3. 返回 ~std::cin~
+
+
+所以， ~while (std::cin >> val)~ 等价于一种概念上的写法:
+
+#+begin_src cpp
+  while (read_from_cin_into(val) succeed)
+#+end_src
+但 C++ 用操作符和流状态将其写得十分紧凑。
+
+**** 输入流状态
+~std::cin~ 内部维护状态位，常见状态包括:
+| 状态      | 含义                                          |
+|-----------+-----------------------------------------------|
+| ~goodbit~ | 当前没有错误                                 |
+| ~eofbit~  | 到达文件末尾                                 |
+| ~failbit~ | 输入格式不匹配，比如要读 ~int~ 却读到 ~abc~ |
+| ~badbit~  | 更严重的 IO 错误                             |
+
+于是 ~while (std::cin >> value)~ 在以下情况会停止:
+1. 正常 EOP
+2. 输入格式错误
+3. 底层 IO 错误
+
+
+这是一种很典型的 C++ 风格:
+#+begin_quote
+操作返回对象本身，对象携带状态，条件语境检查状态。
+#+end_quote
+
+**** 和 Shell/Unix 的关系
+我们经过编译之后:
+#+begin_src bash
+  g++ -std=c++17 -Wall -Wextra -pedantic sum.cpp -o sum
+  ./sum
+#+end_src
+手动输入:
+#+begin_quote
+1 2 3 4 5
+#+end_quote
+然后按 ~Crrl-D~ 表示 EOF 。
+
+也可以用重定向:
+#+begin_src bash
+  echo "1 2 3 4 5" | ./sum
+#+end_src
+
+这时程序不关心输入来自减排还是管道。它只面对 ~std::cin~ 这个抽象输入流。
+
+这就是 C++ Primer 早早引入 IO 库的原因：我们先学会使用抽象基础设施，而不是一上来处理系统调用、文件描述符、缓冲区等低层机制。
+
+-----
+
+*** ~if~: 条件分支与分组统计
+统计连续整数出现的次数:
+#+begin_src cpp
+  #include <iostream>
+
+  int main() {
+
+    int currVal = 0, val = 0;
+
+    if (std::cin >> currVal) {
+      int cnt = 1;
+
+      while (std::cin >> val) {
+        if (val == currVal) {
+          ++cnt;
+        } else {
+          std::cout << currVal << " occurs " << cnt << " times " << std::endl;
+          currVal = val;
+          cnt = 1;
+        }
+      }
+
+      std::cout << currVal << " occurs " << cnt << " times " << std::endl;
+    }
+    return 0;
+  }
+#+end_src
+这个程序有一个非常重要的思想:
+#+begin_quote
+在处理流式输入时，常常需要先读第一条记录，用它初始化当前状态，然后再循环处理剩余记录。
+#+end_quote
+
+**** 为什么要先读入第一项
+
+如果直接写:
+#+begin_src cpp
+  int currVal = 0, val = 0;
+  int cnt = 1;
+
+  while (std::cin >> val) {
+    ...
+  }
+#+end_src
+这里没有可靠地处理“当前正在统计的值”。所以需要先对第一项进行:
+#+begin_src cpp
+  if (std::cin >> currVal)
+#+end_src
+只有读成功，才能进入统计逻辑。
+
+这是一种安全写法。先确认数据，再处理数据。这对可靠性很重要，因为工程里大量的bug都来自 “默认认为数据存在”。
+
+**** 这个程序只能统计“连续相同值”
+
+程序不会把几个分开的相同数合并到一起。因此，排序的前提是，相同值已经被分组放到一起。这其实是一种常见的算法模式:
+#+begin_quote
+处理已经按照 key 排序或分组的数据流。
+#+end_quote
+
+-----
+
+** Introducing Classes
+引入类。
+
+本节我们先使用一个已经定义好的类:
+#+begin_src cpp
+  #include "Sales_item.h"
+#+end_src
+然后可以像 ~int~ 一样使用它:
+#+begin_src cpp
+  Sales_Item item;
+  std::cin >> item;
+  std::cout << item;
+#+end_src
+这非常符合 C++ 的设计思想:
+#+begin_quote
+类类型应该可以像内置类型一样自然地被创建、复制、输入、输出、比较、累加。
+#+end_quote
+
+*** ~Sales_item~ 是什么
+它表示一条销售记录，大致包含:
+#+begin_example
+ISBN
+售出册数
+总收入
+平均售价
+#+end_example
+我们现在不关心它内部是如何实现的，重点看它支持哪些操作:
+#+begin_src cpp
+  Sales_item book;
+  std::cin >> book;
+  std::cout << book << std::endl;
+#+end_src
+说明它支持:
+#+begin_src cpp
+  operator>>(std::istream&, Sales_Item&);
+  operator<<(std::ostream&, const Sales_Item&);
+#+end_src
+也就是可以被输入、输出。
+
+再例如:
+#+begin_src cpp
+  item1 + item2
+  item1 += item2
+#+end_src
+说明它支持加法和复合赋值。
+
+在例如:
+
+#+begin_src cpp
+  item.isbn();
+#+end_src
+说明它有成员函数 ~isbn()~ 。
+
+**** 类的核心是 “接口”，不是“字段”
+如果从 C、Python 或 JavaScript 的经验出发，可能很会想知道:
+#+begin_quote
+Sales_Item 里面到底有什么字段?
+#+end_quote
+但本书可以不让我们看到内部实现，而是先使用接口。那么，对于一个抽象类型，我们应该首先问，我能对它做什么？而不是，它里面怎么存？
+
+~Sales_item~ 的接口大概是:
+| 操作                | 含义                          |
+|---------------------+-------------------------------|
+| ~std::cin >> item~  | 从输入流读取一条销售记录     |
+| ~std::cout << item~ | 输出一条销售记录             |
+| ~item1 + item2~     | 合并两条相同 ISBN 的销售记录 |
+| ~item1 += item2~    | 把右边的记录累加到左边       |
+| ~item.isbn()~       | 取得 ISBN                       |
+
+这就是抽象数据类型的基本思想:
+#+begin_quote
+使用者依赖接口，不依赖实现。
+#+end_quote
+
+**** 为什么 ~Sales_item~ 可以用运算符
+因为 C++ 支持运算符重载。
+
+对内置类型 ~int a, b;~ 我们可以很自然地使用 ~a + b~ ，这里 ~+~ 是语言内置的整数加法。
+
+而对类类型:
+#+begin_src cpp
+  Sales_item a, b;
+  a + b;
+#+end_src
+~+~ 可以是作者自定义的函数，概念上类似 ~operator+(a, b)~ 。 ~<<~ 和 ~>>~ 也类型: ~std::cin >> item~ 概念上类似 ~operator>>(std::cin, item)~ 。
+
+这体现了 C++ 的一个核心目标:
+#+begin_quote
+用户自定义类型可以接近内置类型的使用体验，同时保留静态类型检查和高效实现的可能性。
+#+end_quote
+
+-----
+
+*** Member Functions: 成员函数
+#+begin_src cpp
+  item.isbn()
+#+end_src
+这里的 ~isbn~ 是成员函数。
+
+形式是:
+#+begin_src cpp
+  object.member()
+#+end_src
+~.~ 是成员访问运算符。
+
+我们可以先理解为:
+#+begin_quote
+对 ~item~ 这个对象调用 ~isbn~ 操作
+#+end_quote
+成员函数写法更强调: 这个操作属于这个对象的接口。后面学习类的时候，我们会知道，成员对象内部有一个隐含参数 ~this~ ，指向当前对象，也即是说:
+#+begin_src cpp
+  item.isbn()
+#+end_src
+在底层语义上接近于:
+#+begin_src cpp
+  Sales_item::isbn(&item)
+#+end_src
+当然这只是帮助理解，真实的语法和调用规则更复杂。
+
+-----
+
+** The Bookstore Program
+现在把前面的内容都串联起来。
+
+该程序的目标是: 读取销售交易，按照 ISBN 汇总，输出每本书的总销量、总收入和平均价格，程序假设同一个 ISBN 的交易记录已经连续排列。
+
+#+begin_src cpp
+  #include <iostream>
+  #inlcude "Sales_item.h"
+
+  int main() {
+    Sales_item total;
+
+    if (std::cin >> total) {
+      Sales_item trans;
+      while (std::cin >> trans) {
+        if (total.isbn() == trans.isbn()) {
+  	total += trans;
+        } else {
+  	std::cout << total << std::endl;
+  	total = trans;
+        }
+      }
+      std::cout << total << std::endl;
+    } else {
+      std::cerr << "No data?!" << std::endl;
+      return -1;
+    }
+    return 0;
+  }
+#+end_src
+~total~ 保存当前 ISBN 的累计结果； ~trans~ 保存每次新读入的交易。如果 ISBN 相同，就把 ~trans~ 累加到 ~total~ ；否则返回上一组，并把 ~total~ 置为新的交易。循环结束后，输出最后一组。
+
+让我们和前面的 “连续相同整数技术” 的函数进行对比:
+| 整数计数程序            | 书店程序                       |
+|--------------------------+--------------------------------|
+| ~currVal~                | ~total~                        |
+| ~val~                    | ~trans~                        |
+| ~val == currval~         | ~total.isbn() == trans.isbn()~ |
+| ~++cnt~                  | ~total += trans~               |
+| 输出当前数字计数        | 输出当前 ISBN 汇总            |
+| ~currVal = val; cnt = 1~ | ~total = trans~                |
+
+*** 为什么要先读第一条记录
+#+begin_src cpp
+  Sales_item total;
+
+  if (std::cin >> total) {
+    ...
+  }
+#+end_src
+因为需要一个“当前分组”的初始值。
+
+如果没有第一条记录，那就没有 ISBN ，也没有可累计对象。所以:
+#+begin_src cpp
+  if (std::cin >> total)
+#+end_src
+既完成读取，也完成确认输入非空。
+
+这比先默认构造一个空对象然后直接循环更可靠。
+
+*** 为什么最后还要输出一次
+循环内部只在“遇到新ISBN”的时候输出上一组:
+#+begin_src cpp
+  else {
+    std::cout << total << std::endl;
+    total = trans;
+  }
+#+end_src
+但是最后一组没有“新的ISBN”来触发输出，所以需要再输出一次。这也是流式分组算法的经典边界问题:
+#+begin_quote
+每当看到下一组的第一条记录时，才能确定上一组结束。 \\
+因此最后一组需要在循环结束后单独处理。
+#+end_quote
+
+*** ~total += trans~ 的意思
+这看起来像是整数累加，但其实它操作的是 ~Sales_item~ 。合理的语义应该是:
+#+begin_quote
+要求 ~total~ 和 ~trans~ 是同一本书，并把 ~trans~ 的销售册数和收入累加到 ~total~ 中。
+#+end_quote
+也就是说，类作者会把 “如何合并两条销售记录” 的逻辑封装到 ~+=~ 中。
+
+使用者只需要写:
+#+begin_src cpp
+  total += trans
+#+end_src
+而不用自己手动操作。这就是封装和抽象的意义。
+
+*** ~total = trans~ 的意思
+与上面 ~+=~ 的定义不同，这里 ~=~ 的含义就是赋值，也即:
+#+begin_quote
+放弃当前 ~total~ 的旧值，让它变成 ~trans~ 的副本。
+#+end_quote
+赋值 (assignment) 会抹去对象的当前值，并用新值代替。
+
+*** 从实现角度理解 ~Sales_item~
+本章虽然不要求理解 ~Sales_item~ 的定义，但我们可以合理推测它内部可能类似:
+#+begin_src cpp
+  class Sales_item {
+  public:
+    std::string isbn() const;
+
+    Sales_item& operator+=(const Sales_item);
+
+  private:
+    std::string bookNo;
+    unsigned units_sold = 0;
+    double revenue = 0.0;
+  };
+#+end_src
+输入一条 ~0-201-70353-X 4 24 24.99~ 可能会被解析成:
+#+begin_example
+bookNo = "0-201-70353-X"
+units_sold = 4
+revenue = 4 * 24.99
+#+end_example
+输出时再计算平均价格。但重点是：使用者不应该依赖这些字段名。只需要依赖接口:
+#+begin_src cpp
+  item.isbn();
+  item += another;
+  std::cin >> item;
+  std::cout << item
+#+end_src
+这就是以后写大型 C++ 项目的基础习惯:
+#+begin_quote
+不要把“对象怎么存”暴露给使用者；需要暴露“对象能做什么”。
+#+end_quote
+-----
+
+** 小结
+
+*** 类型决定操作
+类型决定数据内容和可用操作。不同类型支持不同操作。 C++ 的静态类型检查系统会在编译期检查这些操作是否合法。
+
+*** 输入输出不是语言内建语句
+C++ 没有像某些语言那样把 ~print~, ~intput~ 做成语言关键字，而是使用标准库:
+#+begin_src cpp
+  std::cin;
+  std::cout;
+  std::cerr;
+#+end_src
+C++ 语言本身不定义 IO 语句，而是通过标准库提供 IO。这背后体现的是 C++ 的一个重要思想:
+#+begin_quote
+核心语言尽可能小，很多能力通过库和类型系统提供。
+#+end_quote
+
+*** 控制流模式可以泛化到类类型
+C++ 不是简单的 “更复杂的C”。它的关键能力是:
+#+begin_quote
+把用户定义类型融入语言表达式体系，让抽象类型像内置类型一样工作。
 #+end_quote
