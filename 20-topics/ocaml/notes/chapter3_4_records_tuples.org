@@ -4,7 +4,7 @@
 #+title: Records and Tuples
 * Records and Tuples
 
-单链表是一种很棒的数据结构。但是如果你想对几个元素进行修复，而不是整个无限大的数字呢？或者如果你想要这些元素具有不同的类型呢？如果你想要通过名字而不是数字去访问元素呢？列表 (Lists) 并不能轻易实现以上任何一种。作为替代， OCaml 程序员通常使用 records 和 tuples (记录 和 元组) 。
+单链表是一种很棒的数据结构。但是如果你想对固定数量的元素进行修复，而不是整个无限大的数字呢？或者如果你想要这些元素具有不同的类型呢？如果你想要通过名字而不是数字去访问元素呢？列表 (Lists) 并不能轻易实现以上任何一种。作为替代， OCaml 程序员通常使用 records 和 tuples (记录 和 元组) 。
 * Records
 
 记录是由多种其他类型的数据组合而成，每一种类型都被命名 (named) 。 OCaml 的记录非常类似 C 中的结构体。这有一个例子，关于一个 record 类型的定义: ~mon~ ，同时复用了我们在 [[id:f3715a29-2c9c-456b-8169-9e948b18e098][Variants 类型表达 “有限种可能性”]] 中定义的 ~ptype~ 类型。
@@ -33,6 +33,29 @@
   {name = "Charmander"; hp = 39; ptype = TFire}
 #+end_src
 
+需要强调的是， OCaml 中，如果你想定义一个新的 record 类型， *必须先写类型定义* 。形式就是:
+#+begin_src ocaml
+  type record_name = {
+      field1 : type1;
+      field2 : type2;
+    }
+#+end_src
+
+比如:
+#+begin_src ocaml
+  type date = {
+      day : int;
+      month : int;
+      year : int;
+  }
+#+end_src
+然后才能构造这个 record 值:
+#+begin_src ocaml
+  let d = { day = 13; month = 6; year = 2026}
+#+end_src
+
+原因是: OCaml 的字段名不是“临时对象属性”，而是 *类型定义的一部分* 。也就是说， ~day~ / ~month~ / ~year~ 这些字段必须先在某个 record type 里被声明，编译器才知道 ~{day = ...; month = ...; year = ...}~ 是什么类型。
+
 在定义 record 类型时，我们在字段的名称和值之间写的是 ~:~ ；在书写表达式时，我们使用 ~=~ 。
 
 我们可以使用 ~.~ 去访问 record 类型中的字段:
@@ -59,6 +82,7 @@
   match c with {name; hp; ptype} -> hp
 #+end_src
 ~{name; hp; ptype}~ 是 ~{name = name; hp = hp; ptype = ptype}~ 的语法糖。每一个这样的子表达式中，等号左侧的标识符是字段的名字，等号右侧的标识符是模式变量。
+
 ** Record syntax
 一个 record expression 写成:
 #+begin_src ocaml
@@ -108,6 +132,42 @@ Record 的动态语义可以概括为: 构造、访问、复制。
 TFire
 #+end_example
 然后再构建一个 record 值。
+OCaml 并不保证 tuple 和 record 各字段的求值顺序，也就是说，对于:
+#+begin_src ocaml
+  { x = read_int (); y = read_int () }
+#+end_src
+不要依赖它一定先读 ~x~ 再读 ~y~ 。
+
+更稳妥的写法是:
+#+begin_src ocaml
+  let x = read_int () in
+      let y = read_int () in
+      { x; y }
+#+end_src
+这个规则非常重要: 如果字段表达式有副作用，就不要把副作用直接塞进 record 字面量中。
+*** 访问字段
+#+begin_src ocaml
+  c.hp
+#+end_src
+含义是: 求出 ~c~ 的 record 值，然后取出字段 ~hp~ 对应的值。如果:
+#+begin_src ocaml
+  let c = { name = "CHarmander"; hp = 39; ptype = TFire }
+#+end_src
+那么 ~c.hp~ 结果就是 ~39~ 。
+*** Record Copy 复制
+比如:
+#+begin_src ocaml
+  let d = { valentine's_day with day = 15 }
+#+end_src
+它等价于显式重新构造:
+#+begin_src ocaml
+  let d = {
+    day = 15;
+    month = valentine's_day.month;
+    year = valentine's_day.year;
+  }
+#+end_src
+也就是说， ~with~ 不是修改旧值，而是构造新值。
 ** 静态语义
 
 record 类型必须先定义才能使用。这样可以使 OCaml 进行更准确的类型推断。而如果在未定义的情况下直接使用 record 类型，则无法达到这种效果。
@@ -289,7 +349,7 @@ p'
   let s1 = { name = "Alice"; scores = [|90; 95|]}
   let s2 = { s1 with name = "Bob" }
 #+end_src
-这时如果 ~s2.scores.(0) <- 0~ ，那么 ~s1.socres.(0) = 0~ ， ~s2.scores.(0) = 0~ 。
+这时如果 ~s2.scores.(0) <- 0~ ，那么 ~s1.scores.(0) = 0~ ， ~s2.scores.(0) = 0~ 。
 
 因为 ~s1~ 和 ~s2~ 共享同一个数组。
 
@@ -326,3 +386,502 @@ OCaml 也允许可变字段:
 - 如果对于所有的 ~i...n~ ，都成立 ~pi~ 匹配 ~vi~ 并产生绑定 ~bi~，那么记录模式 ~{f1 = p1; ...; fn = pn}~ 匹配记录值 ~{f1 = v1; ...; fn = vn}~ 并产生绑定集 \[U_ib_i\] 。请注意，记录值可能比记录模式包含更多的字段。
 
   作为语法糖，还提供了一种记录模式的另一形式： ~{f1; ...; fn}~ 。它会被展开为 ~{f1 = f1; ...; fn = fn}~ 。
+
+
+-----
+
+* Tuple
+
+本节的核心不是“又一种容器”，而是理解 OCaml 中的一种非常基础的 *product type (积类型)* ：把若干个值按照固定位置组合成一个整体。把 tuple 放在 record 后面讲，是因为二者的本质接近: record 是 “带字段名的积类型”， tuple 是 “只靠位置区分字段的积类型”。 tuple 的组件不是按名字而是按位置识别的；超过三个组件后，通常建议使用 record ；因为人很难记住每个位置的含义。 OCaml 官方文档也采用相同解释： tuple 中元素由其在 product type 中的位置识别，而 record 则由字段名和值组成。
+
+
+** Tuple 是什么
+tuple 是固定长度、可异质、按位置访问的。
+
+先看几个值：
+#+begin_src ocaml
+  (1, 20)
+  (true, "hello")
+  ([1; 2; 3], (0.5, 'x'))
+#+end_src
+它们都是 tuple. tuple 的几个关键性质是:
+- 它的长度固定。比如 ~(1, 2)~ 永远是二元组，不能像 list 那样可以追加元素。
+- 它的元素类型可以不同，比如  ~(true, "hello")~ 它的类型是 ~bool * string~ 。\\
+  这和 list 很不一样。 list 要求所有元素同类型。 \\
+  tuple 则可以自然表达“一个 int 和 一个 bool 和一个 string” ： ~(1, true, "x")~ ，其类型是 ~int * bool * string~ ，这里的 ~*~ 不是乘法运算符，而是 *类型构造符* ，表示 product type 。
+
+** Pair, triple, tuple
+
+二元组是 *pair*:
+
+#+begin_src ocaml
+  (1, true)
+#+end_src
+三元组叫 *triple*:
+#+begin_src ocaml
+  (1, true, "hello")
+#+end_src
+更高元的个数一般直接叫 tuple. LPO 也用 pair 和 n-tuples 这一套说法，并指出 pair 类型采用笛卡尔积的数学记法，例如 ~(1, true)~ 的类型是 ~int * bool~ 。
+
+这里要注意一个细节： OCaml 没有真正意义上的 “一元组”。
+#+begin_src ocaml
+  (1)
+#+end_src
+这只是括号里的整数 ~1~ ，类型仍然是 ~int~ 。也就是说，括号本身不是 tuple 的标志，*逗号才是 tuple 的核心标志* 。
+
+#+begin_src ocaml
+  (1, 2) (* tuple *)
+  (1) (* just 1 *)
+#+end_src
+所以 tuple 的语法更精确地说是:
+
+#+begin_src ocaml
+  (e1, e2, ..., en)
+#+end_src
+其中 ~n >= 2~ 。
+
+同时，括号并不总是强制的，但一般风格上都建议写出来。例如:
+#+begin_src ocaml
+  let p = 1, 2
+#+end_src
+OCaml 仍然可以解析为 pair ，但更推荐写:
+#+begin_src ocaml
+  let p = (1, 2)
+#+end_src
+
+** Tuple 的静态语义
+
+如果:
+#+begin_quote
+e1 : t1 \\
+e2 : t2 \\
+e3 : t3
+#+end_quote
+那么:
+#+begin_src ocaml
+  (e1, e2, e3) : t1 * t2 * t3
+#+end_src
+例如:
+#+begin_src ocaml
+  let p = (1 + 2, not false, "ocaml")
+#+end_src
+推导过程是:
+#+begin_quote
+1 + 2 : int \\
+not false : bool \\
+"ocaml" : string
+#+end_quote
+所以其类型是:
+#+begin_src ocaml
+  p : int * bool * string
+#+end_src
+这就是所谓 tuple 的 static semantics: 如果每个子表达式 ~ei~ 的类型分别是 ~ti~ ，那么整个 tuple 的类型就是 ~t1 * ... * tn~ 。
+
+*注意：嵌套 pair 不等于 triple*
+
+LPO 明确强调:
+
+#+begin_src ocaml
+  (int * int) * int
+  int * (int * int)
+  int * int * int
+#+end_src
+三者不是同一个类型。我们分别看值:
+#+begin_src ocaml
+  ((1, 2), 3) (* (int * int) * int *)
+  (1, (2, 3)) (* int * (int * int) *)
+  (1, 2, 3) (* int * int * int *)
+#+end_src
+它们三个的结构不同。这在 OCaml 中非常重要。因为类型系统关心结构。比如:
+#+begin_src ocaml
+  let f (x, y ,z) = x + y + z
+#+end_src
+这个函数要求参数的是 triple 。所以:
+#+begin_src ocaml
+  f (1, 2, 3) (* OK *)
+  f ((1, 2), 3) (* Error *)
+#+end_src
+因为 ~((1, 2), 3)~ 是 pair whose first component is a pair ，不是 triple 。
+
+** Tuple 的动态语义
+如果:
+#+begin_quote
+e1 ==> v1 \\
+e2 ==> v2 \\
+...
+en ==> vn
+#+end_quote
+那么:
+#+begin_quote
+(e1, e2, ..., en) ==> (v1, v2, ..., vn)
+#+end_quote
+也就是说， tuple 构造会先计算各个组件，然后把这些结果组合成一个 tuple 。
+
+比如:
+#+begin_src ocaml
+  (1 + 2, String.length "abc")
+#+end_src
+会得到:
+#+begin_src ocaml
+  (3, 3)
+#+end_src
+但这里有一个非常重要的补充: *不要依赖 tuple 各组件的求值顺序* 。
+
+OCaml 不规定 n-tuples 和 records 组件的求值顺序；在 ~(e1, e2)~ 中，不应该假设 ~e1~ 一定先于 ~e2~ 求值。所以不要写这种代码:
+#+begin_src ocaml
+  (read_int (), read_int ())
+#+end_src
+然后假定第一个输入一定进入第一个分量。更稳妥的写法是:
+#+begin_src ocaml
+  let x = read_int () in
+      let y = read_int () in
+      (x, y)
+#+end_src
+这段代码显示指定了顺序: 先读取 ~x~ ，再读取 ~y~ ，最后构造 pair 。
+
+这个原则非常重要： *当表达式有副作用时，用 ~let ... in~ 固定求值顺序；不要把副作用藏在 tuple 组件里* 。
+
+** 如何访问 tuple
+主要依靠模式匹配访问 tuple.
+
+record 有字段访问:
+#+begin_src ocaml
+  r.name
+  r.hp
+#+end_src
+tuple 没有通用的 ~.1~ , ~.2~ 等访问语法。访问 tuple 最合适的方式是模式匹配。
+
+比如:
+#+begin_src ocaml
+  let p = (3, 4)
+  let (x, y) = p
+#+end_src
+此时： ~x = 3~, ~y = 4~ 。
+
+当然也可以在函数参数中直接匹配:
+#+begin_src ocaml
+  let distance_from_origin (x, y) =
+    sqrt (float (x * x + y * y))
+#+end_src
+这个函数的类型是:
+#+begin_src ocaml
+  int * int -> float
+#+end_src
+意思是: 它接受一个 pair, 而不是两个独立的参数。
+
+比如这个函数:
+#+begin_src ocaml
+  let compare (x1, y1) (x2, y2) = x1 - x2
+#+end_src
+这里 ~compare~ 接收两个 pair ，每个 pair 都在参数位置被解构。
+
+** ~fst~ 和 ~snd~
+OCaml 提供了两个 pair 投影函数:
+#+begin_src ocaml
+  fst : 'a * 'b -> 'a
+  snd : 'a * 'b -> 'b
+#+end_src
+例如:
+#+begin_src ocaml
+  fst (1, true) (* 1 *)
+  snd (1, true) (* true *)
+#+end_src
+但是它们只适用于二元组。对于三元组或更高元的 tuple ，没有内置的函数能够访问位置。通常直接用模式匹配:
+
+#+begin_src ocaml
+  let (_, y, _) = (1, 2, 3)
+#+end_src
+这里 ~_~ 是之前提到的[[id:5f173f62-e737-4dd3-896c-eb1bc5854d63][~_~ 表示忽略值]] 。对于 n-tuples 没有通用投影函数，应该使用模式匹配；如果只想访问部分组件，可以使用 ~_~ 避免引入无关变量。
+
+例如:
+#+begin_src ocaml
+  let student = ("Alice", 20, 3.8)
+  let (name, _, gpa) = student
+#+end_src
+这表示我只关心学生姓名和 GPA ，不关心年龄。
+
+** Tuple pattern 必须长度精确匹配
+tuple pattern 的形状必须和 tuple value 完全一致。
+
+这点和 record pattern 有差异。 record pattern 可以只写部分字段:
+#+begin_src ocaml
+  let { name; hp } = c
+#+end_src
+即使 record 还有其他字段，也可以匹配。但是 tuple 没有字段名，不能“只按照名字挑出几个”；要么写出完整结构，要么使用 ~_~ 占位。
+
+** Tuple 和 函数多参数
+OCaml 中有两种非常像的写法:
+#+begin_src ocaml
+  let add_pair (x, y) = x + y
+#+end_src
+和
+#+begin_src ocaml
+  let add x y = x + y
+#+end_src
+它们不是同一种函数。第一个函数接收一个 pair:
+#+begin_src ocaml
+  add_pair : int * int -> int
+#+end_src
+调用方式是:
+#+begin_src ocaml
+  add_pair (3, 4)
+#+end_src
+第二个函数接收两个参数:
+#+begin_src ocaml
+  add : int -> int -> int
+#+end_src
+调用方式是:
+#+begin_src ocaml
+  add 3 4
+#+end_src
+也就是说，一个函数可以接收一个 n-tuple 作为单个参数，也可以改写成 Curry 风格的多参数函数；一般使用 Curry style, 因为它支持 [[id:9531b6cc-f91d-4dcf-9ae5-ec2db19fe919][部分应用 partial application]]
+
+比如:
+#+begin_src ocaml
+  let pyth_tuple (x, y, z) =
+    x * x + y * y = z * z
+#+end_src
+它的类型是:
+#+begin_src ocaml
+  int * int * int -> bool
+#+end_src
+调用: ~pyth_tuple (3, 4, 5)~
+
+而:
+#+begin_src ocaml
+  let pyth x y z =
+    x * x + y * y = z * z
+#+end_src
+类型是:
+#+begin_src ocaml
+  int -> int -> int -> bool
+#+end_src
+调用: ~pyth 3 4 5~ ，而且还能部分应用:
+#+begin_src ocaml
+  let pyth_with_3 = pyth 3
+#+end_src
+此时:
+#+begin_src ocaml
+  pyth_with_3 : int -> int -> bool
+#+end_src
+但是 tuple 的版本不支持同样形式的部分应用，它需要一次性给出完整的 triple: ~pyth_tuple (3, 4, 5)~ 。
+
+所以一般 OCaml 的风格是：
+- 如果函数逻辑上有多个独立参数，用 Curry 多参数风格
+- 如果参数本身就是一个整体数据，比如 “一个点”、“一个坐标”、“一个范围”，用 tuple
+
+
+** tuple 和 record 如何选择
+
+*** 适合 tuple 的情况
+tuple 适合短小、临时、结构含义明显的数据。例如二维点:
+#+begin_src ocaml
+  let p = (3.0, 4.0)
+#+end_src
+再比如两个返回值:
+#+begin_src ocaml
+  let div_mod x y =
+    (x / y, x mod y)
+#+end_src
+标准库中也常见这种风格，例如 ~List.split~ 可以把 pair list 拆成两个 list; OCaml 官方文档就用 ~let (x, y) = List.split ...~ 展示 tuple pattern.
+
+这里有一个自己实现的 ~List.split~:
+#+begin_src ocaml
+  (** try to write List.split *)
+  let mysplit lst =
+    let rec aux lst xs ys =
+      match lst with
+      | [] -> (List.rev xs, List.rev ys)
+      | (x, y) :: tail -> aux tail (x :: xs) (y :: ys)
+    in
+    aux lst [] []
+#+end_src
+这个函数类型推断是:
+#+begin_src ocaml
+  mysplit : ('a * 'b) list -> 'a list * 'b list
+#+end_src
+
+*** 适合 record 的情况
+如果字段超过三项，或者多个字段类型相同， record 更清楚。
+
+不推荐:
+#+begin_src ocaml
+  type date = int * int * int
+#+end_src
+因为:
+#+begin_src ocaml
+  (2026, 6, 12)
+  (12, 6, 2026)
+#+end_src
+到底如何区分年月日并不明确。
+
+更推荐:
+#+begin_src ocaml
+  type date = {
+      year : int;
+      month : int;
+      day : int;
+    }
+#+end_src
+这样字段有明确含义，使用 record 更清晰。
+
+所以经验规则是:
+#+begin_src ocaml
+  (* 临时、短小、位置天然有意义 *)
+  (x, y)
+  (min_value, max_value)
+  (quotient, remainder)
+
+  (* 长期存在、字段有业务含义、容易混淆 *)
+  {name; hp; ptype}
+  {year; month; day}
+  {width; height; color; visible}
+#+end_src
+
+** 积类型与和类型
+variant 代表 *one of*: 一个值可能是若干可能性之一。
+
+tuple/record 代表 *each of*: 一个值同时包含若干组成部分。
+
+例如:
+#+begin_src ocaml
+  type color = Red | Green | Blue
+#+end_src
+一个 ~color~ 值是:
+#+begin_src ocaml
+  Red or Green or Blue
+#+end_src
+这就是和类型。
+
+而:
+#+begin_src ocaml
+  type point = float * float
+#+end_src
+一个 ~point~ 值包括:
+#+begin_src ocaml
+  float and float
+#+end_src
+这就是积类型。
+
+record 也是积类型:
+
+#+begin_src ocaml
+  type mon = {
+      name : string;
+      hp : int;
+      ptype : ptype;
+    }
+#+end_src
+它包含:
+#+begin_src ocaml
+  string and int and ptype
+#+end_src
+所以在设计类型时可以用一个简单判断:
+- 如果想表达“几种情况之一”，可以用 variant
+- 如果想表达“几个信息同时存在”，用 tuple 或 record
+- 如果这些信息需要名字，用 record；如果短小其位置含义明显，用 tuple 。
+
+
+** tuple 的底层表示
+tuple 是值，通常是堆上的 block 。从运行时角度看， OCaml 值要么是 immediate value ，要么是指向 heap block 的指针。 OCaml 官方内存表示文档说，运行中 OCaml 程序会使用内存 block 来表示 tuple , record , closure , array 等值。构造这类值时会隐式分配一块内存。
+
+可以把:
+#+begin_src ocaml
+  (1, true, "hello")
+#+end_src
+粗略理解为一个连续的 block ，里面有三个槽位:
+#+begin_example
++-----+------+---------+
+|  1  | true | "hello" |
++-----+------+---------+
+#+end_example
+不过这只是模型，不代表真实的 ABI 。 OCaml 运行时有自己的值表示、垃圾回收、 tag 等机制
+
+更重要的是， tuple 本身是不可变的。
+#+begin_src ocaml
+  let p = (1, 2)
+#+end_src
+不能把它的第二个组件改成别的值。如果想得到新的 pair ，需要构建新值:
+#+begin_src ocaml
+  let (x, _) = p in
+      let p' = (x, 3)
+#+end_src
+但注意，如果 tuple 里面装的是可变对象，那么“tuple的槽位不可变” 和 “槽位指向的对象是否可变” 是两回事。
+
+比如:
+#+begin_src ocaml
+  let p = ([|1; 2|], "data")
+  let (arr, _) = p
+  arr.(0) <- 99
+#+end_src
+这里并没有修改 tuple 本身，而是修改 tuple 中保存的 array 。这个区别和我们前面学习 record 的不可变性是类似：绑定和字段结构可以不可变，但里面引用到的对象可能有内部可变性。
+
+** 一个综合例子: 点、线段、几何函数
+#+begin_src ocaml
+  type point = float * float
+  type segment = point * point
+
+  let distance (x1, y1) (x2, y2) =
+    let dx = x1 -. x2 in
+    let dy = y1 -. y2 in
+    sqrt (dx *. dx +. dy *. dy)
+
+  let length ((p1, p2) : segment) =
+    distance p1 p2
+
+  let midpoint ((x1, y1), (x2, y2)) =
+    ((x1 +. x2) /. 2.0, (y1 +. y2) /. 2.0)
+#+end_src
+这里有几个要点:
+
+- ~point~ 是类型别名: ~type point = float * float~ . 它不会创建一个新的运行时结构，只是给 ~float * float~ 一个更有意义的名字。
+- ~segment~ 是两个点组成的 pair: ~type segment = point * point~ ，也就是 ~(float * float) * (float * float)~ 。
+- ~midpoint~ 的参数模式: ~((x1, y1), (x2, y2))~ 一次性解构了一个嵌套 pair 。
+
+
+** 本节练习
+
+*** 基础解构
+写一个函数: ~swap : 'a * 'b -> 'b * 'a~ ，期望:
+#+begin_src ocaml
+  swap (1, "x") -> ("x", 1)
+#+end_src
+
+#+begin_src ocaml
+  let swap (x, y) = (y, x)
+#+end_src
+
+*** 三元组取中间值
+#+begin_src ocaml
+  middle : 'a * 'b * 'c -> 'b
+#+end_src
+
+#+begin_src ocaml
+  let middle t =
+  match t with
+    (_, m, _) -> m
+#+end_src
+
+
+* tuple & records 小结
+Records 和 tuples 都是 OCaml 中用于组合多个值的复合数据结构。从类型设计的角度看，它们都属于 product types ：一个值同时包含若干个组成部分。它们和 variants 形成对照: variant 表示“几种可能性之一”，而 record/tuple 表示“几个信息同时存在” 。
+
+Record 是带字段名的 product type 。定义 record 时，必须先声明一个新的 record 类型，并为每个字段指定名称和类型。构造 record 时使用字段名和值；访问字段时使用点号；解构字段时可以使用 record pattern 。字段名的意义在于提高可读性，尤其当多个字段类型相同、字段数量较多、或者字段具有明确含义时， record 比 tuple 更安全、更清楚。例如 ~{day; month; year}~ 明显优于 ~int * int * int~ 。
+
+OCaml 的 record 默认不可变。所谓不可变，准确来说是字段绑定不可变：一个 record 值创建后，字段本身不能被重新赋值。但如果字段内部保存的是 array 、 ref 、 mutable record 、 hash table 等可变结构，那么这些内部对象仍然可以被修改。因此 record 的不可变性不是自动的 “深度不可变” 。
+
+Record Copy 语法 ~{r with field = new_value}~ 不是原地修改，而是根据旧 record 构造一个新 record 。未显式更新的字段会从旧 record 中复制过来。这种写法是函数式编程中 “旧状态 -> 新状态” 的常见模式。但 record copy 是浅拷贝：如果某些字段保存的是指针，那么新旧 record 会共享同一个内部对象。
+
+OCaml 也允许使用 ~mutable~ 声明可变字段。此时可以用 ~<-~ 原地修改字段内容。 mutable record 和 record copy 代表的是两种不同的程序设计风格：前者是命令式的原地更新，后者是函数式的值更新。一般而言，纯函数式风格更容易推理、组合和测试；但在需要性能或状态建模时， mutable 字段也有其合理用途。
+
+Tuple 也是 product type ，但它不使用字段名，而是依靠位置区分组件。二元组称为 pair, 三元组称为 triple 。tuple 的类型用 ~*~ 表示，例如 ~int * bool~ ， ~float * float * string~ 。
+
+访问 tuple 主要依靠模式匹配。例如 ~let (x, y) = p~ 可以从 pair 中取出两个组件；对于 triple 或嵌套 tuple ，也可以写出对应形状的 pattern . tuple pattern 必须和 tuple value 的结构精确匹配： ~(x, y)~ 只能匹配 pair ，不能匹配 triple 。对于不关心的组件，可以使用 ~_~ 。
+
+需要特别区分 tuple 参数和多参数函数。 ~let f (x, y) =~ 定义的是一个接收 pair 的函数，类型形如: ~'a * 'b -> ...~ ；而 ~let f x y = ...~ 定义的是柯里化函数，类型形如 ~'a -> 'b -> ...~ 。前者把多个值当作一个整体传入，后者支持 partial application ，是 OCaml 中更常见的函数参数风格。
+
+选择 record 还是 tuple ，核心取决于数据的语义。短小、临时、位置含义天然清楚的数据适合 tuple ，例如坐标 ~(x, y)~ 、商和余数 ~(q, r)~ 。字段较多、字段含义重要、多个字段类型相同、或者数据会长期存在于程序设计中时，应优先使用 record 。经验上，超过三项的 tuple 往往应该重新考虑是否 record 。
+
+从底层实现来看， tuple, record, array 等复合值通常表示为堆上的 block ；变量本身保存的是 OCaml value ，可能是立即值，也可能是指向 block 的指针。因此构造 record 或 tuple 通常意味着分配一个新的复合值。 record copy 也会创建新的 block ，但只复制字段槽位中的值，而不会递归拷贝字段内部引用的对象。
+
+本节的关键结论是: records 和 tuples 不只是“多个值打包在一起” 的语法，而是 OCaml 类型系统中 product type 的具体体现。理解它们有助于后续学习 algebraic data types 。因为 OCaml 中复杂的数据建模通常正是由 sum types 与 product types 组合而成。
