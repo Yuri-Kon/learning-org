@@ -1,0 +1,1311 @@
+:PROPERTIES:
+:ID:       681c0459-8121-40f1-a5fc-bffde761cd16
+:END:
+#+title: variables and basic types
+* 第二章总览
+本章我们可以理解为一条递进链:
+
+#+begin_example
+值如何产生
+-> 对象如何存在
+-> 名字如何绑定到对象
+-> 类型如何约束操作
+-> 间接访问如何发生
+-> 不可变性如何表达
+-> 编译期常量如何表达
+-> 类型太复杂时如何让编译器帮忙
+-> 如何定义自己的数据结构
+#+end_example
+这一章的核心是理解 C++ 的基本哲学:
+#+begin_quote
+C++ 程序中的每个对象都有类型。类型决定对象的存储、取值范围、解释方式和允许的操作。
+#+end_quote
+比如承接我们第一章的例子:
+#+begin_src cpp
+  i = i + j;
+#+end_src
+如果 ~i~ 和 ~j~ 都是整数，那么 ~+~ 就是算术加法。如果它们是 ~Sales_item~ ，那么 ~+~ 就是合并销售记录。也就是说，同一个表达式的语义由类型决定。
+
+这也是 C++ 和许多动态语言非常不同的地方。 C++ 在编译器会检查类型；如果某个类型不支持某个操作，编译器会直接拒绝生成可执行文件。
+
+-----
+* Primitive Built-in Types: 内置基本类型
+C++ 的内置基本类型分为两大类:
+#+begin_quote
+算术类型 arithmetic types
+void
+#+end_quote
+算术类型又分为:
+#+begin_quote
+integral types 整型，包括 bool 、字符类型、整数类型
+floating-point 浮点类型
+#+end_quote
+~void~ 没有值，不能定义 ~void~ 类型变量，最常见的用途是表示函数不返回值:
+#+begin_src cpp
+  void log_error();
+#+end_src
+** Arithmetic Types: 算术类型
+C++ Primer 给出了下列基本算术类型:
+| Type          | Meaning                           | Minimun Size          |
+|---------------+-----------------------------------+-----------------------|
+| ~bool~        | boolean                           | NA                    |
+| ~char~        | character                         | 8 bits                |
+| ~wchar_r~     | wide character                    | 16 bits               |
+| ~char16_t~    | Unicode character                 | 16 bits               |
+| ~char32_t~    | Unicode character                 | 32 bits               |
+| ~short~       | short integer                     | 16 bits               |
+| ~int~         | integer                           | 16 bits               |
+| ~long~        | long integer                      | 32 bits               |
+| ~long long~   | long integer                      | 64 bits               |
+| ~float~       | single-precision floating-point   | 6 significant digits  |
+| ~double~      | double-precisiion floating-point  | 10 significant digits |
+| ~long double~ | extended-precision floating-point | 10 significant digits |
+
+尤其强调，标准只保证最小尺寸，实际大小依赖实现。
+
+这点必须重视。 C++ 的内置类型不是 Javan 那样的完全宽度模型。 C++ 标准为了兼容不同硬件，只规定一些最低要求和相对关系:
+#+begin_quote
+sizeof(char) <= sizeof(short) <= sizeof(int) <= sizeof(long) <= sizeof(long long)
+#+end_quote
+更精确地说， ~char~ 至少 8 bits ， ~short~ 至少 16 bits ， ~int~ 至少 16 bits ， ~long~ 至少 32 bits， ~long long~ 至少 64 bits。
+
+在我现在的 x86-64 Linux 的环境下，常见结果大概是:
+#+begin_src cpp
+    sizeof(char)      == 1
+    sizeof(short)     == 2
+    sizeof(int)       == 4
+    sizeof(long)      == 8
+    sizeof(long long) == 8
+    sizeof(float)     == 4
+    sizeof(double)    == 8
+#+end_src
+但这不是语言层面的绝对保证。尤其是 ~long~: Linux x86-64 上通常是 64 位， Windows x64 上通常是 32 位。这就是为什么跨平台代码不能轻率假设 ~long~ 的宽度。
+*** 类型是什么
+类型不是 “数学集合”，而是“存储 + 解释 + 操作”。
+
+计算机把数据存为 bit 序列；最小可寻址单位是 byte；同一串 bit 必须结合类型才有意义。比如同一段 32 位内存，如果类型是 ~float~ ，就按照浮点数解释；如果类型是 ~unsigned char~ ，某个字节可能表示字符。
+
+#+begin_quote
+类型决定一段内存占用多少 bit，以及这些 bit 如何解释。
+#+end_quote
+比如同样的 bit patter:
+#+begin_example
+01000001
+#+end_example
+按照 ~unsigned char~ 解释，可能是整数 ~65~ ；如果按照字符集解释，可能是字符 ~'A'~ 。
+
+所以 C++ 的类型至少有三种含义:
+1. 存储需求: 需要多少字节，如何对齐
+2. 值域：可以表示那些值
+3. 操作集合: 可以做哪些运算
+
+
+这就是为什么C++类型系统和底层机器关系非常紧密。
+
+-----
+*** 整型: signed / unsigned
+
+除了 ~bool~ 和扩展字符类型外，整数类型可以有 signed 和 unsigned 版本。 ~signed~ 能表示负数、0、正数； ~unsigned~ 只能表示非负数。
+
+例如:
+#+begin_src cpp
+  int x = -1;
+  unsigned y = 1;
+#+end_src
+~int~ 是有符号类型， ~unsigned~ 是 ~unsigned int~ 的缩写。
+**** ~char~ 的特殊性
+C++ 里有三个不同的 ~char~ 类型:
+#+begin_example
+char
+signed char
+unsigned char
+#+end_example
+注意: ~char~ 不是 ~unsigned char~ 或 ~signed char~ 的别名。它是第三种独立类型，只是底层表示会选择 signed 或 unsigned 中的一种。原书特别强调: 普通 ~char~ 到底表现为 signed 还是 unsigned ，取决于编译器。
+
+所以  ~char c = 200;~ 在某些平台上可能表现为负数，在某些平台上可能表现为200附近的非负值。严肃代码里，如果想表达“小整数”，不要用普通 ~char~ ，而应该明确写:
+#+begin_src cpp
+  signed char x;
+  unsigned char y;
+#+end_src
+但如果想表达字符，就用 ~char~ 。
+**** C++20 后的补充: 有符号整数表示
+C++ Primer 是 C++ 11 时代的书，因此它说标准不规定 signed 类型如何表示，只保证范围大致均分，现代机器常用 ~-128~ 到 ~127~ 这样的范围。
+
+现代标准这里有变化: C++20 起，标准只允许有符号整数使用二进制补码表示；C++20 之前标准允许多种 signed integer representation ，但 C++20 之后二进制补码是唯一允许的表示。
+
+这意味着在现代 C++ 的语境下，我们可以更放心地认为普通有符号整数的位级是二进制补码。但注意: *这不等于 signed overflow 变成定义良好* 。例如:
+#+begin_src cpp
+  int x = INT_MAX;
+  ++x; // signed overflow, 仍然是 undefined behavior
+#+end_src
+unsigned 溢出是按照模运算定义的； signed 溢出不是。这一点对安全性、优化和可靠性非常重要。
+**** unsigned 的设计: 模运算
+~unsigned~ 类型的关键规则是:
+#+begin_quote
+超出范围时，结果按照模 2^N 回绕。
+#+end_quote
+比如我的编译器中 ~unsigned int~ 是32位，能表示 ~0~ 到 ~4294967295~ ，那么把 ~-1~ 赋值给它就会得到 ~4294967295~ 。底层逻辑是:
+#+begin_quote
+-1 mod 4294967296 = 4294967295
+#+end_quote
+但这并不表示 ~unsigned~ 是 “安全的非负整数”。它其实更像是固定宽度的模整数。
+**** signed 和 unsigned 混用
+这是 C++ 新手的高危点。
+比如:
+#+begin_src cpp
+  #include <iostream>
+
+  int main() {
+    // unsigned int n = -1;
+    // std::cout << n << std::endl;
+
+    unsigned u = 10;
+    int i = -42;
+    std::cout << i + i << std::endl;
+    std::cout << u + i << std::endl;
+    return 0;
+  }
+#+end_src
+结果是:
+#+begin_quote
+-84
+4294967264
+#+end_quote
+第二个表达式中， ~i~ 会被转化成 ~unsigned~ ，然后再相加。原书明确警告：不要混用 ~signed~ 和 ~unsigned~ ，因为负的 ~signed~ 会被转换成 ~unsigned~ ，会产生令人意外的结果。
+
+更常见的问题是循环：
+#+begin_src cpp
+  for (unsigned u = 10; u >= 0; --u)
+    std::cout << u << '\n';
+#+end_src
+这个循环永远不会停止，因为 ~u >= 0~ 永远为真。当 ~u~ 从 0 再减 1，它会回绕到一个很大的数，根据我们前面对于 ~unsigned~ 是模运算的说明。
+
+之后写现代 C++ 时尤其要警惕这个组合:
+#+begin_src cpp
+  std::vector<int> v
+  for (int i = 0; i < v.size(); ++i) { ... }
+#+end_src
+~v.size()~ 返回的是一个无符号 ~size_type~ ，这会导致 ~int~ 和 ~unsigned~ 比较。
+
+在现代代码中经常写:
+#+begin_src cpp
+  for (std::size_t i = 0; i < v.size(); ++i) {
+    // ...
+  }
+#+end_src
+或者更好:
+#+begin_src cpp
+  for (const auto& x : v) {
+    // ...
+  }
+#+end_src
+
+~auto~ 关键字会自动检测变量的类型，基于赋予的值。它能够帮助我们编写更清晰的代码，而不用重复类型，尤其是对于复杂类型。
+
+具体可以参照: [[https://learn.microsoft.com/zh-cn/cpp/cpp/auto-cpp?view=msvc-170][Microsoft Visual Studio 2022 auto]]
+
+如果确实需要下标，并且需要倒序，应该非常谨慎，避免写出 unsigned 下溢。
+**** Effective Modern C++: ~auto~ 与 size_type
+Effective Modern C++ 中特别强调，用 ~auto~ 可以避免一些手写类型造成的移植性问题。例如:
+#+begin_src cpp
+  std::vector<int> v;
+  unsigned sz = v.size() // 不理想
+#+end_src
+~v.size()~ 返回的真实类型是 ~std::vector<int>::size_type~ ，在 64 位 Windows 上可能和 ~unsigned~ 宽度不同；用 ~auto~ 可以让编译器推导出正确类型:
+#+begin_src cpp
+  auto sz = v.size();
+#+end_src
+~auto~ 不只是省打字，还能避免显式声明变量类型错误导致的正确性、性能和移植性问题。
+
+同时也不能滥用，比如 ~auto~ 会保留或丢弃 ~const~ 、引用等信息。这在我们后面的 ~auto~ 会再次学习。
+*** 浮点类型
+浮点类型默认优先 ~double~ 。C++ 有三种浮点类型:
+#+begin_quote
+float \\
+double \\
+long double
+#+end_quote
+浮点计算通常使用 ~double~ 。 ~float~ 精度通常不够，而 ~double~ 相比 ~float~ 的成本通常可以忽略，有些机器上 ~double~ 甚至更快； ~long double~ 的精度和成本都更依赖实现。
+
+我们可以先形成这个实践判断:
+1. 默认用 ~double~
+2. 大量内存/带宽敏感的数值数组才考虑 ~float~
+3. 确实需要更高精度并确认平台支持时才考虑 ~long double~
+
+
+例如在算法中使用:
+#+begin_src cpp
+  double learning_rate = 0.001;
+  double source = 0.0;
+  double eps = 1e-9;
+#+end_src
+比盲目使用 ~float~ 更加稳妥。
+
+-----
+** Type Conversions: 类型转换
+
+C++ 的算术类型之间有大量隐式转换。赋值时的转换规则:
+#+begin_src cpp
+  bool b = 42; // true
+  int i = b; // 1
+  i = 3.14; // 3
+  double pi = i; // 3.0
+  unsigned char c = -1; // 若8位，则 255
+  signed char c2 = 256; // C++ 11 时是 undefined
+#+end_src
+这里有几条规则:
+1. 非 ~bool~ 算术值转 ~bool~ 时，0 为 ~false~ ，非 0 为 ~true~
+2. ~bool~ 转其他算术类型时， ~false~ 为 0, ~true~ 为 1
+3. 浮点数转整数会被截断
+4. 整数转浮点数可能会丢精度
+5. 超出 ~unsigned~ 范围按模回绕
+6. 超出 ~signed~ 范围会导致未定义行为
+
+
+未定义行为是标准不指定含义的行为，程序可能看起来正常、崩溃、产生垃圾值，更换编译器、版本、输入等都可能变化；实现定义行为则是由具体实现决定，例如 ~int~ 的大小。
+*** 为什么C++保留 undefined behavior
+C++ 的目标之一是:
+#+begin_quote
+不给不需要某项检查的程序强加运行时成本。
+#+end_quote
+如果每次整数加法都检查溢出，每次数组访问都检查边界，每次指针使用都检查有效性， C++ 就会失去大量底层控制和性能优势。
+
+所以 C++ 选择让某些错误成为 undefined behavior 。这样编译器可以基于 “程序不会触发 UB” 的假设进行优化。例如它可以假设有符号整数不会溢出，从而重排或简化表达式。
+
+这给程序员的要求是:
+#+begin_quote
+写 C++ 时不能只问“这在我的机器上是什么运行结果”，还要问“标准是否定义了这个行为”。
+#+end_quote
+
+-----
+** Literals: 字面值
+字面值是代码中直接写出来的值，例如:
+#+begin_src cpp
+  42
+  3.14
+  'a'
+  "hello"
+  true
+  nullptr
+#+end_src
+每个字面值都有类型，字面值的形式和值决定其类型。
+*** 整型字面值
+整型可以写成十进制、八进制、十六进制：
+#+begin_src cpp
+  20 // decimal
+  024 // octal 等于十进制20
+  0x14 // hexadecimal, 等于十进制 20
+#+end_src
+一个非常容易踩坑的例子:
+#+begin_src cpp
+  int month = 09;
+#+end_src
+这是非法的。因为以 ~0~ 开头的表示八进制，而八进制没有数字 ~9~ 。
+
+现代 C++ 还支持二进制字面量:
+#+begin_src cpp
+  0b1010 // C++14 起，等于十进制 10
+#+end_src
+*** 浮点字面值
+默认的浮点字面值是 ~double~:
+#+begin_src cpp
+  3.14 // double
+  3.14f // float
+  3.14L // long double
+#+end_src
+*** 字符和字符串字面值
+#+begin_src cpp
+  'a' // char
+  "a" // const char[2]
+#+end_src
+注意，这里的 ~'a'~ 是一个字符，而 ~"a"~ 是字符串字面量，实际包含两个字符:
+#+begin_quote
+'a' \\
+'\0'
+#+end_quote
+字符串字面值的类型是 “常量字符数组”，编译器会在末尾追加 null character ~'\0'~ 。
+
+所以:
+#+begin_src cpp
+  sizeof('a') // 类型 char
+  sizeof("a") // 数组中有 'a' 和 '\0'
+#+end_src
+** 内置基本类型小结
+- 对象 = 一段有类型的内存区域
+- 类型 type = 存储大小 + 对齐要求 + 值域 + 表示方式 + 可用操作
+- 变量 variable = 带名字的对象，或者引用
+- 表达式 expression = 由对象和值组成，产生一个值，并且有类型
+- 类型转换 conversion = 在某些上下文中，编译器把一个类型的值变成另一个类型的值
+- 未定义行为 UB = 标准不规定结果，不能依赖 “看起来能跑”
+
+
+接下来我们后面会沿着这个模型继续展开：变量定义、初始化、声明和定义、作用域、引用、指针、 ~const~ 、 ~constexpr~ 、 ~auto~ 、 ~decltype~ 。这些不是孤立语法，而是共同服务一个核心问题:
+#+begin_quote
+如何精确控制对象的生命周期、可变性、访问方式和类型推导。
+#+end_quote
+
+-----
+* Variables
+这一节讲“变量”。但实际上是在铺垫 C++ 的对象模型、初始化模型、链接模型和作用域模型。后面理解构造函数、 RAII、头文件、ODR、 ~extren~ 、 ~static~ 、 ~const~ 、 生命周期、未定义行为，都要回到这一节。
+
+对于 Variables ， C++ Primer 给出的定义很简洁:
+#+begin_quote
+变量提供一块可被程序操作的具名存储。每个 C++ 变量都有类型，类型决定变量的内存大小、布局、可存储值范围，以及可施加的操作。
+#+end_quote
+此外，C++ 程序员经常把 variables 和 object 混用。
+
+这一段需要拆开理解：
+#+begin_quote
+variable = name + object \\
+object = typed region of memory \\
+type = storage layout + value interpretation + legal operations
+#+end_quote
+所以， ~int x = 42~ 并不是单纯创建了一个名字x，而是:
+1. 分配一块足以容纳 ~int~ 的存储区域
+2. 这块区域的类型是 ~int~
+3. 用 42 初始化这块区域
+4. 把名字 x 绑定到这块区域
+5. 之后在 x 的可见作用域内， x 代表这个对象
+
+
+这和 Python 这类语言的名字绑定不同。在 Python 里，名字更多是引用某个对象；在 C++ 里，局部变量 ~int x~ 通常直接就是一个对象本身。这个区别在后面理解引用、指针、拷贝、移动、生命周期非常重要。
+
+-----
+
+** Variable Definitions: 变量定义
+一个简单变量定义由类型说明符、一个或多个变量名组成，变量名之间用逗号分隔，并以分号结束。定义可以选择性地提供初始值。
+
+例如:
+#+begin_src cpp
+  int sum = 0, value, unit_sold = 0;
+  Sales_item item;
+  std::string book("0-201-78345-X");
+#+end_src
+这三行分别涉及三种情况
+
+*** 一个定义可以定义多个变量
+一个定义可以定义多个变量，但不一定都初始化。
+
+对应第一行。这里:
+#+begin_quote
+sum 是 int, 初始化为 0 \\
+value 是 int, 没有显式初始化 \\
+units_sold 是 int, 初始化为 0
+#+end_quote
+这就是 C++ 的一个危险点: 同一个定义语句里，有些变量初始化了，有些没有初始化。
+
+如果这行出现在函数内部，那么 ~value~ 就是为初始化的局部内置对象，读取它的值会导致为定义行为。函数体内定义的变量如果没有初始化，其值是 undefined ；访问这种值是错误。
+
+所以实际上更推荐:
+#+begin_src cpp
+  int sum = 0;
+  int value = 0;
+  int units_sold = 0;
+#+end_src
+或至少保证每个变量都显式初始化。
+
+从可靠性角度，更建议第一种。尤其是当类型、初始化表达式或含义不完全相同时。
+
+*** 类类型对象的默认初始化由类自己决定
+#+begin_src cpp
+  Sales_item item;
+  std::string empty;
+#+end_src
+对类类型来说，“没有显式初始化”不等于“里面是垃圾值”。类可以定义默认构造行为:
+#+begin_src cpp
+  std::string empty;
+#+end_src
+会得到空字符串。 ~string~ 类规定: 如果不提供初始化器，得到的是 empty string.
+
+这和内置类型 ~int~ 等完全不同。比如:
+#+begin_src cpp
+  int local_int;
+#+end_src
+函数内部的 ~local_int~ 没有确定值；而 ~std::string local_str;~ 是一个合法的空字符串对象。
+
+这体现了 C++ 的设计思想:
+#+begin_quote
+内置类型为了性能不自动初始化；类类型可以把初始化策略封装在构造函数里。
+#+end_quote
+也就是说， ~std::string~ 的作者替我们保证了对象一创建就处于有效位置。这也预示了 RAII 的相关内容: 资源和状态应在对象构造时就建立好。
+
+*** 什么是 Object
+对象的定义是:
+#+begin_quote
+最一般地说， object 是一块能够包含数据并且具有类型的内存区域。
+#+end_quote
+本书会采用这个广义用法，不管对象是内置类型还是类类型、有名或无名、可读写还是只读，都可以叫 object.
+
+所以以下均可以被视为对象或涉及对象:
+#+begin_src cpp
+  int x = 1; // x 是具名对象
+  std::string s = "hi"; // s 是类类型对象
+  42 // 字面值，不是变量，但表达式产生值
+  std::string("tmp") // 临时对象
+#+end_src
+C++ 后面大量术语都围绕 object 展开:
+#+begin_quote
+object lifetime 对象生命周期 \\
+object storage 对象存储 \\
+object representation 对象表示 \\
+const object 常量对象 \\
+temporary object 临时对象 \\
+subobject 子对象 \\
+#+end_quote
+我们可以这样理解:
+#+begin_quote
+对象 = 某段生命周期内存在的、有类型的存储区域 \\
+变量 = 有名字的对象，或者引用
+#+end_quote
+
+*** Initializers: 初始化器
+对象被初始化，就是对象在创建的那一刻获得指定值。初始化变量的值可以是任意复杂的表达式:
+#+begin_src cpp
+  double price = 109.99;
+  double discont = price * 0.16;
+  double salePrice = applyDiscount(price, discont);
+#+end_src
+这体现了两点:
+
+- 第一，同一条定义中，前面定义的名字可以被后面初始化器使用；
+- 第二，初始化器不一定是字面值，还可以是函数调用。
+
+
+所以初始化不是 “写一个常量进去”，而是 *用一个表达式的结果构造对象的初始状态* 。
+
+*** 初始化不是赋值
+:PROPERTIES:
+:ID:       d4750c25-5414-469f-9bad-b8e1a4b4d91c
+:END:
+#+begin_quote
+初始化不是赋值。初始化会在对象创建时给它一个初始值。赋值会将对象当前值抹掉，用新的值替换。
+#+end_quote
+比如:
+#+begin_src cpp
+  int x = 0; // 初始化
+  x = 1; // 赋值
+#+end_src
+这对于内置类型 ~int~ 好像看起来差别不大，但对于类类型差别非常大:
+#+begin_src cpp
+  std::string s = "hello"; // 初始化：构造 string 对象
+  s = "world"; // 赋值：调用 string 的赋值操作
+#+end_src
+更典型地:
+#+begin_src cpp
+  Sales_data data1; // 默认初始化
+  Sales_data data2 = data1; // 拷贝初始化
+  data1 = data2; // 赋值
+#+end_src
+这三行可能调用不同的函数:
+- 默认构造函数
+- 拷贝构造函数
+- 拷贝赋值运算符
+
+
+C++ 对象模型里，“创建对象”和“修改已有对象”是两件事。
+
+*** C++ 的多种初始化方式
+
+书中列出了四种把 ~int units_sold~ 初始化为 0 的写法:
+
+#+begin_src cpp
+  int units_sold = 0;
+  int units_sold = {0};
+  int units_sold{0};
+  int units_sold(0);
+#+end_src
+这四种都能初始化一个 ~int~ ，但它们并不总是等价。尤其对类类型、 ~auto~ 、 ~initializer_list~ 、窄化转换而言。
+
+C++ 初始语法之所以复杂，是历史演化的结果。
+- C 继承来的 ~=~ 初始化
+- C++ 构造函数引入的 ~()~ 初始化
+- C++11 引入的 ~{}~ 列表初始化 / 花括号初始化
+
+
+*** List initialization: 列表初始化
+C++11 推广了 ~{}~ 初始化。花括号初始化可以在很多场景中使用，成为 list initialization；对内置类型来说，它有一个重要性质：如果初始化可能导致信息丢失，编译器不允许。
+
+例如:
+#+begin_src cpp
+  long double id = 3.1415926;
+  int a{id}; // 错误: narrowing conversion
+  int b = {id}; // 错误: narrowing conversion
+
+  int c(id); // 可以，但截断
+  int d = id; // 可以，但截断
+#+end_src
+这里 ~a~ 和 ~b~ 被拒绝，因为 ~long double~ 到 ~int~ 会丢失小数部分，甚至可能超出 ~int~ 范围。
+
+这就是 ~{}~ 初始化的重要安全价值:
+#+begin_quote
+它能在编译器阻止某些窄化转换。
+#+end_quote
+实际写现代 C++，我们更偏好:
+#+begin_src cpp
+  int count{0};
+  double price{0.0};
+  std::string name{"alice"};
+#+end_src
+但是需要注意，Effective Modern C++对此有一个重要补充：花括号初始化虽然统一，但会和 ~std::initializer_list~ 产生特殊交互，有时导致选择了你没想到的构造函数。此外，它还专门提醒要注意区分 ~()~ 和 ~{}~ 创建对象，尤其是在类有 ~initializer_list~ 构造函数时。
+
+所以在实践上可以形成更细致的判断：
+- 内置数据类型: ~{}~ 很合适，可以防止窄化
+- 容器显式列元素: ~{}~ 很合适
+- 类类型构造: 要知道该类是否有 ~initializer_list~ 构造函数
+- ~auto~ 变量: 避免 ~auto x{...}~ 或 ~auto x = {...}~ 的误推导，后面会讲
+
+
+*** Default Initialization: 默认初始化
+如果定义变量时没有初始化器，变量会被 default initialized；默认值取决于变量类型，也可能取决于变量定义的位置。
+
+**** 内置类型的默认初始化
+#+begin_quote
+函数体外定义的内置变量类型：初始化为 0 \\
+函数体内定义的内置变量类型：不初始化，值未定义
+#+end_quote
+例如:
+#+begin_src cpp
+  int global_int;
+  int main ()
+   {
+     int local_int;
+   }
+#+end_src
+~global_int~ 是 0, ~local_int~ 是未初始化的，读取它是错误。
+
+C++ 标准资料中， default-initialization 发生在没有初始化器声明对象等场景；对于非类类型，默认初始化通常不会执行初始化动作，而自动存储期对象的未初始化会带来 indeterminate value 相关问题。
+
+最实用的规则是:
+#+begin_src cpp
+  int x; // 函数内部：危险，未初始化
+  int x{}; // 安全，值初始化为0
+  int x = 0; // 安全，初始化为0
+#+end_src
+如果写:
+#+begin_src cpp
+  int count;
+  std::cin >> count;
+#+end_src
+这通常没问题，因为在读取前并没有使用 ~count~ 的值。但如果后续逻辑复杂，仍然推荐初始化为 0.
+
+**** 为什么 C++ 不自动初始化局部 int
+这和 C++ 的设计哲学直接相关:
+#+begin_quote
+不为未请求的操作付出成本。
+#+end_quote
+如果每个局部 ~int~ 都自动清零，那么某些性能敏感的代码会被迫支付额外成本。 C++ 选择把责任交给程序员：如果需要初值，就初始化；如果不需要，语言也不强迫付出清零成本。
+
+但如果强调可靠性和安全性优先的话，实践建议通常是:
+#+begin_src cpp
+  int value{};
+  double price{};
+  bool ok{}; // false
+#+end_src
+
+**** 类类型的默认初始化
+类类型由自己控制默认初始化。这意味着类可以保证自己的不变量。例如 ~std::string~ 默认构造后是一个合法字符串，长度为0，可以调用:
+#+begin_src cpp
+  s.size();
+  s.empty();
+  s += "hello";
+#+end_src
+这也是 C++ 类设计的核心目标之一:
+#+begin_quote
+构造完成的对象应该处于有效状态。
+#+end_quote
+以后写自己的类，也应该做到:
+#+begin_quote
+对象一旦构造完成，就要满足不变量；不需要用户额外调用 ~init()~ 才能使用。
+#+end_quote
+
+-----
+
+** Variable Declarations and Definitions: 声明与定义
+这一节是以后理解头文件、分离编译、链接错误的关键。
+
+为了让程序能被分成逻辑部分，C++ 支持 separate compilation ，也就是多个文件可以独立编译。一个文件可能需要另一个文件中定义的变量，所以C++区分 declaration 和 definition .
+
+核心区别是:
+- 声明 declaration: 让名字为程序所知
+- 定义 definition: 创建实体，变量定义会分配存储
+
+
+变量定义本身也是声明。
+
+*** ~extern~: 只声明，不定义
+#+begin_src cpp
+  extern int i; // 声明 i,但是不定义 i
+  int j; // 声明并定义 j
+#+end_src
+其中， ~extern int i~ 的意思是:
+#+begin_quote
+有一个 ~int~ 类型的变量 i, 它的定义在别处。当前翻译单元可以使用这个名字，但这里不分配存储。
+#+end_quote
+~int j~ 则会真正定义一个对象，分配存储。
+
+也就是说，如果要获得一个不是定义的声明，需要加 ~extern~ ，并且不能提供初始化器。 *任何带初始化器的声明都是定义* ； ~extern double pi = 3.14159;~ 是定义，因为它提供了初始化器。
+
+*** 一个变量只能定义一次，但可以声明多次
+例如:
+#+begin_src cpp
+  // config.h
+  extern int global_counter;
+
+  // config.cc
+  int global_counter = 0;
+
+  // main.cc
+  #include "config.h"
+  void f() {
+    ++global_counter;
+  }
+#+end_src
+这里的 ~global_counter~ 只有在 ~config.cc~ 中的一个定义，但是却可以在多个文件里通过头文件声明 ~extern int global_counter~ 。但是如果把定义写进头文件:
+#+begin_src cpp
+  // bad_config.h
+  int global_counter = 0;
+#+end_src
+然后多个 ~.cc~ 都 include 这个头文件，这就会导致多个翻译单元各自定义 ~global_counter~ ，链接时通常会报 multiple definition。这就是声明/定义区分的意义。
+
+*** 分离编译的底层流程
+
+以两个文件为例:
+#+begin_src cpp
+  // a.cpp
+  int counter = 0;
+#+end_src
+
+#+begin_src cpp
+  // b.cpp
+  extern int counter;
+
+  void inc()
+  {
+    ++counter;
+  }
+#+end_src
+编译期大致发生:
+#+begin_quote
+a.cpp -> a.o \\
+b.cpp -> b.o \\
+linker 把 a.o 和 b.o 链接成可执行文件
+#+end_quote
+在编译 ~b.cpp~ 时，编译器只需要知道:
+#+begin_quote
+counter 是 int
+#+end_quote
+所以 ~extern int counter;~ 足够让它生成代码。
+
+但 ~counter~ 的真实存储在哪里，需要链接器在 ~a.o~ 中找到定义:
+#+begin_src cpp
+  int counter = 0;
+#+end_src
+这就是为什么 C++ 需要声明和定义分开： *编译器处理但个翻译单元，链接器处理跨文件实体匹配* 。
+
+~std::cout~ 和 ~std::cin~ 也是类似的机制。当我们在代码里写
+#+begin_src cpp
+  #inlcude <iostream>
+  std::cout << "hello\n";
+#+end_src
+这里 ~std::cout~ 并不是我们定义的对象。它由标准库的某处定义，我们通过头文件获得声明，然后链接到标准库实现。
+
+
+*** 声明、定义和 ODR
+这里可以提前引入一个非常重要的概念： *ODR, One Definition Rule* 。
+
+简化理解就是：一个实体在整个程序中通常只能有一个定义；但是声明可以出现多次，只要保持一致。
+
+类定义、模板、inline函数等有更复杂的 ODR 规则，后面会逐步提到。现在先记住变量的基本规则:
+#+begin_quote
+头文件放声明，不要放普通全局变量定义。 \\
+.cc/.cpp 文件放定义。
+#+end_quote
+C++17 引入了 ~inline variable~ ，可以让某些变量定义安全地放在头文件里，但这是现代扩展点。
+
+-----
+
+** Identifiers: 标识符
+标识符就是名字。 C++ 标识符可以由字母、数字、下划线组成，必须以字母或下划线开头，大小写敏感。
+
+例如:
+#+begin_src cpp
+  int somename, someName, SomeName, SOMENAME;
+#+end_src
+这是四个不同变量。
+
+*** 关键字不能做标识符
+
+例如:
+#+begin_src cpp
+  int double = 3.14; // 错误，double 是关键字
+#+end_src
+
+*** 保留名字规则很重要
+程序员自定义名字不能包含连续两个下划线，不能以下划线+大写字母开头；函数外定义的标识符不能以下划线开头。
+
+也就是说，不要写:
+#+begin_src cpp
+  int __value;
+  int _Value;
+  int _global; // 如果在全局作用域，需要避免
+#+end_src
+这些名字需要留给编译器、标准库、系统头文件实现使用。当我们在工程里使用它们，可能和实现内部名字冲突，导致十分诡异的问题。
+
+实践上建议:
+#+begin_src cpp
+  int value;
+  int student_count;
+  int max_buffer_size;
+#+end_src
+类名可以用大写开头:
+#+begin_src cpp
+  struct Sales_data {};
+  class BookStore {};
+#+end_src
+普通变量用小写更清晰:
+#+begin_src cpp
+  int units_sold = 0;
+  double total_revenue = 0.0;
+#+end_src
+
+-----
+
+** Scope of a Name: 作用域
+scope 是程序的一部分，在这个部分中某个名字具有特定含义。C++ 中大多数作用域由花括号界定。名字从声明点开始可见，直到声明所在作用域结束。
+
+例如:
+#+begin_src cpp
+  #include <iostream>
+
+  int main()
+  {
+    int sum = 0;
+
+    for (int val = 1; val <= 10; ++val)
+      sum += val;
+
+    std::cout << sum << std::endl;
+  }
+#+end_src
+这里有几个名字:
+- ~main~: 全局作用域
+- ~sum~: ~main~ 函数体的块作用域
+- ~val~: ~for~ 语句作用域
+- ~std~: 命名空间名
+- ~cout~ / ~endl~: ~std~ 命名空间里的名字
+
+
+~val~ 在 ~for~ 外不可见。
+
+*** 名字从声明点开始可见
+比如:
+#+begin_src cpp
+  int x = 1;
+
+  int main()
+  {
+    int y = x; // 使用的是全局 x
+    int x = 2; // 从这里开始，局部 x 隐藏全局 x
+  }
+#+end_src
+局部 ~x~ 的作用域不是从第一个花括号开始的，而是从它自己的声明点开始。
+
+同理，如果我们在局部作用域里写:
+#+begin_src cpp
+  int x = x;
+#+end_src
+右边的 ~x~ 指的是正在声明的这个局部 ~x~ ，但它尚未初始化，读取它会出问题。不要写这种代码。
+
+*** 嵌套作用域与隐藏
+看下面这个例子:
+#+begin_src cpp
+  #include <iostream>
+
+  int reused = 42;
+
+  int main()
+  {
+    int unique = 0;
+
+    std::cout << reused << " " << unique << std::endl;
+
+    int reused = 0;
+
+    std::cout << reused " " << unique << std::endl;
+    std::cout << ::reused << " " << unique << std::endl;
+
+    return 0;
+  }
+#+end_src
+输出是:
+#+begin_example
+42 0
+0 0
+42 0
+#+end_example
+意思是，局部的 ~reused~ 会隐藏全局变量 ~reused~ 。如果要显式访问全局变量，需要使用空的作用域运算符:
+#+begin_src cpp
+  ::reused
+#+end_src
+在函数里定义和全局变量同名的局部变量，通常是坏风格。
+
+*** 为什么作用域对 C++ 特别重要
+因为 C++ 的名字查找、对象生命周期、析构时机都和作用域强相关。\\
+例如:
+#+begin_src cpp
+  {
+    std::string s = "hello";
+  } // s 在这里析构
+#+end_src
+~std::string~ 的生命周期结束点由作用域决定。
+
+这就是 RAII:
+- 对象构造时获取资源
+- 对象离开作用域时析构并释放资源
+
+
+所以上述的作用域并不是简单的可见性规则，以后会变成 C++ 资源管理模型的基础。
+
+** Variables 底层逻辑总结
+这一节可以压缩成几个核心命题。
+
+1. 变量是具名对象 \\
+   #+begin_src cpp
+     int x = 0;
+   #+end_src
+   不是“名字 x 指向某个值”，而是创建了一个 ~int~ 对象，并让 ~x~ 成为它的名字。
+2. 初始化发生在对象创建时，赋值发生在对象已存在
+   #+begin_src cpp
+     T a = expr; // 初始化
+     a = expr; // 赋值
+   #+end_src
+   这对类类型尤其重要。
+3. 未初始化的局部内置类型对象是危险的
+   #+begin_src cpp
+     int x; // 函数内部危险
+     int x{}; // 推荐这种方式，可以赋予默认值0
+   #+end_src
+   原书中反复提醒：未初始化变量导致运行时问题，访问未初始化值是未定义行为，编译器不一定能发现。
+4. 声明让名字可见，定义创建实体
+   #+begin_src cpp
+     extern int x; // 声明
+     int x = 0; // 定义
+   #+end_src
+   这是头文件和分离编译的基础
+5. 作用域控制名字可见性，也暗含对象生命周期边界
+
+
+-----
+
+* Compound Types
+这一节的内容不单是 “引用和指针怎么写”，而是我们目前的学习中，第一次把对象 (object) - 地址 (address) - 类型 (type) - 表达式语义 (expression semantics) 串在一起。书中把 *复合类型(compound type)* 定义为 “由其他类型定义而来的类型”，本节先讲两种最基础、也最容易造成长期误解的复合类型: *引用 (reference)* 和 *指针(pointer)* 。
+
+** Compound type: 类型不是孤立的
+类型不是孤立的，而是可以被组合出来的。到目前为止，我们看到的声明大多是 ~int i = 0~, ~double d = 3.14~ , ~std::string s = "hello"~ 这种的，看起来像 “一个类型说明符 + 一个变量名”。但是从这一节开始， C++ 的真实声明模型要展开了：
+#+begin_src cpp
+  int i = 1024, *p = &i, &r = i;
+#+end_src
+这一个声明里， ~int~ 是 *base type* ，即基础类型；而 ~i~, ~*p~, ~&r~ 分别是 *declarator* ，即声明符。原书特别强调：一个声明不是简单的 “类型 + 名字列表”，而是 *base type + declarator list* 。每个 declarator 都会把名字声明称 “与 base type 有某种关系的类型”。例如， ~p~ 不是 ~int~ ，而是 “pointer to int”； ~r~ 不是普通 ~int~ ，而是 “reference to int” 。
+
+这就是为什么下面这句很容易误读:
+#+begin_src cpp
+  int* p1, p2;
+#+end_src
+它并不是两个 ~int*~ 。它等价于:
+#+begin_src cpp
+  int *p1; // p1 is pointer to int
+  int p2; // p2 is int
+#+end_src
+在 C++ 的声明语法里， ~*~ 和 ~&~ 更贴近 declarator， 而不是单纯贴近 base type 。所以从学习阶段开始，建议采用原书的风格:
+
+#+begin_src cpp
+  int *p1, *p2;
+  int &r = i;
+#+end_src
+这样可以提醒自己: ~*p1~, ~*p2~, ~&r~ 是各自的声明符，不要以为 ~int*~ 会自动作用于后面的所有变量。
+
+** Reference: 引用不是对象，而是已有对象的别名
+引用是 C++ 新手第一次真正遇到的 “语法表面很像变量，但语义不是变量” 的东西。
+#+begin_src cpp
+  int ival = 1024;
+  int &refVal = ival;
+#+end_src
+这里 ~refVal~ 是 ~ival~ 的引用。更确切地说， ~refVal~ 是 ~ival~ 的 *alias* ，即别名。原书说得很直接:
+ *A reference is not an object. Instead, a reference is just another name for an alreay existing object.* 引用不是一个新的对象，而是绑定到一个已有对象上的名字。
+
+我们可以这样理解:
+#+begin_src cpp
+  int i = 10;
+  int &r = i;
+
+  r = 20;
+  std::cout << i << '\n'; // 20
+#+end_src
+~r = 20~ 不是 “让引用r指向一个新的值”，而是 “通过名字r操作它所绑定的对象i”。引用一旦初始化，就一直绑定到那个对象，没有“重新绑定”这个说法。
+
+比如:
+#+begin_src cpp
+  int a = 1;
+  int b = 2;
+  int &r = a;
+
+  r = b;
+#+end_src
+这句 ~r = b~ 的意思不是让 ~r~ 改为引用 ~b~ ，而是把 ~b~ 的值赋给 ~a~ 。执行后:
+#+begin_src cpp
+  a == 2
+  b == 2
+#+end_src
+这里， ~r~ 仍然是 ~a~ 的别名。
+
+** 引用必须初始化
+引用必须初始化，因为它没有 “空绑定” 状态。
+
+普通变量可以先定义、再赋值:
+#+begin_src cpp
+  int x;
+  x = 42;
+#+end_src
+但引用不行。
+
+原因不是语法洁癖，而是对象模型决定的。引用不是 *独立对象* ，它没有像指针那样 “保存地址的存储单元” 作为语法层面的对象身份。它必须在创建时绑定到一个已有对象，否则它就没有语义基础。
+
+这也解释了为什么引用常被用来表达一种更强的约束： *这个名字一定代表某个有效对象* 。相较指针，引用没有 ~nullptr~ 这种显式空状态。虽然底层ABI或编译器实现中，引用参数常常会用地址传递，但是 C++ 语言语义不把引用看作 “可为空、可改指向的地址变量”。
+
+这也是C++的一个重要设计哲学： *语言抽象和机器实现不总是一一对应* 。引用在机器上可能通过指针实现，但在语言层面不是指针。我们写程序时必须按照语言规则理解，而不是按照某个编译器的实现猜测它。
+
+** 引用的初始化不是拷贝，而是绑定
+看这两句:
+#+begin_src cpp
+  int i = 42;
+  int j = i;
+#+end_src
+~j~ 是一个新对象，初始化时从 ~i~ *拷贝* 了值。之后 ~i~ 和 ~j~ 独立。
+
+而:
+#+begin_src cpp
+  int i = 42;
+  int &r = i;
+#+end_src
+~r~ 并不是从 ~i~ 拷贝到值，它只是 *绑定* 到 ~i~ 。所以 ~r~ 修改时，改变的是 ~i~ 。
+
+这和我们在之前的 [[id:d4750c25-5414-469f-9bad-b8e1a4b4d91c][初始化不是赋值]] 中的思想一致。对引用而言，初始化尤其特殊: 它不是给引用对象存入值，因为引用不是对象；它是建立名字和已有对象之间的绑定关系。
+
+** 普通左值只能绑定到对象，且类型必须精确匹配
+书中这里讲的是 *lvalue reference* ，即左值引用。C++11引入了 *rvalue reference* , 右值引用，形式是 ~T&&~ ，主要服务于移动语义、完美转发等高级机制。在本节中，如果单独说引用 reference ，那么默认是 *lvalue reference* 。
+
+普通非 const 左值引用有两个限制:
+#+begin_src cpp
+  int &r1 = 10; // error
+  double d = 3.14;
+  int &r2 = d; //error
+#+end_src
+第一句错误，因为 ~10~ 是字面值，不是一个可被普通 ~int&~ 绑定的对象。第二句错误，因为 ~d~ 是 ~double~ 对象，而 ~r2~ 要求绑定到 ~int~ 对象。这里不能先做 ~double -> int~ 转换，然后让 ~int&~ 绑定到临时 ~int~ 。因为那会让我们以为自己能通过 ~r2~ 修改 ~d~ ，实际上修改的是临时对象。C++ 禁止这种误导性的非 const 引用绑定。
+
+但是后面会讲到一个例外，在有关 ~const~
+
+#+begin_src cpp
+  const int &r = 10; // ok
+  const int &r2 = 3.14 // ok, but binds to a temporary int
+#+end_src
+但这是 ~const reference~ 的特殊规则，不要提前混淆。当前阶段先记住： *普通 ~T&~ 要绑定到一个同类型的、真实存在的对象* 。
+
+-----
+
+** Pointer: 指针是对象，保存地址，可以改变
+指针 (pointer) 也是复合类型，但它和引用的根本差异是： *指针本身是对象* .
+#+begin_src cpp
+  int i = 42;
+  int *p = &i;
+#+end_src
+~p~ 是一个对象，它的值是 ~i~ 的地址。它占有自己的存储空间；你可以拷贝它、赋值给它、让它先指向 ~i~ ，再指向别的对象。
+#+begin_src cpp
+  int i = 1;
+  int j = 2;
+
+  int *p = &i;
+  p = &j; // p now points to j
+#+end_src
+这和引用形成鲜明对比:
+#+begin_src cpp
+  int &r = i;
+  r = j; // assigns j's value to j, does not rebind r
+#+end_src
+所以引用表达的是“别名关系”，指针表达的是“地址值关系”。
+
+** ~&~ 和 ~*~ 有两套含义：声明上下文与表达式上下文
+~&~ 和 ~*~ 在不同上下文中含义完全不同。
+
+声明中:
+#+begin_src cpp
+  int &r = i; // & means reference declarator
+  int *p = &i; // * means pointer declarator
+#+end_src
+表达式中:
+#+begin_src cpp
+  p = &i; // & means address-of operator
+  *p = 10; // * means dereference operator
+#+end_src
+所以这一句:
+#+begin_src cpp
+  int &r2 = *p;
+#+end_src
+左边的 ~&~ 是声明符的一部分，表示 ~r2~ 是引用；右边的 ~*p~ 是解引用表达式，得到 ~p~ 所指向的那个 ~int~ 对象。
+
+
+** 指针的值有几种状态: 有效不等于可解引用
+书中把 pointer value 分成四类:
+1. 指向某个对象
+2. 指向某个对象之后的紧邻位置，也就是 one past the end
+3. 空指针 (null pointer)
+4. 无效指针 (invalid pointer)
+
+
+重点是: *valid pointer 不一定可以 dereference* 。
+
+比如:
+#+begin_src cpp
+  int *p = nullptr;
+#+end_src
+~p~ 是一个 *有效* 的空指针值，我们可以比较它:
+#+begin_src cpp
+  if (p == nullptr) {}
+#+end_src
+但不能解引用:
+#+begin_src cpp
+  *p = 42; // undefined behavior
+#+end_src
+再比如数组中常见的 one past the end pointer:
+#+begin_src cpp
+  int arr[3] = {1, 2, 3};
+  int *end = arr + 3;
+#+end_src
+~end~ 是合法的“尾后指针”，可用于比较无效、迭代边界判断，但不能解引用:
+#+begin_src cpp
+  *end; // undefined behavior
+#+end_src
+这体现了 C++ 的内存模型：语言允许你持有某些“边界地址”用于算法表达，但不允许把它当作对象访问。
+
+** 解引用：从地址回到对象
+当指针确实指向一个对象的时候，可以使用解引用运算符 (dereference operator) 访问对象:
+#+begin_src cpp
+  int i = 42;
+  int *p = &i;
+
+  std::cout << *p << '\n'; // 42
+
+  ,*p = 0;
+  std::cout << *p << '\n'; // 0
+#+end_src
+~*p~ 不是 “指针里的值”，而是 “指针p指向的对象”。所以 ~*p = 0~ 修改的是 ~i~ 。
+
+这有一个非常重要的类型系统含义：指针类型不仅保存地址，还告诉编译器 “这个地址应按照什么类型解释”。例如：
+#+begin_src cpp
+  double d = 3.14;
+  double *pd = &d;
+  int *pi = pd; // error
+#+end_src
+这里，为什么不能把 ~double *~ 随便赋值给 ~int *~ ？因为 ~int*~ 的解引用会告诉编译器：“请把这块地址上的比特解释为 int ，并允许 int 操作”。如果实际那里是 ~double~ 对象，访问语义就错了。C++ 的静态类型系统在这里保护了对象类型。
+
+** ~nullptr~: 现代 C++ 中表示空指针的正确方式
+C++11 引入了 ~nullptr~ ，它是 *pointer literal* ，即指针字面值。 cppreference 也说明: ~nullptr~ 是 ~std::nullptr_t~ 类型的纯右值 (prvalue) ，可以隐式转换为空的任意指针类型。
+
+所以现代 C++ 应写:
+#+begin_src cpp
+  int *p = nullptr;
+#+end_src
+而不是:
+#+begin_src cpp
+  int *p = 0;
+  int *p = NULL;
+#+end_src
+~0~ 的问题是它首先是一个 ~int~ 。只有在上下文需要指针时，它才被当作空指针常量使用。 ~NULL~ 通常也是某种整数常量宏。 Effective Modern C++ 中强调: ~0~ 和 ~NULL~ 在重载和模板类型推导中会造成错误直觉； ~nullptr~ 的实际类型是 ~std::nullptr_t~ ，可以转换到所有 raw pointer 类型，但不会被当作整数。
+
+比如这个典型问题:
+#+begin_src cpp
+  void f(int);
+  void f(void *);
+
+  f(0); // calls f(int)
+  f(nullptr); // calls f(void *)
+#+end_src
+如果想表示 “空指针”，就写 ~nullptr~ ，不要写 ~0~ 或 ~NULL~ 。这是类型系统上的问题。
+
+** 指针可以用于条件判断，但前提是指针值有效
+#+begin_src cpp
+  int i = 1024;
+  int *p1 = nullptr;
+  int *p2 = &i;
+
+  if (p1) {
+    // false
+  }
+
+  if (p2) {
+    // true
+  }
+#+end_src
+空指针会在条件中被转换为 ~false~ ，非空指针会被转换为 ~true~ 。但注意， *参与条件判断的指针本身也必须是有效指针值* 。未初始化的指针不只是 “不知道指向哪里”，而是它的值是 indeterminate ，读取这个值本身就可能导致未定义行为。当指针用于条件或比较时，也必须是 valid pointer 。
+
+比如合格错误示例:
+#+begin_src cpp
+  int *p; // uninitialized local pointer
+
+  if (p) { // undefined behavior: reading invalid pointer value
+    
+  }
+#+end_src
+安全的写法是:
+#+begin_src cpp
+  int *p = nullptr;
+  if (p) {
+    // ...
+  }
+#+end_src
+这就是为什么 “初始化所有指针” 比初始化所有普通整数变量还要重要。
+
+** ~void *~: 只有地址，没有对象类型
+~void *~ 是一种特殊指针类型，可以保存任意对象的地址:
+#+begin_src cpp
+  double obj = 3.14;
+  double *pd = &obj;
+
+  void *pv = &obj;
+  pv = pd;
+#+end_src
+但是 ~void*~ 丢失了 “该地址处对象是什么类型” 的信息。原书说， ~void*~ 能做的事情很有限：比较、传参、返回、赋给另一个 ~void*~ 。不能通过 ~void*~ 直接操作它指向的对象，因为 *类型决定可执行的操作* ，而 ~void *~ 不知道对象类型。
+
+例如:
+#+begin_src cpp
+  void *pv = &obj;
+  *pv; // error: cannot deference void* as an object type
+#+end_src
+必须先恢复类型:
+#+begin_src cpp
+  double *pd2 = static_cast<double *>(pv);
+  std::cout << *pd2 << '\n';
+#+end_src
+但这要求程序员真的知道 ~pv~ 原本保存的是 ~double~ 对象地址。如果错把它转成 ~int*~ 再解引用，就是未定义行为或严格别名相关问题的入口。
+
+设计上， ~void*~ 是 C/C++ 低层接口的遗产：它允许把内存当作 “裸地址” 传递，但它绕开了类型信息。现代 C++ 中，普通业务代码应尽量少用 ~void*~ ；泛型用模板，所有权用智能指针，类型擦除用 ~std::any~, ~std::function~, 虚函数接口等更高层设施。
+
+** 指向指针的指针: pointer to pointer
+因为指针本身也是对象，所以也有地址。因此可以有指向指针的指针:
+#+begin_src cpp
+  int ival = 1024;
+  int *pi = &ival;
+  int **ppi = &pi;
+#+end_src
+这里， ~pi~ 是 ~int*~ ，指向 ~ival~ 。 ~ppi~ 是 ~int**~ ，指向 ~ival~ 。访问时:
+#+begin_src cpp
+    std::cout << ival << '\n';   // 1024
+    std::cout << *pi << '\n';    // 1024
+    std::cout << **ppi << '\n';  // 1024
+#+end_src
+~*ppi~ 得到的是 ~pi~ 这个指针对象； ~**ppi~ 才得到最终的 ~int~ 对象。
+
+这类声明要围绕名字读:
+#+begin_src cpp
+  int **ppi;
+#+end_src
+~ppi~ is a pointer to pointer to int.
+
+** 指向指针的引用: reference to pointer
+
+引用不是对象，所以不存在 “指向引用的指针”。但指针是对象，所以就存在 “指向指针对象的引用”:
+#+begin_src cpp
+  int i = 42;
+  int *p = &i;
+  int *&r = p;
+#+end_src
+对于 ~*&r~ 的定义我们这样念: ~r~ 是一个引用(~&r~)，引用到 ~int*~ 这个指针。所以 ~r~ 是指向 ~int~ 的指针的引用。
+
+验证:
+#+begin_src cpp
+  int i = 42;
+  int j = 100;
+
+  int *p = &i;
+  int *&r = p;
+
+  ,*r = 0;   // modifies i, i becomes 0
+
+  r = &j;   // modifies p itself, p now points to j
+
+  ,*r = 7;   // modifies j, j becomes 7
+#+end_src
+这里要区分:
+#+begin_src cpp
+  *r = 0;
+#+end_src
+~r~ 是 ~p~ 的别名。所以 ~*r~ 等价于 ~*p~ ，修改 ~p~ 指向的对象 ~i~ 。
+
+而:
+#+begin_src cpp
+  r = &j;
+#+end_src
+这是给 ~p~ 赋新地址，因为 ~r~ 是 ~p~ 的别名，执行后 ~p~ 改为指向 ~j~ 。
+
+这说明引用并不总是 “引用普通对象”；它还可以引用一个指针对象。后面函数参数中会经常看到这种模式，用于让函数修改调用者传入的指针:
+#+begin_src cpp
+  void reset(int *&p) {
+    p = nullptr;
+  }
+#+end_src
+调用后，实参函数本身会被修改成空指针。
+
+** 引用和指针核心差异总结
+不要只记语法，从对象模型理解:
+| 维度                   | 引用 ~T&~                                | 指针 ~T*~                                    |
+|------------------------+------------------------------------------+----------------------------------------------|
+| 是否是对象            | 语言层面不是对象，是别名                | 是对象，保存地址值                          |
+| 是否必须初始化        | 必须                                     | 不必须，但强烈建议初始化                    |
+| 是否可重新绑定/改指向 | 不可以                                   | 可以                                         |
+| 是否可为空            | 普通引用没有空状态                      | 可以说 ~nullptr~                             |
+| 使用方式               | 自动访问被绑定对象                      | 需要 ~*p~ 解引用                            |
+| 表达语义               | “这个名字就是那个对象”                  | “这个对象保存另一个对象的地址”             |
+| 常见用途               | 参数传递、别名、避免拷贝、表达非空对象 | 可选函数、动态对象、数组遍历、底层内存操作 |
+
+现代 C++ 的倾向是: \\
+能用引用表达的，不要用指针；需要空状态、重绑定、动态所有权或C接口时，再考虑指针。
+
+现代C++不鼓励随意使用 raw pointer 表达所有权。 Effective Modern C++ 中明确把内置指针称为 raw pointer ，并把 smart pointer 作为现代资源挂你的重要替代；例如 ~std::unique_ptr~ 表达独占所有权， ~std::shared_ptr~ 表达共享所有权。
+
+也就是说，裸指针 ~T*~ 更适合表达:
+
+#+begin_quote
+  我访问/观察一个对象，但是不拥有它。
+#+end_quote
+而不是：我负责释放它。
+
+所有权问题要等到后面 ~new/delete~, RAII, 智能指针时系统展开。
+
+
+** C++ 为什么同时拥有指针和引用
+
+从语言设计上来看，引用和指针解决的是不同层次的问题。
+
+指针来自C的系统编程传统，它暴露地址，允许你接近机器的内存模型：对象在内存中有位置，指针保存位置，解引用通过位置访问对象。这给了 C++ 高性能、底层控制、与硬件和 C ABI 交互的能力。但代价是安全性：空指针、悬垂指针、野指针、越界指针都可能产生 undefined behavior 。
+
+引用则更像是 C++ 为类型系统和抽象机制增加的“安全别名”。它让你可以避免拷贝，有不必把 “地址值” 暴露给使用者。例如函数参数:
+#+begin_src cpp
+  void increment(int &x) {
+    ++x;
+  }
+#+end_src
+调用者写:
+#+begin_src cpp
+  increment(i);
+#+end_src
+语义上就是 “把对象i交给函数，让函数处理它”。不需要写:
+#+begin_src cpp
+  increment(&i);
+#+end_src
+函数内部也不需要写:
+#+begin_src cpp
+  ++(*p);
+#+end_src
+引用让接口更接近“对象语义”，指针让接口更接近“地址语义”。
+
+C++ 的复杂性就在这里：它同时保留底层机器模型，又提供高层抽象设施。你必须知道什么时候自己正在写“对象层面的代码”，什么时候正在写“地址层面的代码”。
+
