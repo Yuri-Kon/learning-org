@@ -1308,4 +1308,1592 @@ C++11 引入了 ~nullptr~ ，它是 *pointer literal* ，即指针字面值。 c
 引用让接口更接近“对象语义”，指针让接口更接近“地址语义”。
 
 C++ 的复杂性就在这里：它同时保留底层机器模型，又提供高层抽象设施。你必须知道什么时候自己正在写“对象层面的代码”，什么时候正在写“地址层面的代码”。
+* Const Qualifier
 
+这一节是在前面 *object - type - reference - pointer* 的基础上，引入 C++ 类型系统中第一个真正重要的“权限约束”： *通过某个名字、引用或指针，是否允许修改对象* 。
+
+~const~ 的核心不是 “这个内存永远都不会变”，而是：
+#+begin_quote
+在某个类型视角下，这个对象或被指向对象不允许被修改。
+#+end_quote
+
+同时还会学习C++的一个基础设计原则:
+#+begin_quote
+const correctness = 用类型系统表达 “不可变约束”
+#+end_quote
+我们分为三个层次来讲:
+1. const 的语言语义(C++ 标准层面)
+2. 指针/引用中的 const 组合规则(类型系统核心)
+3. 现在C++的设计扩展(C++11 ~ C++20)
+
+-----
+
+** const qualifier: 把 “不能修改”写进类型系统
+*const qualifier(const 限定符)* 用来限定一个对象的类型，使该对象在初始化后不能再被赋新值。比如缓冲区大小：我们希望它有名字，方便维护；又希望它不会被误改，所以写成 ~const int bufSize = 512~ 。书中明确指出：因为 ~const~ 对象创建后不能改变，所以必须初始化。
+
+比如:
+#+begin_src cpp
+  const int bufferSize = 512; // ok
+  bufSize = 1024; // error: cannot assign to const object
+  const int i = get_size(); // ok: 运行期初始化也可以
+  const int j = 42; // ok: 编译器常量初始化
+  const int k; // error: const 对象必须初始化
+#+end_src
+这里需要区分三个层次:
+#+begin_src cpp
+  int x = 42;
+  const int cx = 42;
+  constexpr int cex = 42;
+#+end_src
+- ~x~ 是普通对象，可以修改
+- ~cx~ 是 *const object(常量对象)* ，初始化之后不能通过 ~cx~ 修改
+- ~cex~ 是 *constexpr object(常量表达式对象)* ，不仅不能修改，而且其初始化必须能在编译期求值。 \\
+  当前 C++ 标准草案也规定: ~constexpr~ 用在对象声明上会使对象成为 ~const~ ，并且对象必须是 literal type 且被初始化。 \\
+  所以，就会有：
+  #+begin_src cpp
+    int f();
+
+    const int a = f(); // ok, 但 a 不是 constant expression
+    constexpr int b = f(); // error, 除非 f 是 constexpr function
+  #+end_src
+这就是本节最后的 ~constexpr~ 的伏笔: *const 管能不能改， constexpr 管能不能作为编译期值* 。
+
+
+** const 对象的初始化、拷贝与类型约束
+
+~const~ 对象虽然不能被赋值，但可以用来初始化另一个对象:
+#+begin_src cpp
+  const int ci = 42;
+  int i = ci; // ok, 拷贝 ci 的值
+#+end_src
+  
+这并不矛盾。因为拷贝 ~ci~ 并没有改变 ~ci~ 本身。 ~ci~ 的不可修改性，保护的是 ~ci~ 这个对象，而不是它的值42不能被赋值。
+
+更底层地说，C++对象模型是：对象是一块具有类型的存储区域。 ~const int ci~ 说明这块存储区域通过 ~ci~ 这个名字不能被修改；但读取它的值、用它初始化另一个 ~int~ 对象，是允许的。
+#+begin_src cpp
+  const int ci = 42;
+  int j = ci; // j 是一个新的 int 对象
+  j = 100; // ok, j 不是 const
+#+end_src
+这里就出现一个关键问题: ~const~ 修饰的到底是谁？这会在指针和引用中变得复杂。
+
+** 默认情况下，文件作用域 const 具有内部链接
+#+begin_src cpp
+  // constants.h
+  const int bufSize = 512;
+#+end_src
+如果这个头文件被多个 ~.cpp~ 文件包含，在普通变量的规则下会导致多重定义。但 C++ 对 namespace scope 的非 ~extern const~ 做了特殊处理：它默认具有 *internal linkage(内部链接)* 。也就是说每个翻译单元各有一份自己的 ~bufSize~ 。C++ Primer 也解释了：为了避免多重定义， ~const~ 变量默认局部于文件；如果要跨文件共享同一个 ~const~ 对象，需要在定义和声明都使用 ~extern~ 。 cppreference 对现代规则的表述也是：非局部、非 volatile 、非 extern 的 const 变量默认给出 internal linkage 。C++17 起还需要考虑 inline 变量例外。
+
+经典写法是:
+#+begin_src cpp
+  // file_1.cpp
+  extern const int buffSize = get_size(); // definition
+
+  // file_1.h
+  extern const int bufSize; // declaration
+#+end_src
+
+现代 C++17之后，更常见的是:
+#+begin_src cpp
+  // constants.h
+  inline constexpr int bufSize = 512;
+#+end_src
+*inline variable(内联变量)* 允许同一个变量定义出现在多个翻译单元中，只要定义一致，并且它在整个程序中仍然是一个实体、具有同一个地址。
+
+所以在现代实践中:
+#+begin_src cpp
+  // C++17 +
+  inline constexpr std::size_t buffer_size = 4096;
+#+end_src
+通常要优于:
+#+begin_src cpp
+  #define BUFFER_SIZE 4096
+#+end_src
+因为前者有类型、有作用域、参与类型检查；后者只是预处理器文本替换。
+
+
+** reference to const: 引用到 const
+本节的第一个容易误解的概念是 *reference to const* ，对 const 的引用。
+#+begin_src cpp
+  const int ci = 1024;
+  const int &r1 = ci; // ok
+  r1 = 42; // error;
+  int &r2 = ci; // error
+#+end_src
+所谓的 “const reference” ，只是口语缩写。严格说应该叫 *reference to const* ，因为引用不是对象，引用本身不能再绑定到别的对象。所以不存在 “const reference” 这种对象层面的东西。 ~const int&~ 的意思是 “这个引用把被引用对象当作 const int 来看”。
+
+也就是说， ~const int &r = i;~ 不是说这个 ~r~ 引用本身 const, 因为引用天然不能重复绑定。它说的是:
+#+begin_quote
+通过 r 不能修改 i 。
+#+end_quote
+
+
+** reference to const 可以绑定到非 const 对象
+#+begin_src cpp
+  int i = 42;
+  int &r1 = i;
+  const int &r2 = i;
+
+  r1 = 0; // ok, i 变成 0
+  r2 = 0; // error, 不能通过 r2 修改 i
+#+end_src
+~r2~ 不能修改 ~i~ ，但 ~i~ 本身可以被修改。 reference to const 限制的只是“通过该引用能做什么”，并不一定说明底层的对象本身一定是 const 。
+
+这也是: ~const~ 很多时候都不是物理不可变性，而是 *access path immutability (访问路径上的不可修改性)* 。
+
+可以把它理解成:
+#+begin_src cpp
+  int i = 42;
+
+  const int &view  = i; // 只读视图
+#+end_src
+~view~ 本身只是一扇只读窗口，但房子本身不一定不可变。
+
+** reference to const 可以绑定到字面值、表达式和临时对象
+普通左值引用 ~int&~ 要求绑定到一个真实、可修改的 ~int~ 左值:
+#+begin_src cpp
+  int &r  = 42; // error
+  int &r2 = i + 1; // error
+#+end_src
+但是 ~const int&~ 可以:
+#+begin_src cpp
+  const int &r1 = 42; // OK
+  const int &e2 = i + 1; //OK
+#+end_src
+这里发生了 *temporary materialization (临时对象实质化)* 与 *lifetime extension (生命周期延长)* 。可以粗略理解为编译器生成了一个临时 ~const int~ 对象，然后让引用绑定到它:
+#+begin_src cpp
+  const int temp = 42;
+  const int &r1 = temp;
+#+end_src
+更值得注意的是类型转换:
+#+begin_src cpp
+  double dval = 3.14;
+  // int &r1 = dval; // error
+  const int &r2 = dval; // OK, 但 r2 绑定到的不是 dval ，而是临时的 int(3)
+#+end_src
+这不是让 ~ri~ 成为 ~dval~ 的别名，它大致等价于:
+#+begin_src cpp
+  const int temp = dval; // 截断为 3
+  const int &ri = temp;
+#+end_src
+所以:
+#+begin_src cpp
+  double dval = 3.14;
+  const int &ri = dval;
+  dval = 4.99;
+  // ri 仍然是3 ，不会变成4
+#+end_src
+而为什么普通的 ~int&~ 不允许这种绑定呢？因为如果允许:
+#+begin_src cpp
+  int &ri = dval; // 假设允许
+  ri = 10;
+#+end_src
+用户很可能以为 ~dval~ 被修改为了10,但实际上引用可能绑定到转换产生的临时对象。这种语义太误导，因此语言禁止非 const 引用绑定到需要转换产生的临时对象。
+
+
+** pointer to const: 指向 const 的指针
+引用和指针的 const 规则比较相似，但指针更复杂，因为指针本身是对象。
+
+先看 *pointer to const*:
+#+begin_src cpp
+  const double pi = 3.14;
+  double *ptr = &pi; // error
+  const double *cptr = &pi; // OK
+
+  *cptr = 42; // error
+#+end_src
+~const duble *cptr~ 的意思是:
+#+begin_quote
+cptr 是一个指针，指向一个被视为 const double 的对象。
+#+end_quote
+注意， ~cptr~ 本身可以改:
+#+begin_src cpp
+  const double pi = 3.14;
+  const double e = 2.718;
+  const double *p = &pi;
+
+  p = &e; // OK, p 可以改指向
+  ,*p = 0.0; // error 不能通过 p 修改对象
+#+end_src
+pointer to const 也可以指向非 const 对象:
+#+begin_src cpp
+  double d = 3.14;
+  const double *p = &d; // OK
+  ,*p = 2.0; // error
+  d = 2.0; // OK
+#+end_src
+这和 ~const int&~ 指向非 ~const~ 对象的语义一样: 限制的是 “通过这个指针不能修改”，不是对象本身不能修改。 point / reference to const 可以理解为 “它认为自己指向/引用的是const”，因此该 pointer/reference 不允许通过它自己修改。但如果指向的并不是一个 const, 仍然可以通过别的方式修改。
+
+
+** const pointer: 常量指针
+因为指针是对象，因此指针本身也可以是 const 。这叫 *const pointer* ，常量指针。
+#+begin_src cpp
+  int errNumb = 0;
+  int *const curErr = &errNumb;
+#+end_src
+从右往左读:
+
+~curErr~ 先和 ~const~ 结合，所以 ~curErr~ 本身是一个 const；再看 ~*~ 说明它是一个指针；最后基础类型是 ~int~ 。所以:
+#+begin_quote
+curErr 是一个 const pointer to int.
+#+end_quote
+常量指针不能换指向:
+#+begin_src cpp
+  int a = 1;
+  int b = 2;
+  int *const p = &a;
+  p = &b; // error, p 本身不能改
+  *p = 0; // ok, a 变成 0
+#+end_src
+当然也可以两边都是用 ~const~:
+#+begin_src cpp
+  const double pi = 3.14159;
+  const double *const pip = &pi;
+#+end_src
+~pip~ 是:
+#+begin_quote
+const pointer to const double.
+#+end_quote
+所以，这个指针指向的对象不能通过它修改；这个指针的指向本身也不能修改。也就是说:
+#+begin_src cpp
+  ,*pip = 2.72; // error, pointer to const
+  pip = nullptr; // error, const pointer
+#+end_src
+对于 ~const pointer~ 和 ~pointer to const~ ，这是两个不同的维度。我们使用从右往左读的方法判断其类型。
+
+** top-level const 与 low-level const
+*top-level const*: 顶层const, 对象本身是 const
+*low-level const*: 底层 const, 复合类型所指向、引用、间接访问的对象是 const .
+#+begin_src cpp
+  int i = 0;
+
+  int *const p1 = &i; // top-level const: p1 本身不可改
+  const int ci = 42; // top-level const: ci 本身不可改
+
+  const int *p2 = &ci; // low-level const: p2 指向 const int
+  const int *const p3 = p2; // 左边 const 是 low-level, 右边 const 是 top-level
+
+  const int &r = ci; // 引用中的 const 总是 low-level
+#+end_src
+
+top-level const 表示对象本身是 const; low-level const 出现在指针、引用等复合类型的基础类型部分。指针可以同时拥有 top-level 和 low-level const. 
+
+*** 拷贝时， top-level const 会被忽略
+#+begin_src cpp
+  const int ci = 42;
+  int i = ci; // OK
+#+end_src
+这里复制的是值。 ~ci~ 不可改的这个事实，不影响它把值复制到普通 ~int~ 。
+
+指针也一样:
+#+begin_src cpp
+  int i = 0;
+  const int *p2 = &i;
+  const int *const p3 = p2;
+
+  p2 = p3; // OK: p3 本身是 const 不会被复制
+#+end_src
+~p3~ 是 const pointer, 但拷贝它的值只是拷贝里面存的地址，不会修改 ~p3~ 。
+
+*** 拷贝时， low-level const 不能随便丢弃
+原因很简单:
+#+begin_src cpp
+  const int ci = 42;
+  const int *p2 = &ci;
+
+  int *p = p2; // error
+#+end_src
+因为如果允许，就可以通过 ~p~ 修改 ~ci~ 了，就会出现很诡异的情况:
+#+begin_src cpp
+  *p = 100; // 通过 int* 修改 const int?
+#+end_src
+这会破坏 const 约束。
+
+但是，从非 const 到 const 是允许的:
+#+begin_src cpp
+  int i = 0;
+  int *p = &i;
+
+  const int *cp = p; // OK
+#+end_src
+因为增加只读限制是安全的；减少只读限制是不安全的。 C++ Primer 对此的总结是：复制对象时， top-level const 可以忽略， low-level const 不可以忽略；通常可以从 noconst 复制到 const ，不能反过来。
+
+
+** const 与 auto: 先提前建立规则
+严格来说 ~auto~ 是2.5节的内容，但是我们可以先提前打通联系。
+
+#+begin_src cpp
+  const int ci = 42;
+  const int &cr = ci;
+
+  auto a = ci; // int, top-level const 被丢弃
+  auto b = cr; // int, 引用被看作其绑定对象, top-level const 被丢弃
+
+  auto c = &ci; // const int*, low-level const 保留
+#+end_src
+如果希望保留顶层 const:
+#+begin_src cpp
+  const auto x = ci; // const int
+#+end_src
+如果希望引用:
+#+begin_src cpp
+  auto &r1 = ci; // const int&
+  const auto &r2 = 42; // OK
+#+end_src
+C++ Primer 在下一节会正式讲： ~auto~ 通常忽略 top-level const, 但保留 pointer-to-const 这种 low-level const. Effective Modern C++ 也把这一类规则放到类型推导的核心位置：按值推导时会忽略引用性以及顶层 const / volatile；引用或指针推导时则会保留相应的 const 限定。
+
+这条规则后面会反复出现:
+#+begin_src cpp
+  const std::string s = "hello";
+
+  auto x = s; // std::string 复制一份. x 可改
+  const auto y = s; // const std::string
+  auto &z = s; // const std::string&
+#+end_src
+
+
+** constexpr and constant expressions: 编译期值
+*constexpr expression* （常量表达式）是值不会改变、并且能在编译期求值的表达式。
+#+begin_src cpp
+  const int max_files = 20; // constant expression
+  const int limit = max_files + 1; // constant expression
+
+  int staff_size = 27; // not constant expression
+  const int sz = get_size(); // not constant expression
+#+end_src
+为什么 ~staff_size~ 不是：因为它不是 const
+
+为什么 ~sz~ 不是: 因为 ~get_size()~ 的结果通常运行期才能知道。
+
+*** constexpr variale: 要求编译器验证
+#+begin_src cpp
+  constexpr int mf = 20;
+  constexpr int limit = mf + 1;
+  constexpr int sz = size(); // 只有 size 是 constexpr function 才 ok
+#+end_src
+~constexpr~ 的好处不是 “让东西更 const”，而是把你的意图交给编译器检查。
+#+begin_src cpp
+  const int n = get_size(); // 运行期 OK
+  constexpr int n = get_size(); // 编译期检查: get_size() 必须可编译期求值
+#+end_src
+所以 C++ Primer 的建议是：如果打算把变量用作 constant expression, 通常应该用 ~constexpr~ 。
+
+Effective Modern C++ 更进一步: ~constexpr~ 不只是 “常量”，而是让部分原本运行期做的工作迁移到编译期；如果构造函数、成员函数、非成员函数都满足 ~constexpr~ 条件，一个对象甚至可以在编译期就完成计算并放入只读内存。
+
+** literal type: 能参与 constexpr 的类型
+*literal type (字面值类型)* 是足够简单、可以拥有编译期字面值的类型。
+
+在C++11的语境里，算术类型、引用、指针是 literal type； ~Sales_item~ 、IO类型、 ~std::string~ 这类库类型当时不属于本节语境下可以 ~constexpr~ 的类型。
+#+begin_src cpp
+  constexpr int i = 42; // OK
+  constexpr double d = 3.14; // OK
+  constexpr int *p = nullptr; // OK
+
+  std::string s = "hello"; // OK
+  constexpr std::string cs = "hi"; // C++ 下不行
+#+end_src
+~constexpr~ 要求类型和初始化过程都能被编译器在常量求值语境中处理。
+立
+
+** constexpr pointer: constexpr 修饰的是指针本身
+#+begin_src cpp
+  const int *p = nullptr;
+  constexpr int *q = nullptr;
+#+end_src
+二者完全不同。 ~const int *p~ 表示 p 是 pointer to const int, p 可以改指向，但不能通过 p 修改 int. ~constexpr int *q~ 表示 q 是 ~constexpr object~ ，因此 q 本身是 ~const pointer to int~ 。也就是说:
+#+begin_src cpp
+  constexpr int *q = nullptr;
+  int *const q = nullptr;
+#+end_src
+在等价方向上二者接近。在 ~constexpr~ 指针声明中， ~constexpr~ 作用于指针本身，而不是指针所指的类型； ~constexpr~ 会给它定义的对象施加 top-level const. 
+
+所以:
+#+begin_src cpp
+  constexpr int *q = nullptr; // q 是 const pointer to int
+  constexpr const int *p = &i; // p 是 const pointer to const int
+#+end_src
+再注意: ~constexpr~ 指针只能初始化为 ~nullptr~ 、 ~0~ ，或指向有固定地址的对象。局部自动变量通常不能作为 ~constexpr~ 指针的目标；全局对象、静态局部对象有固定地址，可以。
+
+也就是说:
+#+begin_src cpp
+  int gloabl = 0;
+  constexpr int *p = &global; // OK, global 有固定地址
+
+  int main() {
+    int local = 0;
+    // constexpr int *q = &local; // error. local 地址不是常量表达式
+  }
+
+#+end_src
+
+** C++20 之后: const, constexpr, consteval, constinit 的分工
+现代 C++ 又引入了两个相关关键词。
+
+*** consteval: 必须编译期求值的函数
+*consteval (立即函数)* 用于函数，要求其调用在需要的语境中产生 constant expression. immediate function 是 constexpr function , 并且 consteval 也隐含 inline；潜在求值的 immediate invocation 必须产生 constant expression.
+#+begin_src cpp
+  consteval int square(int x) {
+    return x * x;
+  }
+  int a = square(3); // OK, 编译期求值
+#+end_src
+和 ~constexpr~ 的区别可以记为:
+#+begin_src cpp
+  constexpr int f(int x) { return x * x; } // 可以编译期，也可以运行期
+  consteval int g(int x) { return x * x; } // 必须编译期
+#+end_src
+
+*** constinit: 保证静态初始化，但不保证不可修改
+*constinit* 是 C++20 引入的，作用于 static 或 thread storage duration 的变量。它要求变量不能进行 dynamic initialization；但它不像 ~constexpr~ 那样自动使对象 const-qualified. ~constinit~ 变量若发生动态初始化则程序不良构， ~constinit~ 不能和 ~constexpr~ 一起使用；对象场景下 ~constexpr~ 会让对象 const, 而 ~constinit~ 不会。
+
+#+begin_src cpp
+  constexpr int square(int x) { return x * x; }
+
+  constinit int global = square(10); // OK, 静态初始化
+  global = 5; // OK, constinit 不等于 const
+#+end_src
+所以四者关系是:
+
+#+begin_quote
+const: 不能通过该对象修改；可能运行期初始化 \\
+constexpr: 必须可常量求值；对象隐含 const \\
+consteval: 函数必须编译期求值 \\
+constinit: 静态/线程变量必须静态初始化；不代表不可修改
+#+end_quote
+
+-----
+
+** const 的设计哲学: 接口契约
+C++ 的 ~const~ 很强，因为它深入类型系统:
+#+begin_src cpp
+  void print(const std::string &s);
+#+end_src
+这个函数的接口承诺是:
+#+begin_quote
+我不会修改传入的字符串
+#+end_quote
+调用者可以传入普通对象:
+#+begin_src cpp
+  std::string s = "hello";
+  print(s);
+#+end_src
+也可以传入 const 对象:
+#+begin_src cpp
+  const std::string cs = "world";
+  print(cs);
+#+end_src
+这就是 const-correctness 的价值：它扩大了函数可接受的参数范围，同时让编译器帮助检查 “不该改的东西是否改了” 。
+
+但要注意， ~const~ 不是并发安全、不是深度不可变、也不是魔法防御。
+
+例如类里可能有缓存:
+#+begin_src cpp
+  class Widget {
+  public:
+    int value() const {
+      if (!cache_valid_) {
+        cache_ = compute();
+        cache_valid_ = true;
+      }
+      return cache_;
+    }
+
+  private:
+    mutable int cache_ = 0;
+    mutable bool cache_valid_ = false;
+  };
+#+end_src
+这里， ~value~ 是 const member function, 但是它修改了 ~mutable~ 成员。这叫做 *logical constness(逻辑常量性)*: 从用户可观察语义看对象不变，但内部缓存可以变。 Effective Modern C++ 在这个方面提醒: 如果 const member function 可能被多个线程并发调用，就必须保证线程安全；一个变量可用 atomic, 多个变量作为整体更新时应该使用 mutex.
+
+这说明 ~const~ 是接口语义的一部分，但不是完整的并发模型。
+
+** 本节核心规则压缩
+#+begin_src cpp
+  const int x = 42;
+#+end_src
+~x~ 是 const object, 必须初始化，不能被赋值修改。
+#+begin_src cpp
+  const int &r = x;
+#+end_src
+~r~ 是 reference to const, 不是 “const reference” 。不能通过 ~r~ 修改对象。
+#+begin_src cpp
+  const int *p = &x;
+#+end_src
+~p~ 是 pointer to const. ~p~ 可以换指向，但不能通过 ~p~ 修改对象。
+#+begin_src cpp
+  int *const p = &x;
+#+end_src
+~p~ 是 const pointer. ~p~ 不能换指向，但可以通过 ~p~ 修改 ~i~ 。
+#+begin_src cpp
+  const int *const p = &x;
+#+end_src
+~p~ 是 const pointer to const. 指针本身和所指对象都不能通过这个表达式修改。
+#+begin_src cpp
+  constexpr int n = 42;
+#+end_src
+~n~ 是 compile-time constant expression, 可用于数组大小、模板实参等要求编译期求值的语境。
+#+begin_src cpp
+  constexpr int *p = nullptr;
+#+end_src
+~constexpr~ 修饰的是对象本身，所以 ~p~ 是 const pointer, 而不是 pointer to const.
+
+** 一些例子
+#+begin_src cpp
+  int i = 0;
+  const int ci = 42;
+
+  int &ri = ci; // error, 不能用普通引用绑定到 const int
+  const int &r2 = i; // OK, 只读视图
+  const int &r3 = 42; // OK, 绑定临时对象并延长生命周期
+
+  int *p1 = &ci; // error, 不能用 int* 指向 const int
+  const int *p2 = &ci; // OK, 只读试图
+  const int *p3 = &i; // OK, 通过 p3 不能修改 i
+
+  int *const p4 = &i; // OK
+  p4 = nullptr; // error, p4 是 const pointer, 不能修改指向
+  ,*p4 = 10; // OK, p4 指向的是 nonconst int
+
+  const int *const p5 = &ci; // OK
+  p5 = &i; // error, p5 是 const pointer to const int, 不能修改指向
+  ,*p5 = 10; // error
+
+  const int n = get_size(); // 不是 constant expression, 除非 get_size() 可编译期求值且语义允许
+  constexpr int m = 42; // 是 constant expression
+#+end_src
+下一节会进入 ~typedef~, ~using~, ~auto~, ~decltype~, 其中 ~auto~ 的推导规则直接依赖这一节的 top-level const / low-level const
+
+-----
+
+* Dealing with Types
+
+这一节表面上讲三个语法设施: *type alias (类型别名)* , ~auto~, ~decltype~ 。但是它真正处理的是 C++ 类型系统里的一个核心矛盾:
+#+begin_quote
+C++ 要求编译期知道每个名字的精确类型；但真实工程里的类型经常又长、又嵌套、又依赖上下文，甚至只有编译器才知道。
+#+end_quote
+C++ Primer 在 2.5 开头说得很准确：随着程序复杂化，类型也会复杂化；困难主要来自两个方面，一是类型难写，二是有时很难确定我们到底需要什么精确类型。于是本节给出三类工具：给复杂类型起名字、让编译器从初始化器推导类型、让编译器从表达式推导类型。
+
+-----
+
+** 主线: 类型表达能力与可读性的平衡
+
+C++ 是 *static typed languaged (静态类型语言)* 。编译器必须在编译期知道每个表达式的类型，才能决定:
+#+begin_src cpp
+  i = i + j;
+#+end_src
+到底是整数加法、浮点加法、字符串拼接，还是某个类重载的 ~operator+~ 。 C++ Primer 在 Part I 开头也强调：C++ 中对象类型决定能执行什么操作，类型检查在编译期完成，因此编译器必须知道程序中每个名字的类型。
+
+但是类型一旦进入真实工程，就会变得非常啰嗦:
+#+begin_src cpp
+  std::unordered_map<std::string, std::vector<std::unique_ptr<Node>>>::const_iterator
+#+end_src
+或者:
+#+begin_src cpp
+  typename std::iterator_traits<It>::value_type
+#+end_src
+或者 lambda 的闭包类型根本写不出来:
+#+begin_src cpp
+  auto pred = [](const auto &x) { return x.valid(); };
+#+end_src
+所以 2.5 不是偷懒语法，而是 C++ 现代化的入口： *你要学会什么时候显式写类型，什么时候抽象类型，什么时候让编译器推导类型* 。
+
+这对应现代工具的取舍。 [[https:google.github.io/styleguide/cppguide.html][Google C++ Style Guide]] 的目标不是追求某种语法洁癖，而是管理 C++ 的复杂度，让代码在大规模代码库中可读、可维护；它明确强调“为读者优化，而不是为写作者优化”。 [[https:llvm.org/docs/CodingStandards.html][LLVM Coding Standards]] 也类似：大型代码库尤其需要统一风格，目标是是提高公共源码库的可读性和可维护性。
+
+-----
+
+** Type Alias: 类型别名
+类型别名不是新类型，而是已有类型的另一个名字。 *type alias* 是某个已有类型的同义名，它不创造新类型，不改变 ABI,不改变对象布局，不增加运行期开销。它只是让编译器在语义上把一个名字当作另一个类型来用。
+
+C++ Primer 给出两种定义类型别名的方法。传统的 C/C++ 写法是 ~typedef~:
+#+begin_src cpp
+  typedef double wages; // wages 是 double 的同义名
+  typedef wages base, *p; // base 是 double, p 是 double*
+#+end_src
+C++11 引入了 *alias declaration (别名声明)*:
+#+begin_src cpp
+  using SI = Sales_item; // SI 是 Sales_item 的同义名
+#+end_src
+书中明确说， ~using~ 左边的是别名名，右边是被命名的类型；类型别名可以出现在任何类型名可以出现的地方。也就是说:
+#+begin_src cpp
+  wages hourly, weekly;
+  // 等价于
+  double hourly, weekly;
+
+  SI item;
+  // 等价于
+  Sales_item item;
+#+end_src
+
+*** 类型别名的真正用途: 表达意图
+例如:
+#+begin_src cpp
+  using Price = double;
+  using Quantity = std::size_t;
+  using CustomerId = std::uint64_t;
+#+end_src
+这样能提高可读性:
+#+begin_src cpp
+  Price total_price(Quantity n);
+#+end_src
+更接近领域语言。
+
+但是需要警惕， *type alias 不提供类型安全* 。比如:
+#+begin_src cpp
+  using UserId = int;
+  using OrderId = int;
+
+  void cancel_order(OrderId id);
+
+  UserId u = 42;
+
+  cancel_order(u); // 合法，因为 UserId 和 OrderId 本质上都是 int
+#+end_src
+如果希望真正区分 ~UserId~ 和 ~OrderId~ ，应该创建新类型:
+#+begin_src cpp
+  struct UserId {
+    int value;
+  };
+
+  struct OrderId {
+    int value;
+  };
+
+  void cancel_order(OrderId id);
+
+  UserId u{42};
+  // cancel_order(u); // error
+#+end_src
+这是C++设计里的一个关键分层： *alias* 是命名工具，不是抽象边界； *class/struct* 才能创造新类型。
+
+-----
+
+** typedef 的语法陷阱: 它遵循声明符系统
+C++ 的声明语法来自C. 它不是简单的 “左边类型，右边名字”，而是 *declarator* （声明符） 与 *base type* （基本类型部分）组合。
+#+begin_src cpp
+  typedef wages base, *p;
+#+end_src
+这里 ~wages~ 是基本类型， ~base~ 是一个声明符， ~*p~ 是另一个声明符。所以:
+#+begin_src cpp
+  base x; // double x;
+  p ptr; // double *ptr;
+#+end_src
+这也是为什么 ~typedef~ 在复杂类型上难读:
+#+begin_src cpp
+  typedef void (*Handler)(int, const std::string&);
+#+end_src
+需要按照 C 声明语法读:
+#+begin_quote
+Handler 是一个指针，指向函数；该函数接受 ~int~ 和 ~const std::string&~ ，返回 ~void~ 。
+#+end_quote
+如果按照 ~using~ 写就会清晰很多:
+#+begin_src cpp
+  using Handler = void (*)(int, const std::string&);
+#+end_src
+就会更容易阅读:
+#+begin_quote
+Handler 是右边这个类型的别名。
+#+end_quote
+Effective Modern C++ 中也专门建议应优先使用 alias declaration, 而不是 ~typedef~ ，其中一个理由正是函数指针别名更容易读；更重要的理由是 alias declaration 可以写成 *alias template (别名模板)* ，而 ~typedef~ 不能。libc++ 的公开编码指南里也明确写道：优先使用 ~using~ alias 而不是 ~typedef~ ，因为 ~using~ 更易读且支持模板；历史代码里仍有 ~typedef~ 多半是历史原因。
+
+-----
+
+** alias template
+假设想给一个使用自定义分配器的 ~std::list~ 起别名。
+
+如果使用 C++11 的 ~using~ 写法:
+#+begin_src cpp
+  template <typename T>
+  using MyAllocList = std::list<T, MyAlloc<T>>;
+  MyAllocList<Widget> widgets;
+#+end_src
+如果使用 C++98 的风格 ~typedef~ 的话，必须绕一层模板结构体:
+#+begin_src cpp
+  template <typename T>
+  struct MyAllocList {
+    typedef std::list<T, MyAlloc<T>> type;
+  };
+
+  MyAllocList<Widget> widgets;
+#+end_src
+它减少了模板元变成中的 “类型萃取样板代码”。现代标准库也大量使用这种模式:
+#+begin_src cpp
+  template <bool B, class T = void>
+  using enable_if_t = typename enable_if<B, T>::type;
+
+  template <class T>
+  using remove_reference_t = typename remove_reference<T>::type;
+
+  template <class T>
+  using decay_t = typename decay<T>::type;
+#+end_src
+
+上面的意思是，早期的C++的类型计算经常产出一个 ~::type~ ，C++14之后大量提供 ~_t~ 后缀别名，把:
+#+begin_src cpp
+  typename std::remove_reference<T>::type
+#+end_src
+简化为:
+#+begin_src cpp
+  std::remove_reference_t<T>
+#+end_src
+libc++ 编码指南也进一步建议，在只有一个 alias 成员的类型萃取场景中，能用 alias template 的就优先用 alias template ，因为它比 class template 更轻量。不过它也提醒 alias template 会更早求值，在少数 SFINAE 场景可能更受影响。
+
+*** 插叙: 关于 template 以及 typename 的大致介绍
+以下面这段为例:
+#+begin_src cpp
+  template <class T>
+  using remove_reference_t = typename remove_reference<T>::type;
+#+end_src
+可以粗略理解为:
+#+begin_quote
+输入一个类型 ~T~ ，输出另一个类型。
+#+end_quote
+这是 C++ type traits 的常见形式。C++14 的 ~_t~ 别名模板就是为了避免反复写 ~typename ...::type~ ，让类型转换更简洁。
+
+**** ~template~ 是什么
+~template~ 的意思是：接下来我要定义一个 *模板(template)* ，它不是一个具体东西，而是一族东西的生成规则。
+
+比如普通函数：
+#+begin_src cpp
+  int add(int a, int b) {
+    return a + b;
+  }
+#+end_src
+它只能处理 ~int~ 。但是如果写成函数模板:
+#+begin_src cpp
+  template <class T>
+  T add(T a, T b) {
+    return a + b;
+  }
+#+end_src
+它就表示一族函数:
+#+begin_src cpp
+  add<int>
+  add<double>
+  add<std::string>
+  ...
+#+end_src
+当调用 ~add(1, 2)~ 时，编译器会推导出 ~T = int~ ，于是生成类似:
+#+begin_src cpp
+  int add(int a, int b);
+#+end_src
+当调用 ~add(1.4, 2.6)~ 时，编译器会推导出 ~T = double~ ，于是生成类似:
+#+begin_src cpp
+  double add(double a, double b)
+#+end_src
+所以 ~template~ 的核心作用就是:
+#+begin_quote
+把 “具体类型” 变成参数，让编译器根据类型生成代码。
+#+end_quote
+
+**** ~template <class T>~ 里的 ~class T~
+这里的 ~class~ 不表示 “必须传一个 class 类型”，它的意思是：
+#+begin_quote
+T 是一个类型参数。
+#+end_quote
+所以下面两者基本等价:
+#+begin_src cpp
+  template <class T>
+
+  template <typename T>
+#+end_src
+比如:
+#+begin_src cpp
+  template <class T>
+  struct Box {
+    T value;
+  };
+#+end_src
+可以这样用:
+#+begin_src cpp
+  Box<int> b1;
+  Box<double> b2;
+  Box<std::string> b3;
+#+end_src
+此时， ~Box<int>~ 是一个具体类型。 ~Box<double>~ 是另一个具体类型。而 ~Box<T>~ 本身是模板，不是一个完整类型。只有当提供模板实参之后，比如 ~Box<int>~ 它才能成为具体类型。
+
+**** ~template <bool B, class T = void>~
+来看这一句:
+#+begin_src cpp
+  template <bool B, class T = void>
+  using enable_if_t = typename enable_if<B, T>::type;
+#+end_src
+模板参数有两个:
+#+begin_src cpp
+  bool B
+#+end_src
+这是一个 *非类型模板参数 (non-type template parameter)* 。它不是类型，而是编译期布尔值。
+
+例如:
+#+begin_src cpp
+  enable_if_t<true, int>
+  enable_if_t<false, int>
+#+end_src
+第二个:
+#+begin_src cpp
+  class T = void
+#+end_src
+这是一个类型参数，并且默认值是 ~void~ .
+所以， ~enable_if_t<true>~ 等价于 ~enable_if_t<true, void>~ ，也就是说哦，如果不提供第二个模板参数，默认使用 ~void~ .
+
+**** ~using xxx = ...~
+普通类型别名是这样:
+#+begin_src cpp
+  using Int = int;
+#+end_src
+而模板类型别名是这样的:
+#+begin_src cpp
+  template <class T>
+  using Ptr = T*;
+#+end_src
+于是， ~Ptr<int>~ 等价于 ~int*~ . ~Ptr<std::string>~ 等价于 ~std::string*~ 。所以:
+#+begin_src cpp
+  template <class T>
+  using remove_reference_t = typename remove_reference<T>::type;
+#+end_src
+意思是定义一个别名模板 ~remove_reference_t<T>~ ，它等价于 ~typename remove_reference<T>::type~ 。
+
+
+**** ~::type~
+~::~ 是作用域解析运算符 (scope resolution operator) 。例如:
+#+begin_src cpp
+  struct x {
+    using type = int;
+  };
+#+end_src
+那么 ~x::type~ 就是 ~int~ 。这里的 ~type~ 没有魔法，就是一个嵌套在 ~x~ 里的类型别名。
+
+再看一个例子:
+#+begin_src cpp
+  template <class T>
+  struct Identity {
+    using type = T;
+  };
+#+end_src
+那么 ~Identity<int>::type~ 就是 ~int~ , ~Identity<double>::type~ 就是 ~double~ 。
+
+所以， ~remove_reference<T>::type~ 的意思是：
+#+begin_quote
+先用 ~T~ 实例化 ~remove_reference<T>~ 这个模板，然后取出它内部名叫 ~type~ 的类型。
+#+end_quote
+
+**** ~remove_reference<T>::type~ 的大致结构
+标准库里的实现会更复杂，但核心思想类似这样:
+#+begin_src cpp
+  template <class T>
+  struct remove_reference {
+    using type = T;
+  };
+
+  template <class T>
+  struct remove_reference<T&> {
+    using type = T;
+  }
+
+  template <class T>
+  struct remove_reference<T&&> {
+    using type = T;
+  }
+#+end_src
+所以，
+#+begin_src cpp
+  template <class T>
+  using remove_reference_t = typename remove_reference<T>::type;
+#+end_src
+只是把后面那一串从作用域中提取 ~type~ 类型的代码，包装成更短的 ~remove_reference_t<T>~ 。比如说， ~remove_reference_t<int&>~ 等价于 ~typename remove_reference<int&>~ ，其结果是 ~int~ 。
+
+**** 为什么前面要写 ~typename~
+后半部分的 ~typename remove_reference_t<T>::type~ 可能会让人感到困惑，这里的 ~typename~ 的意思是，告诉编译器:
+#+begin_quote
+将 ~remove_reference<T>::type~ 视为一个类型。
+#+end_quote
+做这个提醒，是因为 ~remove_reference<T>::type~ 依赖于模板类型 ~T~ 。在模板定义阶段，编译器还不知道 ~T~ 未来会是什么，也就不能确定 ~remove_reference<T>::type~ 到底是一个类型，还是一个静态类型成员，或是别的名字。比如:
+
+#+begin_src cpp
+  template <class T>
+  struct Weird {
+    static int type;
+  };
+#+end_src
+这里，如果我们取 ~Weird<T>::type~ 的话，就不是一个类型，而是一个变量。
+
+所以C++要求：凡是这种依赖于模板参数的嵌套类型名，通常必须写 ~typename~ . 也就是:
+#+begin_src cpp
+  typename Trait<T>::type
+#+end_src
+而不是:
+#+begin_src cpp
+  Trait<T>::type
+#+end_src
+
+**** ~enable_if_t~ 如何理解
+我们先看它依赖的 ~enbable_if~ 大概怎么实现:
+#+begin_src cpp
+  template <bool B, class T = void>
+  struct enable_if {
+    // B 为 false 时，没有 type
+  }
+
+  template <class T>
+  struct enable_if<true, T> {
+    using type = T;
+  }
+#+end_src
+然后:
+#+begin_src cpp
+  template <bool B, class T = void>
+  using enable_if_t = typename enable_if<B, T>::type
+#+end_src
+因为 ~B = true~ ，所以 ~enable_if<true, int>~ 里面有:
+#+begin_src cpp
+  using type = int;
+#+end_src
+所以结果是 ~int~ 。
+
+但是如果 ~enable_if_t<false, int>~ 展开成: ~typename enable_if<false, int>::type~ ，而这里面没有 ~type~ 。所以这个类型不存在。
+
+这就是 ~enable_if~ 的核心: *条件为真时产生一个类型，条件为假时不产生类型* 。
+
+常用于让某个模板函数 “只在某些条件下存在”。
+
+例如:
+#+begin_src cpp
+  #include <typ_traits>
+  #include <iostream>
+
+  template <class T>
+  std::enable_if_t<std::is_integral_v<T>, void> print(T x) {
+    std::cout << "integer: " << x << std::endl;
+  }
+#+end_src
+当 ~T = int~ 时， ~std::is_integral_v<int>~ 的结果为 ~true~ ，所以 ~std::enable_if_t<true, void>~ 的结果为 ~void~ ，函数有效。当 ~T = double~ 时， ~std::is_integral_v<double>~ 结果为 ~false~ ，于是 ~std::enable_if_t<false, void>~ 没有类型，模板函数替换失败。
+
+这背后就是之后会遇到的 SFINAE: *Substitution Failure Is Not An Error* 。模板替换失败不一定立刻报错，而是把这个候选模板从重载集合中移除。
+
+-----
+
+** 类型别名与 ~const: pstring~
+#+begin_src cpp
+  typedef char *pstring;
+
+  const pstring cstr = 0;
+  const pstring *ps; 
+#+end_src
+这里的 ~const pstring cstr~ 并不是 ~const char *cstr~ 。 ~pstring~ 本身就是 pointer to char, 所以 ~const pstring~ 的意思是 “const pointer to char”，也即是:
+#+begin_src cpp
+  char *const cstr = 0;
+#+end_src
+这才是正确的理解。 ~const~ 修饰的是整个别名代表的类型，而不是把 ~char*~ 文本展开后再肉眼进行解析。 ~pstring~ 的类型是 pointer to char, 那么显然 ~const pstring~ 的类型就是 const pointer to char, 也就是 ~char *const~ ，而不是 pointer to const char (~const char*~) .
+
+而对于 ~const pstring *ps~ ，我们可以翻译成 ps 是一个指针，指向的是 const pointer to char .也即是说可以写成:
+#+begin_src cpp
+  char *const *ps;
+#+end_src
+这里， ~ps~ 的指向可以改变，因为它是普通的 pointer, ~*ps~ 的指向不能改变，因为它是 ps 指向的 const pointer, ~**ps~ 的值可以改变, 因为 ~*ps~ 是 const pointer, 而不是 const pointer to const. 
+
+如果使用 ~using~:
+#+begin_src cpp
+  using pstring = char*;
+  const pstring cstr = nullptr; // 仍然是 char *const
+#+end_src
+~using~ 的可读性更好一些，但是语义完全一样。
+
+这个例子背后是 C++ 声明系统里的根规则:
+#+begin_src cpp
+  const T x;
+#+end_src
+其中 ~const~ 修饰的是 ~T~ 这个整体类型。如果 ~T~ 是 ~int~, 那么就是 ~const int~ ，如果 ~T~ 是 ~char*~ ，那么就是 ~char *const~.
+
+为了避免理解误差，最好不要使用 ~using pstring = char*~ 这种带有指针的别名。更好的做法是在使用时才声明指向关系，或者直接使用高级抽象:
+#+begin_src cpp
+  char *p;
+  const char *cp;
+
+  std::string s;
+  std::string_view sv;
+#+end_src
+
+#+begin_quote
+别名适合表达稳定的概念类型，不适合隐藏裸指针的可见性。
+#+end_quote
+
+** ~auto~: 编译期类型推导，不是动态类型
+
+auto type specifier (auto 类型说明符) 告诉编译器: 变量类型从初始化器中推导。
+
+~auto~ 不像 ~double~ 那样命名一个具体类型，而是让编译器从 Initializer 推导类型；因此使用 ~auto~ 声明变量必须有初始化器。
+
+注意， ~auto~ 不是 Python 的动态类型。它只是让编译器在编译期替你写类型:
+#+begin_src cpp
+  auto x = 42; // 编译后 x 的类型固定为 int
+  x = 3.14; // 合法，但是 3.14 转成 int,  x 变成 3
+#+end_src
+它更接近 “编译期局部类型推导”。
+
+
+** ~auto~ 必须初始化 
+#+begin_src cpp
+  auto x = 0; // OK
+  auto y; // error
+#+end_src
+这可以避免一类未初始化局部变量问题:
+#+begin_src cpp
+  int x1; // 可能未初始化
+  auto x2; // error
+  auto x3 = 0; // OK
+#+end_src
+
+** 一个声明中的多个 ~auto~: 必须推导出同一个基础类型
+比如:
+#+begin_src cpp
+  auto i = 0, *pi = &i; // OK
+  auto sz = 0, pi = 3.14; // error
+#+end_src
+原因是同一个声明只有一个 base type. 第一个声明里 ~auto~ 推导为 ~int~:
+#+begin_src cpp
+  int i = 0, *p = &i;
+#+end_src
+第二个声明里， ~sz~ 想让 ~auto~ 是 ~int~ ， ~pi~ 想让 ~auto~ 是 ~double~ ，冲突，所以非法。
+
+现在 C++ Core Guideliness 有一条很实用的建议， *一个声明只声明一个名字，用auto避免重复冗长类型名* 。所以项目中更推荐:
+#+begin_src cpp
+  auto i = 0;
+  auto *p = &i;
+
+  auto sz = 0;
+  auto pi = 3.14;
+#+end_src
+不要把多个 ~auto~ 声明放在一起，它节省不了多少行，却会显著增加理解成本。
+
+** auto 与 reference: 初始化器是引用时，推导的是被引用对象类型
+
+对于下面的类型:
+#+begin_src cpp
+  int i = 0;
+  int &r = i;
+
+  auto a = r;
+#+end_src
+这里 ~a~ 的类型就是 ~int~, 而不是 ~int&~ 。因为在表达式中使用引用，通常就是使用它所绑定的对象。 C++ Primer 明确说，当引用作为初始化器时，初始化器其实是对应对象，编译器用该对象的类型进行 ~auto~ 推导。
+
+所以:
+#+begin_src cpp
+  a = 42;
+#+end_src
+只会修改 ~a~ ，不会修改到 ~i~ 。也就是说， ~auto a = r~ 本质上是给 ~a~ 的类型推导为 ~int~, 并将 ~r~ 的值复制给它。
+
+如果想让 ~a~ 成为引用，必须显式写:
+#+begin_src cpp
+  auto &a = r; // int&
+  a = 42; // 修改 i
+#+end_src
+这条规则非常重要： *auto 默认按值推导；引用性默认丢失，除非显式写 ~auto&~ 或 ~auto&&~* 。
+
+** auto 与 const: 丢弃top-level const, 保留 low-level const
+
+比如:
+#+begin_src cpp
+  int i = 0;
+  const int ci = i;
+  const int &cr = ci;
+
+  auto b = ci; // int
+  auto c = cr; // int
+  auto d = &i; // int*
+  auto e = &cr; // const int*
+#+end_src
+~auto~ 通常忽略 *top-level const*, 但保留 *low-level const* 。例如 pointer to const 中的 const 会被保留。
+
+逐个解释:
+#+begin_src cpp
+  auto b = ci;
+#+end_src
+这里 ~ci~ 是 ~const int~, 但这里是按值复制。复制出来的新对象 ~b~ 没有必要继承 ~ci~ 的不可修改性，所以 ~b~ 是 ~int~ 。
+#+begin_src cpp
+  auto c = cr;
+#+end_src
+~cr~ 是 ~const int&~ ，但使用引用时视为使用其绑定对象；而绑定对象的 const 在按值复制时是顶层 const, 所以被丢弃。 ~c~ 也是 ~int~ 。
+#+begin_src cpp
+  auto d = &i;
+#+end_src
+~&i~ 的类型是 ~int*~ ，所以 ~d~ 是 ~int*~ 。
+#+begin_src cpp
+  auto e = &ci;
+#+end_src
+~&ci~ 的类型是 ~const int*~, 这里的 const 是底层const，表示指向 const int. 不能丢。否则就会允许通过 ~int*~ 修改 ~ci~ ，所以 ~e~ 是 ~const int*~ 。
+
+如果要保留顶层 const, 必须写出来:
+#+begin_src cpp
+  auto &g = ci; // const int&
+  auto &h = 42; // error
+  const auto &h = 42; // const int&
+#+end_src
+书中明确说，当我们要求 ~auto~ 推导出引用时，初始化器中的顶层 const 不会被忽略；因为绑定引用时， const 不再是 “复制源对象的顶层 const”，而是引用所绑定对象类型的一部分。
+
+
+** ~auto*~, ~auto&~, ~const auto&~ 的选择
+
+*** 本地复制: ~auto~
+#+begin_src cpp
+  auto value = compute();
+#+end_src
+表示你要一个新对象。它可能发生拷贝，也可能发生移动，也可能被优化掉。语义上它拥有自己的值。
+
+*** 只读引用: ~const auto&~
+#+begin_src cpp
+  const auto& item = container.front();
+#+end_src
+表示不复制、且不修改。遍历容器时非常常见:
+#+begin_src cpp
+  for (const auto &x : xs) {
+    use(x);
+  }
+#+end_src
+
+*** 可修改引用: ~auto&~
+#+begin_src cpp
+  for (auto &x : xs) {
+    normalize(x);
+  }
+#+end_src
+
+*** 指针: ~auto*~
+#+begin_src cpp
+  auto *p = get_ptr();
+#+end_src
+~auto*~ 的优势是把“这是指针”明确留在使用点。这比 ~auto p = get_ptr()~ 更清楚，因为后者可能让读者一眼看不出 ~p~ 是指针。
+
+** auto 取舍: 不是越多越现代
+Effective Modern C++ 主张: Prefer auto to explicit type declarations. 因为 ~auto~ 能避免未初始化变量、冗长类型、闭包类型无法书写、以及错误类型捷径。比如：
+#+begin_src cpp
+  std::vector<int> v;
+  unsigned sz = v.size(); // 可能出现错误
+#+end_src
+~v.size()~ 的真实类型是 ~std::vector<int>::size_type~, 不一定等于 ~unsigned~. 32 位和 64 位平台上这种“看起来差不多”的类型可能导致移植问题，用 ~auto~ 可以让 ~sz~ 精确成为 ~v.size()~ 的返回类型。
+
+但 Google/Abseil 的实践更加克制。Abseil 引用 Google Style Guide: 只有当类型推导当代码对不熟悉项目的读者更清楚，或者让代码更安全时，才使用类型推导；不要仅仅因为不想写显示类型就是用 ~auto~.
+
+这两个观点并不矛盾。可以这样折中:
+#+begin_src cpp
+  auto it = v.begin(); // 好，迭代器类型冗长且上下文明显
+  auto size = v.size(); // 好，避免手写错误 size_type
+  const auto &[key, value] = *it; // 好，结构绑定表达局部结构
+  auto ptr = std::make_unique<Node>(); // 好，右侧已写 Node
+#+end_src
+但下面就可能不清楚:
+#+begin_src cpp
+  auto result = service.query(request);
+#+end_src
+读者不知道 ~result~ 是状态码、对象、指针、optional、expected，还是某个异步句柄。此时用显式类型可能更好:
+#+begin_src cpp
+  QueryResult result = service.query(request);
+#+end_src
+或者改函数名/接口设计，让返回类型更清楚。
+
+** map 遍历中的 auto
+有一个比较常见的问题。关联容器的元素并不是:
+#+begin_src cpp
+  std::pair<Key, Value>
+#+end_src
+而是:
+#+begin_src cpp
+  std::pair<const Key, Value>
+#+end_src
+因为 Key 不能被修改。
+
+错误写法:
+#+begin_src cpp
+  std::unordered_map<std::string, int> m;
+
+  for (const std::pair<std::string, int> &p : m) {
+    // ...
+  }
+#+end_src
+这里，我们会以为 ~p~ 引用的是内部元素，但其实没有。因为 map 的内部元素是:
+#+begin_src cpp
+  std::pair<const std::string, int>
+#+end_src
+键是 const 的。和我们写的类型不同。编译器会构造一个临时的 ~std::pair<std::string, int>~ ，再让 ~const&~ 绑定到临时对象。每轮循环都可能发生不必要拷贝。因此建议使用 ~const auto&~ 或结构化绑定来避免错误类型。正确写法应该是:
+#+begin_src cpp
+  for (const auto &p : m) {
+    // p 的真实类型是 const std::pair<const std::string, int>&
+  }
+#+end_src
+C++17 后更好:
+#+begin_src cpp
+  for (const auto &[key, value] : m) {
+    // key: const std::string&
+    // value: const int& 或按 const pair 引用推得的元素访问
+  }
+#+end_src
+这就是 ~auto~ 的工程价值：能够避免“我以为我写对了类型，其实写错了”的问题。
+
+
+** auto 与 ~{}~ 初始化
+在 C++11/14 中:
+#+begin_src cpp
+  auto x1 = 27; // int
+  auto x2(27); // int
+  auto x3 = {27}; // std::initializer_list<int>
+  auto x4{27}; // C++14/17 中也是 std::initializer_list<int>
+#+end_src
+~auto~ 遇到花括号初始化时有特殊规则，可能推导成 ~std::initializer_list~ ，这是经典问题。 cppreference 也说明， brace-enclosed-initializer 本身没有类型，因此模板类型推导不能直接从 ~{1, 2, 3}~ 推导 ~T~, 但 ~auto~ 有特殊例外，在 copy-list-initialization 中会被推导为 ~std::initializer_list~ 。
+
+C++17 修改了 ~auto x{27}~ 的规则，现在:
+#+begin_src cpp
+  auto x1 = {27}; // std::initializer_list<int>
+  auto x2{27}; // int, C++17 起
+  auto x3{1, 2}; // error, 初始化列表不能多个元素推导一个auto
+#+end_src
+建议上很简单:
+#+begin_src cpp
+  auto x = 27; // 普通标量
+  auto xs = {1, 2, 3}; // 明确想要 initializer_list 时才这样写
+#+end_src
+不要为了统一花括号而强行写 ~auto x{27}~, 它会造成跨版本认知负担。类型推导应该提升清晰性或安全性，而不是机械追求统一或少写。
+
+** decltype: 从表达式获得类型，但不求值
+*decltype type specifier (decltype 类型是说明符)* 用来从一个表达式获得类型。
+
+有时我们想让编译器从某个表达式推导变量类型，但不想用这个表达式初始化变量，于是引入 ~decltype~ ；编译器分析表达式以确定类型，但不计算表达式。
+
+比如:
+#+begin_src cpp
+  decltype(f()) sum = x;
+#+end_src
+这里 ~f()~ 不会被调用。编译器只会问:
+#+begin_quote
+如果调用 ~f()~ ，返回类型是什么？
+#+end_quote
+然后把 ~sum~ 声明成那个类型。
+
+比如:
+#+begin_src cpp
+  int f();
+
+  decltype(f()) x = 0; // int x = 0;
+#+end_src
+再如:
+#+begin_src cpp
+  std::vector<int> v;
+
+  decltype(v.size()) n = 0;
+  // n 的类型是 std::vector<int>::size_type
+#+end_src
+这里不需要真的调用 ~v.size()~ 来初始化 ~n~ ，只需要借用它的返回类型。
+
+** decltype 与 auto 的核心区别
+~auto~ 看初始化规则，通常会调整类型:
+#+begin_src cpp
+  const int ci = 0;
+  const int &cr = ci;
+
+  auto a = ci; // int
+  auto b = cr; // int
+#+end_src
+~decltype~ 更像“问这个名字或表达式的精确类型是什么”，因此:
+#+begin_src cpp
+  decltype(ci) x = 0; // const int
+  decltype(cr) y = x; // const int&
+#+end_src
+~decltype~ 处理 top-level 和 reference 的方式与 ~auto~ 不同；当作用于变量时， *它返回该变量的类型，包括顶层引用 const 和引用* 。
+
+所以从语义方面我们可以这样理解:
+#+begin_src cpp
+  const int ci = 42;
+  const int &cr = ci;
+
+  auto a = cr; // int
+  decltype(cr) b = ci; // const int&
+#+end_src
+这里 ~auto~ 问的是:
+#+begin_quote
+用 ~cr~ 初始化一个新对象，应该是什么类型
+#+end_quote
+而 ~decltype(cr)~ 问的很简单:
+#+begin_quote
+~cr~ 这个名字被声明成了什么类型
+#+end_quote
+这两个问题不是同一层面的。
+
+** decltype 的现代完整规则
+如果 ~decltype~ 作用于变量名，返回变量声明类型；如果作用于更一般表达式，可能得到引用类型。现代 C++ 可以更精确地说:
+#+begin_src cpp
+  decltype(e)
+#+end_src
+有两大规则:
+
+第一，如果 ~e~ 是未加括号的 id-expression 或成员访问表达式， ~decltype(e)~ 得到该实体的声明类型。
+#+begin_src cpp
+  int i = 0;
+  const int ci = 0;
+  int &r = i;
+
+  decltype(i) a = 0; // int
+  decltype(ci) b = 0; // const int
+  decltype(r) c = i; // int&
+#+end_src
+第二，如果 ~e~ 是其他表达式，结果取决于 *value catagory(值类型)* :
+- 若 ~e~ 是 lvalue, ~decltype(e)~ 是 ~T&~
+- 若 ~e~ 是 xvalue, ~decltype(e)~ 是 ~T&&~
+- 若 ~e~ 是 pvalue, ~decltype(e)~ 是 ~T~
+
+
+现在只需要先掌握 lvalue 版本，因为我们还没正式展开右值引用:
+#+begin_src cpp
+  int i = 42;
+  int *p = &i;
+
+  decltype(i) a; // int
+  decltype((i)) b; // int&, error: 引用必须初始化
+  decltype(*p) c; // int&, error: 引用必须初始化
+#+end_src
+这里，为什么 ~decltype(*p)~ 是 ~int&~ 。因为 ~*p~ 表达式表示被指向的对象，它可以出现在赋值左边:
+#+begin_src cpp
+  *p = 10;
+#+end_src
+所以 ~*p~ 是 lval expression. 对于 lvalue expression, ~decltype~ 给出 ~T&~ 。解引用得到的是指针所指的对象，并且可以给该对象赋值，因此 ~decltype(*p)~ 是 ~int&~ ，不是 ~int~ 。
+
+** ~decltype((i))~ 的语义
+这是最经典的问题:
+#+begin_src cpp
+  int i = 0;
+
+  decltype(i) a; // int
+  decltype((i)) b; // int&, error
+#+end_src
+因为 ~i~ 是一个未加括号的变量，套用第一条规则。但 ~(i)~ 不再是 “未加括号的 id-expression”，而是一个普通表达式。变量表达式是 lvalue，所以:
+#+begin_src cpp
+  decltype((i)) // int&
+#+end_src
+~decltype((variable))~ 永远都是引用类型，而 ~decltype(variable)~ 只有当 variable 本身被声明为引用时才是引用。 Effective Modern C++ 也强调，这个差异可能在 C++14 的 ~decltype(auto)~ 的返回类型推导中可能导致严重的问题。
+
+例如:
+#+begin_src cpp
+  decltype(auto) f1() {
+    int x = 0;
+    return x; // decltype(x) 是 int, 所以返回 int
+  }
+
+  decltype(auto) f2() {
+    int x = 0;
+    return (x); // decltype((x)) 是 int&, 所以返回局部变量引用， UB
+  }
+#+end_src
+~f2~ 返回的是局部变量引用，函数返回后 ~x~ 已经销毁，后续使用是 ~undefinend behavior (未定义行为)~ 。这就是为什么 ~decltype(auto)~ 很强，但不能随便使用。
+
+** ~decltype~ 的典型用途
+典型用途是表达“与某个表达式同类型”。
+
+基础阶段最常见用途:
+#+begin_src cpp
+  decltype(v.size()) index = 0;
+#+end_src
+比写:
+#+begin_src cpp
+  std::vector<int>::size_type index = 0;
+#+end_src
+更短，但同时更依赖上下文。
+
+另一个典型用途是泛型代码中的返回类型:
+#+begin_src cpp
+  template <typename Container, typename Index>
+  auto access(Container &c, Index i) -> decltype(c[i]) {
+    return c[i];
+  }
+#+end_src
+这里，为什么不直接用:
+#+begin_src cpp
+  auto acces(Container &c, Index i) { ... }
+#+end_src
+的形式呢？因为 C++14 之后函数返回类型可以用 ~auto~ 推导，但普通 ~auto~ 推导会像类型模板一样丢掉引用性。 Effective Modern C++ 的例子说明，如果 ~c[i]~ 返回 ~T&~ ，普通 ~auto~ 返回类型可能被推导为 ~T~ ，导致不能返回可赋值引用；这是需要 ~decltype(auto)~ 或 ~trailing return.
+
+但同时，我们之前强调过，下面的写法比较危险:
+#+begin_src cpp
+  decltype(auto) access(Container &c, Index i) { ... }
+#+end_src
+这虽然会保留 ~c[i]~ 的真实返回类型，如果是引用就返回引用，如果是值就返回类型；但是它对表达式形式非常敏感，所以不要当成普通 ~auto~ 的高级替代品。它适合写泛型库、转发函数、适配器；普通业务代码里用得越少越好。
+
+** 源码视角：为什么标准库到处都是类型别民
+一个简化版的源码式结构大概是:
+#+begin_src cpp
+  template <class T, class Allocator = std::allocator<T>>
+  class vector {
+  public:
+    using value_type = T;
+    using allocator_type =  Allocator;
+    using size_type = std::size_type;
+    using difference_type = std::ptrdiff_t;
+
+    using reference = value_type&;
+    using const_reference = const value_type&;
+
+    using pointer = typename std::allocator_traits<Allocator>::pointer;
+    using const_pointer = typename std::allocator_traits<Allocator>::const_pointer;
+
+    using iterator = /* implementation-defined */;
+    using const_iterator = /* implementation-defined */;
+  };
+#+end_src
+这些别名的意义是为了给泛型代码一个统一接口:
+#+begin_src cpp
+  templat <typename Container>
+  void print_size(const Container &c) {
+    typename Container::size_type n = c.size();
+  }
+#+end_src
+或者 C++11后，
+#+begin_src cpp
+  templat <typename Container>
+  void print_size(const Container &c) {
+    auto n = c.size();
+  }
+#+end_src
+这也是C++ “库优先” 设计哲学的重要部分：语言不需要内建所有高级类型，只需要提供模板、别名、迭代器、运算符重载、 RAII 等机制，标准库和用户库就能构造出接近内建类型体验的抽象。 LLVM 编码标准也体现了类似的思路：优先使用标准库设施或 LLVM support libraries, 而不是重复构造数据结构；在 LLVM 中， ~DenseMap~, ~SmallVector~ 等支持库类型提供了与标准库相似的接口，但针对编译器场景做了性能取舍。
+
+
+** ~decltype~ 与 ~auto~ 的对照总结
+看这一组:
+#+begin_src cpp
+  int i = 0;
+  const int ci = 42;
+  const int &cr = ci;
+  int *p = &i;
+
+  auto a = ci; // int
+  decltype(ci) b = 0; // const int
+#+end_src
+- ~auto~: 创建一个新对象，从 ~ci~ 拷贝值。顶层 const 丢掉
+- ~decltype(ci)~: 获取 ~ci~ 这个名字的声明类型。保留 const
+
+
+#+begin_src cpp
+  auto c = cr; // int
+  decltype(cr) d = 0; // const int&
+#+end_src
+- ~auto~: 引用退化为被引用对象，再按值复制
+- ~decltype(cr)~: ~cr~ 被声明为 ~const int&~, 所以就是 ~const int&~
+
+
+#+begin_src cpp
+  auto e = *p; // int
+  decltype(*p) f = i; // int&
+#+end_src
+- ~auto~: 用 ~*p~ 初始化新对象，复制一个 int
+- ~decltype(*p)~: ~*p~ 是 lvalue expression, 所以得到 ~int&~
+
+
+#+begin_src cpp
+  decltype(i) g; // int
+  decltype((i)) h = i; // int&
+#+end_src
+~i~ 是未加括号变量名，得到声明类型； ~(i)~ 是 lvalue expression ，得到引用。
+
+** 本节的取舍
+
+*** 优先用 ~using~, 少用 ~typedef~
+新代码中:
+#+begin_src cpp
+  using Callback = void (*)(int);
+#+end_src
+模板别名必须用 ~using~:
+#+begin_src cpp
+  template <typename T>
+  using Vec = std::vector<T>;
+#+end_src
+
+*** 不要用 alias 假装创建强类型
+比如:
+#+begin_src cpp
+  using Meter = double;
+  using Second = double;
+
+  Meter m = 10;
+  Second s = m; // 合法
+#+end_src
+这里语义上 ~Second~ 和 ~Meter~ 应该是两个完全不同的类型，但是从语法上却可以赋值。需要类型安全时，使用 ~struct~ 包装。
+
+*** 局部变量可适度使用 ~auto~
+适合:
+#+begin_src cpp
+  auto it = container.begin();
+  auto ptr = std::make_unique<Node>();
+  auto n = v.size();
+
+  for (const auto &x : xs) {}
+  for (auto &[k, v] : map) {}
+#+end_src
+谨慎:
+#+begin_src cpp
+  auto result = run();
+  auto data = client.fetch();
+  auto status = parse(x);
+#+end_src
+因为读者可能不知道返回类型。 ~auto~ 应该让代码更加清晰或者更加安全，而不是为了避免书写显式类型。
+
+*** ~decltype~ 多用于泛型库和类型适配
+普通业务代码里:
+#+begin_src cpp
+  decltype(expr) x = ...;
+#+end_src
+出现频率不会太高。它更适合:
+#+begin_src cpp
+  decltype(container.size()) n = 0;
+#+end_src
+或者:
+#+begin_src cpp
+  template <typename F, typename Arg>
+  using result_t = decltype(std::declval<F>()(std::declval<Arg>()));
+#+end_src
+这类类型计算场景。
+
+*** ~decltype(auto)~ 要慎用
+它适合完美保留返回表达式类型:
+#+begin_src cpp
+  template <typename Container>
+  decltype(auto) front(Container &c) {
+    return c.front();
+  }
+#+end_src
+但是下面这种非常危险:
+#+begin_src cpp
+  decltype(auto) f() {
+    int x = 0;
+    return (x); // int&, 悬垂引用
+  }
+#+end_src
+
+-----
+
+** 本节压缩
+#+begin_src cpp
+  using T = ...
+#+end_src
+给类型起别名，但是不创建新类型。
+#+begin_src cpp
+  typedef ...
+#+end_src
+旧式类型别名。语法受C声明符影响；新代码优先使用 ~using~ .
+#+begin_src cpp
+  auto x = expr;
+#+end_src
+从初始化器推导变量类型，默认按值，引用性与顶层 const 通常丢失，底层 const 保留。
+#+begin_src cpp
+  auto &x = expr;
+#+end_src
+显式要求引用；这是 const 规则按照引用绑定处理。
+#+begin_src cpp
+  const auto &x = expr;
+#+end_src
+只读引用。尤其适合遍历和避免拷贝。
+#+begin_src cpp
+  decltype(name)
+#+end_src
+若 ~name~ 是未加括号的名字，得到声名类型。
+#+begin_src cpp
+  decltype(expr)
+#+end_src
+若是一般表达式，则根据值类别推导； lvalue 得到 ~T&~ 。
+#+begin_src cpp
+  decltype((x))
+#+end_src
+几乎总是引用，因为 ~(x)~ 是 lvalue expression 。
