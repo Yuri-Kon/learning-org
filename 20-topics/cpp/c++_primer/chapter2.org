@@ -2897,3 +2897,703 @@ C++17 修改了 ~auto x{27}~ 的规则，现在:
   decltype((x))
 #+end_src
 几乎总是引用，因为 ~(x)~ 是 lvalue expression 。
+* Define Out Own Data Structures
+** 2.6 的位置: 从“使用类型”到“定义类型”
+*data structure* 不只是“几个字段放在一起”，而是“相关数据元素的组合，以及使用这些数据的策略”。书中使用 ~Sales_item~ 作为对照: ~Sales_item~ 不仅保存 ISBN、销量、收入，还提供 ~isbn()~, ~>>~, ~<<~, ~+~, ~+=~ 等操作；而本节的 ~Sales_data~ 只保存数据，不提供操作。所以使用者必须自己写读入、输出、合并逻辑。
+
+这体现了C++核心设计目标: *用户自定义类型应该尽量像内置类型一样自然可用* 。标准草案也直接说: ~class~ 是一种类型； ~class-key~ 可以是 ~class~, ~struct~, ~union~ 。也就是说，在 C++ 里， ~struct~ 并不是“低级的C风格结构体”，而是定义 class type 的一种语法形式。
+
+本节先使用 ~struct~, 因为它适合表达一种“透明的数据聚合体”：数据公开，使用者可以直接访问。等学到第七章，我们将会学到成员函数、构造函数、访问控制、封装；到第十四章再学习运算符重载，才能写出真正接近 ~Sales_item~ 那样的类型。
+** 定义 ~Sales_data~: 最小的用户自定义类型
+我们这样定义：
+#+begin_src cpp
+  #include <string>
+  struct Sales_data {
+    std::string bookNo;
+    unsigned units_sold = 0;
+    double revenue = 0.0;
+  };
+#+end_src
+这段代码定义了一个新的类型，名字叫 ~Sales_data~ 。它的三个 data members 分别是:
+#+begin_src cpp
+  std::string bookNo; // ISBN
+  unsigned units_sold = 0; // 销量
+  double revenue = 0.0; // 总收入
+#+end_src
+C++ 标准说，一个 class definition 会引入一个新类型；例如 ~struct X { int a; };~ 和 ~struct Y { int a; }~ 即便成员完全一样， ~X~ 和 ~Y~ 也是两个不同类型，不能互相赋值。这非常关键: C++ 的类型不是“形状兼容即可”，而是 *名义类型系统* 倾向更强。 ~Sales_data~ 不是“三元组”，也不是“随便三个字段”，而是一个具有独立语义的类型。
+** class body 后面必须有分号
+这里，是因为 C++ 的声明系统允许你在定义类型的同时定义对象:
+#+begin_src cpp
+  struct Sales_data {
+    std::string bookNo;
+    unsigned units_sold = 0;
+    double revenue = 0.0;
+  } accum, trans, *salesptr;
+#+end_src
+它等价于更清晰的写法:
+#+begin_src cpp
+  struct Sales_data {
+    std::string bookNo;
+    unsigned units_sold = 0;
+    double revenue = 0.0;
+  } accum, trans, *salesptr;
+
+  Sales_data accum, trans, *salesptr;
+#+end_src
+所以 ~}~ 后面的分号是在结束整个 declaration. C++ Primer 也强调，虽然可以把类型定义和对象定义写在一起，但这会把 “定义类型” 和 “定义变量” 混在一个语句中，通常不推荐。
+
+如果漏掉这个分号，编译器会继续试图把后面的内容也当作这个声明的一部分来解析，错误信息可能看起来很绕。
+** 数据成员的对象模型: 每个对象都有自己的成员副本
+定义:
+#+begin_src cpp
+  Sales_data a;
+  Sales_data b;
+#+end_src
+不是创建了一个共享的 ~bookNo~, 一个共享的 ~units_sold~, 一个共享的 ~revenue~ ，而是每个 class type 对象都有一个对应于每个 direct non-static data member 的唯一 member subobject. 换句话说， ~a.units_sold~ 和 ~b.units_sold~ 对应的是两个不同的子对象。
+
+这和前面学过的“对象是具有类型的一块内存区域”是连在一起的。 ~Sales_data~ 对象是一块复合内容，其中嵌入了多个 member subobject.
+
+但不要把它想象成简单的C二进制布局。因为 ~std::string~ 是一个类对象，它内部可能含有指针、长度、容量、小字符串优化等实现细节。这个对象的 ~sizeof(Sales_data)~ 不一定等于 ~sizeof(std::string) + sizeof(unsigned) + sizeof(double)~ , 中间可能还有 padding (填充) 以满足 alignment(对齐)。因此不要对这种类型做原始二进制读写:
+#+begin_src cpp
+  // 不推荐: Sales_data 含有 std::string, 不是适合裸二进制持久化的类型
+  std::ofstream out("data.bin", std::ios::binary);
+  out.write(reinterpret_cast<const char*>(&data), sizeof data);
+#+end_src
+真正可靠的序列化应该按照字段写出，例如写出 ISBN, 销量, 收入, 而不是把整个对象的内存块直接倾倒出去。
+** In-class initializer: 把默认值放在成员声明处
+这两个成员有默认成员初始化器:
+#+begin_src cpp
+  unsigned units_sold = 0;
+  double revenue = 0.0;
+#+end_src
+C++11 起可以为数据成员提供 in-class initializer; 创建对象时，这些初始化器会用于初始化成员；没有初始化器的成员会被 default initialized 。 ~units_sold~ 和 ~revenue~ 会被初始化为0, ~bookNo~ 由 ~std::string~ 自己默认初始化为空字符串。
+
+对内置类型成员尽量给默认成员初始化器。如果我们写:
+#+begin_src cpp
+  struct Bad {
+    std::string name;
+    unsigned count;
+    double value;
+  };
+#+end_src
+那么 ~Bad b;~ 里面的 ~count~ 和 ~value~ 在很多默认初始化场景下可能没有确定值。局部内置类型对象未初始化会产生 indeterminate value, 使用它们可能导致 undefined behavior 。成员也是同一套对象模型的延伸。
+** ~struct~ 和 ~class~ 的真正区别
+在 C++ 中:
+#+begin_src cpp
+  struct Sales_data {
+    std::string bookNo;
+    unsigned units_sold = 0;
+    double revenue = 0.0;
+  };
+#+end_src
+和
+#+begin_src cpp
+  class Sales_data {
+  public:
+    std::string bookNo;
+    unsigned units_sold = 0;
+    double revenue = 0.0;
+  };
+#+end_src
+在这个例子里几乎等价。核心区别是默认访问权限:
+#+begin_src cpp
+  struct X {
+    int a; // 默认 public
+  };
+
+  class Y {
+    int a; // 默认 private
+  };
+#+end_src
+所以本章节选择 ~struct~ 的设计意味是: *这是一个透明的数据聚合体，外部代码可以直接访问它的成员* 。
+
+但是这个设计有取舍。 ~Sales_data~ 没有封装 invariant. 所谓 invariant ，就是对象在任何对外可见状态下都应该满足的约束，例如:
+#+begin_example
+units_sold >= 0
+revenue >= 0
+bookNo 不为空
+平均单价 = revenue / units_sold
+#+end_example
+当前的 ~Sales_data~ 不保护这些约束。它只是一个“数据袋子”。这不是C++的最终设计风格：先理解 class type, member, header, 编译模型，再逐步把操作和约束封装进去。
+
+实践上可以这样区分:
+- ~struct~:
+  - 适合简单、透明、没有复杂不变式的数据载体
+  - 例如配置项、坐标、简单记录、 DTO
+- ~class~:
+  - 适合有资源管理、生命周期管理、状态不变式、并发约束的对象
+  - 例如文件句柄、网络连接、缓存、业务实体
+** ~Sales_data~ 是 aggregate, 可以用聚合初始化
+因为当前 ~Sales_data~ 没有用户声明构造函数、没有 private/protected 数据成员、没有虚函数等，它是一个 aggregate (聚合). 标准草案对 aggregate 的定义包括: class aggregate 没有用户声明或继承的构造函数，没有 private/protected direct non-static data members, 没有 virtual functions 等。
+
+所以可以写:
+#+begin_src cpp
+  Sales_data empty;
+
+  Sales_data item1{"0-201-78345-X", 3, 60.0};
+  Sales_data item1{"0-201-78345-X", 3}; // revenue 没有显示给出，会使用默认成员初始化器 0.0
+#+end_src
+
+C++20 之后还可以使用 designated initializer:
+#+begin_src cpp
+  Sales_data item3{
+    .bookNo = "0-201-78345-X",
+    .units_sold = 3,
+    .revenue = 60.0
+  };
+#+end_src
+指定初始化器对这种简单 ~struct~ 很清晰。但要注意C++的 designated initializer 比 C 更受限制，成员指定顺序要遵循声明顺序；不要把它当作任意字段乱序赋值机制。
+
+这同时也说明了一个API设计问题: 如果你把一个类型公开为 aggregate, 外部用户可能大量依赖:
+#+begin_src cpp
+  Sales_data s{"isbn", 3, 60.0};
+#+end_src
+这样的代码。将来如果一旦添加构造函数，把成员改成 private 、增加不变式，很多调用代码都会失效。所以 aggregate 很适合内部简单数据结构，但如果是长期稳定的库接口，需要谨慎。
+** 使用 ~Sales_data~: 手动读入、计算、合并
+本节的逻辑是，读入两条交易记录，如果 IBSN 相同，就合并销量和收入，输出平均价格；否则报错。 C++ Primer 强调，因为 ~Sales_data~ 不提供操作，所以读入、输出、加法都要用户自己写。
+
+我们可以写一个比较健壮的版本:
+#+begin_src cpp
+  #include <iostream>
+  #include "Sales_data.hpp"
+
+  int main() {
+    Sales_data data1, data2;
+
+    double price1 = 0.0;
+    double price2 = 0.0;
+
+    if (!(std::cin >> data1.bookNo >> data1.units_sold >> price1)) {
+      std::cerr << "fali to read first transaction\n";
+      return 1;
+    }
+
+    data1.revenue = data1.units_sold * price1;
+
+    if (!(std::cin >> data2.bookNo >> data2.units_sold >> price2)) {
+      std::cerr << "fali to read first transaction\n";
+      return 1;
+    }
+
+    data2.revenue = data2.units_sold * price2;
+
+
+    // std::cout << data1.bookNo << data2.bookNo << std::endl;
+    if (data1.bookNo == data2.bookNo) {
+      unsigned totalCnt = data1.units_sold + data2.units_sold;
+      double totalRevenue = data1.revenue + data2.revenue;
+
+      std::cout << data1.bookNo << ' ' << totalCnt << ' ' << totalRevenue << ' ';
+
+      if (totalCnt != 0) {
+        std::cout << totalRevenue / totalCnt << '\n';
+      } else {
+        std::cout << "(no sales)\n";
+      }
+      return 0;
+    }
+    std::cerr << "Data must refer to the same ISBN\n";
+    return 1;
+  }
+#+end_src
+这里有一个设计细节：输入记录里有“单价”，但是 ~Sales_data~ 存的是“总收入”:
+#+begin_src cpp
+  data1.revenue = data1.units_sold * price1;
+#+end_src
+这是一种存储策略选择，优点是合并交易很方便：
+#+begin_src cpp
+  totalRevenue = data1.revenue + data2.revenue;
+#+end_src
+平均价格可以之后计算:
+#+begin_src cpp
+  average = totalRevenue / totalCnt;
+#+end_src
+缺点是如果需要追踪每笔交易的单价分布， ~revenue~ + ~units_sold~ 就不够了。也就是说，数据结构不是中性的；它反映了你打算如何使用数据。
+
+另一个补充: 严肃金融场景中一般不建议使用 ~double~ 表示金额，因为二进制浮点数不能精确表示许多十进制小数。教学阶段用 ~double~ 是为了专注类型和结构；真实业务中常用“分”为单位的整数，或者专门的 ~decimal~/~money~ 类型。
+** 头文件: 为什么 ~Sales_data~ 应该放进 ~Sales_data.hpp~
+如果一个源文件要定义对象:
+#+begin_src cpp
+  Sales_data data;
+#+end_src
+编译器必须知道 ~Sales_data~ 的完整定义，因为它要知道对象大小、成员布局、如何初始化成员。只有这样它才能为对象分配存储并生成成员访问代码。
+
+这就是为什么类定义通常放在头文件里:
+#+begin_src cpp
+  // Sales_data.hpp
+  #ifndef SALES_DATA_H
+  #define SALES_DATA_H
+
+  #include <string>
+
+  struct Sales_data {
+    std::string bookNo;
+    unsigned units_sold = 0;
+    double revenue = 0.0;
+  };
+
+  #endif
+#+end_src
+一个好的头文件应该是 self-contained 的：只要别人写
+#+begin_src cpp
+  #include "Sales_data.hpp"
+#+end_src
+就能够使用 ~Sales_data~ 这个数据结构，而不需要提前猜测它内部用了什么头文件。因为 ~Sales_data~ 的成员里用力 ~std::string~ ，所以 ~Sales_data.hpp~ 自己必须 ~include <string>~ 。不要依赖 “包含者刚好已经 ~include <string>~ ”。
+
+标准对 ~#include~ 的机制描述得很直接: ~#include~ 预处理指令会被它所识别的头文件或源文件的全部内容替换。 ~<...>~ 形式走实现定义的 header search； ~"..."~ 形式先按照源文件搜索规则寻找，失败时再转到 header search 。所以:
+#+begin_src cpp
+  #include <string> // 标准库里头文件
+  #include "Sales_data.h" // 自己项目里的头文件
+#+end_src
+这是常见而合理的约定。
+** header guard: 解决 “同一翻译单元内重复包含”
+头文件可能被多次包含。例如:
+#+begin_src cpp
+  // a.h
+  #include "Sales_data.h"
+
+  // main.cpp
+  #include "Sales_data.h"
+  #include "a.h"
+#+end_src
+预处理后， ~Sales_data.h~ 的文本可能会进入同一个翻译单元两次。如果没有保护，就会得到重复定义，进而发生错误。
+
+标准的 One-definition rule 说， class type, 函数, 变量等都是 definable item; 同一个 translation unit 不能包含同一个 definable item 的多个定义。所以需要 header guard:
+#+begin_src cpp
+  #ifndef SALES_DATA_H
+  #define SALES_DATA_H
+
+  #include <string>
+  struct Sales_data {
+    std::string bookNo;
+    unsigned units_sold = 0;
+    double revenue = 0.0;
+  };
+
+  #endif
+#+end_src
+
+执行过程是:
+- 第一次 ~include~:
+  - ~SALES_DARA_H~ 未定义
+  - 进入 ~#ifndef~ 区域
+  - ~#define SALES_DATA_H~
+  - 复制 ~struct~ 定义
+- 第二次 ~include~:
+  - ~Sales_DATA_H~ 已定义
+  - ~#ifndef~ 条件为假
+  - 跳过 ~struct~ 定义
+
+
+C++ Primer 也强调，预处理变量不遵循C++作用域规则，所以 guard 名字要在整个程序里尽量唯一，通常用全大写、基于头文件名或项目名前缀。
+
+实践中也常见:
+#+begin_src cpp
+  #pragma once
+#+end_src
+它更简洁，但不是 C++ 标准的一部分；多数主流编译器支持。目前我们建议先掌握标准 header guard, 因为它揭示了预处理器的 ODR 的基本机制。
+** header guard 不等于完整解决 ODR
+这里要分清两层问题。
+
+- 第一层：同一个 ~.cpp~ 预处理后，不要出现两次同一个类定义。 header guard 解决的是这个。
+- 第二层：多个 ~.cpp~ 都可以包含同一个类定义，但这些定义必须一致。标准允许某些 definable item 在多个翻译单元中出现定义，但要求满足严格条件，例如对应定义应由相同 token 序列组成、名字查找应指向同一实体等。
+
+
+如果手动在两个 ~.cpp~ 写两份“看起来差不多”的定义:
+#+begin_src cpp
+  // file1.cpp
+  struct Sales_data {
+    std::string bookNo;
+    unsigned units_sold = 0;
+    double revenue = 0.0;
+  };
+
+  // file2.cpp
+  struct Sales_data {
+    std::string bookNo;
+    double revenue = 0.0;
+    unsigned units_sold = 0;
+  };
+#+end_src
+这就是灾难。两个翻译单元对同一个类型的布局理解不同，程序可能 ill-formed, 甚至在某些情况下问题不会被链接器友好地诊断出来。
+
+这就是头文件的根本价值： *用一个源文本维护跨翻译单元一致的类型定义* 。
+** 为什么类定义必须放头文件
+我们可以只向前声明:
+#+begin_src cpp
+  struct Sales_data;
+#+end_src
+这会告诉编译器：有一个类型叫 ~Sales_data~ 。但此时它是 incomplete type (不完整类型)。
+
+我们可以做:
+#+begin_src cpp
+  Sales_data *p = nullptr; // OK: 指针大小不依赖 Sales_data 完整布局
+#+end_src
+但不能做:
+#+begin_src cpp
+  Sales_data data; // error: 编译器不知道对象大小
+#+end_src
+也不能访问成员:
+#+begin_src cpp
+  p->bookNo; // error: 不知道里面有没有 bookNo
+#+end_src
+标准说，当定义一个 ~T~ 类型对象、声明一个 ~T~ 类型的非静态数据成员、对 ~T~ 做成员访问、 ~sizeof(T)~ 等操作时，需要完整类型。
+
+这也解释了 C++ 的分离编译模型:
+- 函数:
+  - 调用者通常只需要函数声明
+  - 函数体可以放在另一个 ~.cpp~ ，链接时再合并
+- 类:
+  - 如果要定义对象或访问成员变量，编译器必须看到完整类定义。所以类定义通常放在头文件中。
+** 从编译器视角理解
+我们可以用预处理初始看 ~#include~ 的效果:
+#+begin_src bash
+  g++ -E bookstore.cpp > bookstore.ii
+#+end_src
+~bookstore.ii~ 里会看到 ~Sales_data.hpp~ 已经被替换为了头文件内容。 header guard 会让第二次包含时内容被跳过。
+
+也可以用 Clang AST 看编译器如何理解这个类型:
+#+begin_src bash
+  clang++ -Xclang -ast-dump -fsyntax-only bookstore.cpp
+#+end_src
+会看到类似概念上的结构:
+#+begin_example
+CXXRecordDecl struct Sales_data
+  FieldDecl bookNo 'std::string'
+  FieldDecl units_sold 'unsigned int'
+  FieldDecl revenue 'double'
+#+end_example
+这有助于我们把源码和编译器内部模型对应起来: ~struct Sales_data~ 不是运行时动态创建的东西，而是在编译期建立了一个类型描述；每次定义 ~Sales_data data;~ ，编译器都依据这个类型描述生成对象初始化和成员访问代码。
+** 设计取舍: 为什么现在先暴露数据，之后再封装
+当前我们的版本:
+#+begin_src cpp
+  struct Sales_data {
+    std::string bookNo;
+    unsigned units_sold = 0;
+    double revenue = 0.0;
+  };
+#+end_src
+优点:
+- 简单
+- 聚合初始化方便
+- 成员访问直观
+- 适合作为教学中的数据模型
+- 没有额外抽象成本
+  
+缺点:
+- 无法保护不变式
+- 所有用户都要重复读入、输出、合并逻辑
+- 错误状态容易产生
+- 一旦字段变化，所有使用者都要改
+
+
+未来的成熟版本会像这样演化:
+#+begin_src cpp
+  class Sales_data {
+  public:
+    std::string isbn() const { return bookNo; }
+    Sales_data &combine(const Sales_data &rhs) {
+      units_sold += rhs.units_sold;
+      revenue += rhs.revenue;
+      return *this;
+    }
+    double avg_price() const {
+      return units_sold ? revenue / units_sold : 0;
+    }
+
+  private:
+    std::string bookNo;
+    unsigned units_sold = 0;
+    double revenue = 0.0;
+  };
+#+end_src
+这不是说 ~class~ 比 ~struct~ 高级，而是说：当对象有不变式和行为时，应把行为放进类型内部。 C++ 的设计哲学不是 “只用类包装数据”，而是 “让类型表达语义约束”。简单透明的数据可以是 ~struct~; 有规则、有生命周期、有资源管理的东西应该封装成 ~class~ 。
+* Variables and Basic Types 章末总结
+第二章的核心是建立C++最基础的对象模型和类型模型。C++ Primer 在章末明确说: *types are fundamental to all programming in C++*; 每个类型都定义对象的存储需求，以及可以在该对象上执行的操作。内置类型与机器硬件表示紧密相关，而类机制则让我们可以定义自己的类型，标准库的IO, ~string~ 等高级抽象也正是用 class 机制建立起来的。
+** 类型是 C++ 的解释框架
+C++ 中，一段数据本身并不自动具有意义。意义来自类型。
+
+同样一串 bit, 如果解释为 ~int~, 就是整数；如果解释为 ~char~, 可能是字符；解释为 ~float~, 就是浮点数。类型至少决定三件事:
+1. 对象需要多少存储空间
+2. 这段存储中 bit 如何被解释
+3. 这个对象允许参与哪些操作
+
+
+所以:
+#+begin_src cpp
+  i = i + j;
+#+end_src
+这个表达式的含义取决于 ~i~ 和 ~j~ 的类型。如果它们是整数， ~+~ 是算术加法；如果它们是 ~Sales_item~ ， ~+~ 可以表示销售记录的合并。第二章开头就用这个例子说明，表达式的合法性和语义由类型决定。
+
+这也是C++静态类型系统的基础：编译器在编译期检查每个名字的类型，并根据类型决定哪些操作合法。
+** 内置类型: 接近机器，但不等于机器
+C++提供一组 primitive built-in types, 包括整数、字符、布尔、浮点数和 ~void~ 。这些类型非常接近硬件，但标准通常只规定最低要求，而不是规定大小。例如 ~int~ 至少16位， ~long long~ 至少 64 位；实际大小依赖平台和 ABI 。 C++ Primer 也特别强调：内置算术类型的大小会随着机器变化。标准只保证最小尺寸。
+
+因此不能轻易假设:
+#+begin_src cpp
+  sizeof(int) == 4;
+  sizeof(long) == 8;
+#+end_src
+这在 Linux x86-64 环境下可能成立，但在其他平台上未必成立。现在实践中，如果需要明确宽度，应该使用 ~<sctdint>~ 里的类型:
+#+begin_src cpp
+  std::int32_t
+  std::uint64_t
+  std::size_t
+#+end_src
+同时，本章最容易踩坑的是 ~signed~ 和 ~unsigned~ 的混用。 ~unsigned~ 不是 “安全的非负整数”，而是 *模整数* 。负数参与 unsigned 运算时会转化为 unsigned, 产生回绕结果。因此:
+#+begin_src cpp
+  unsigned u = 10;
+  int i = -42;
+
+  std::cout << u + i << '\n';
+#+end_src
+可能输出一个很大的数。
+** 字面值也有类型
+字面值不是“无类型的值”。 ~42~, ~42u~, ~42L~, ~3.14~, ~3.14f~, ~'a'~, ~"a"~ 都有类型。
+
+特别需要区分:
+#+begin_example
+'a' // char
+"a" // const char[2], 包含末尾 '\0' 
+#+end_example
+还有:
+#+begin_example
+10 // 十进制整数
+010 // 八进制整数，值是8
+0x10 // 十六进制整数，值是16
+#+end_example
+以 ~0~ 开头的整数字面值会按八进制解释。
+
+字面值会影响重载、初始化、类型推导和转换。以后遇到模板、 ~auto~, 函数重载时，这些细节会重新出现。
+** 变量与对象：变量是有名字的对象
+C++ Primer 对 object 使用宽泛定义: *object 是一块具有类型的内存区域* 。变量则是我们给对象取的名字。对象是否有名字、是否是内置类型、是否是类类型、是否可修改，都不改变“对象是是一块带类型存储”的基本事实。
+
+因此:
+#+begin_src cpp
+  int i = 0;
+  std::string s = "hello";
+#+end_src
+都定义了对象。 ~i~ 是一个 ~int~ 对象， ~s~ 是一个 ~std::string~ 类类型对象。
+
+本章反复强调的关键区别是:
+- 初始化 initialization: 对象创建时获取初始值。
+- 赋值 assignment: 对象已经存在，后来用新值覆盖旧值。
+
+#+begin_src cpp
+  int x = 10; // 初始化
+  x = 20; // 赋值
+#+end_src  
+对内置类型来说，这个区别并不明显。但对类类型，初始化可能调用构造函数，赋值可能调用运算符，它们是不同操作。
+** 默认初始化: C++ 把责任交给程序员
+局部内置类型对象如果没有显式初始化，值是不确定的:
+#+begin_src cpp
+  int x; // 局部变量，未初始化
+  std::cout << x; // 错误：使用未定义值
+#+end_src
+这不是 “随机值” 那么简单，而是可能导致 undefined behavior 。 C++ 这样设计，是为了保留零开销原则: 不强制为每个局部对象自动清零，让程序员在需要时显式初始化。
+
+现代实践中，除非有非常明确的理由，否则应该初始化对象:
+#+begin_src cpp
+  int count = 0;
+  double price = 0.0;
+  std::string name;
+#+end_src
+对类类型对象，默认初始化由类自己决定。例如 ~std::string s~ 会得到空字符串，因为 ~std::string~ 定义了自己的默认构造行为。
+** 声明、定义与分离编译
+C++ 区分 declaration 和 definition:
+#+begin_src cpp
+  extern int x; // 声明，不定义
+  int x; // 定义
+#+end_src
+声明让名字可见；定义真正创建实体。变量可以声明多次，但只能定义一次。
+
+这和 C++ 的分离编译模型密切相关。一个 ~.cpp~ 文件可以使用另一个 ~.cpp~ 文件中定义的对象或函数，但它必须先看到声明。链接器最后再把不同翻译单元中的定义连接起来。
+
+本章虽然只初步介绍，但它已经埋下后面头文件、连接、ODR、inline、模板编译模型的基础。
+** 作用域: 名字只在一定区域内有效
+作用域决定一个名字在程序中哪里可见。名字从声明点开始可见，到所处作用域结束为止。
+#+begin_src cpp
+  int reused = 42;
+
+  int main() {
+    int reused = 0;
+    std::cout << reused; // 使用局部 reused
+    std::cout << ::reused; // 使用全局 reused
+  }
+#+end_src
+局部名字会隐藏外层名字。C++允许这种隐藏，但实践上要谨慎，因为它会降低可读性，甚至制造非常隐蔽的bug.
+
+好的习惯是: *在尽可能小的作用域中定义变量，并尽量靠近首次使用的位置定义* 。
+** 引用: 别名，不是普通对象
+引用是已有对象的另一个名字，它不是对象。
+#+begin_src cpp
+  int i = 42;
+  int &r = i;
+#+end_src
+此后 ~r~ 和 ~i~ 指向同一个对象。
+#+begin_src cpp
+  r = 10; // 修改的是 i
+#+end_src
+引用必须初始化，并且一旦绑定到某个对象，就不能重新绑定到另一个对象。
+
+理解引用的关键是:
+#+begin_quote
+引用不是“保存地址的变量”； \\
+引用在语义上是对象的别名。
+#+end_quote
+当然，编译器实现引用时可能用地址，但语言层面应该把它理解为 alias. 这个理解以后对函数参数、返回值、范围 for 、模板推导、移动语义都非常重要。
+** 指针: 保存地址的对象
+指针和引用都能间接访问对象，但指针本身也是对象:
+#+begin_src cpp
+  int i = 42;
+  int *p = &i;
+#+end_src
+指针可以保存地址，可以被赋值、拷贝、改变指向，也可以为空:
+#+begin_src cpp
+  p = nullptr;
+#+end_src
+现代C++应优先使用 ~nullptr~, 而不是 ~0~ 或者 ~NULL~ 。 ~nullptr~ 有专门的指针空值类型，能避免整型和指针重载时的起义； Effective Modern C++ 中也把 "prefer nullptr to 0 and NULL" 列为现代C++迁移时的重要建议。
+
+指针最重要的风险是: *有效指针不一定可解引用* 。比如空指针、尾后指针都可能是有效指针，但不能通过 ~*p~ 访问对象。
+#+begin_src cpp
+  int *p = nullptr;
+  ,*p = 10; // undefined behavior
+#+end_src
+因此，指针使用的底线是：初始化、检查、明确所有权和生命周期。
+** ~const~: 把不可修改性写进类型系统
+~const~ 让对象初始化后不可修改。 ~const~ 对象必须初始化，因为之后不能再赋值。
+
+本章最重要的是理解两类 const:
+- top-level const: 对象本身是 const
+- low-level const: 通过指针、引用等间接访问到的对象是 const.
+
+
+例如:
+#+begin_src cpp
+  int i = 0;
+  int *const p1 = &i; // top-level const: p1 本身不能改指向
+  const int *p2 = &i; // low-level const: 不能通过 p2 修改 i
+  const int *const p3 = &i; // 两者都有
+#+end_src
+这个区分会影响拷贝、赋值、指针转换、 ~auto~ 推导。尤其是 ~auto~ 会忽略 top-level const, 但会保留 low-level const.
+** ~constexpr~: 要求编译期可求值
+~const~ 表示不能修改，但不一定表示编译期常量。
+
+~constexpr~ 则要求表达式能在编译期求值:
+#+begin_src cpp
+  constexpr int size = 512;
+#+end_src
+所以可以用于数组大小、模板实参等需要编译期常量的场景。
+
+现代 C++ 中， ~const~, ~constexpr~, ~consteval~, ~constinit~ 的分工越来越细:
+- ~const~: 不可被修改
+- ~constexpr~: 可用于常量表达式，通常要求编译期可求值
+- ~consteval~: 函数必须在编译期求值
+- ~constinit~: 保证静态初始化，但不表示对象不可修改
+
+
+第二章主要掌握 ~const~ 和 ~constexpr~ 即可。
+** 类型别名: 给复杂类型命名
+C++ 支持用 ~typedef~ 或 ~using~ 定义类型别名:
+#+begin_src cpp
+  typedef double wages;
+  using SI = Sales_item;
+#+end_src
+现代C++更推荐使用 ~using~ 。创建类型别名不是创建新类型，而是给已有类型另起一个名字。类型别名的主要价值是表达意图、隐藏复杂生命、辅助模板编程。
+** ~auto~: 让编译器从初始化器推导类型
+~auto~ 是编译期类型推导，不是动态类型。使用 ~auto~ 的变量必须初始化:
+#+begin_src cpp
+  auto x = 42; // int
+  auto d = 3.14; // double
+  auto s = "hello"; // const char*
+#+end_src
+~auto~ 能避免显式类型写错导致的正确性、性能和移植性问题。例如: ~std::vector<int>::size_type~ 不一定等同于 ~unsigned~, 用 ~auto sz = v.size()~ 可以让编译器保留真实返回类型。
+
+但 ~auto~ 不是越多越好。需要掌握它的规则:
+#+begin_src cpp
+  const int ci = 42;
+
+  auto a = ci; // int, 忽略 top-level const
+  const auto b = ci; // const int;
+  auto &c = ci; // const int&
+#+end_src
+实践上可以先记住:
+#+begin_src cpp
+  auto x = expr; // 只需要一个本地副本
+  const auto &x = expr; // 只读访问，避免拷贝
+  auto &x = expr; // 需要修改原对象
+  auto *p = expr; // 明确表达这是指针
+#+end_src
+另外， ~auto~ 和初始化 ~{}~ 结合时可能推导出 ~std::initializer_list~, 这是现代C++的一个经典坑。
+** ~decltype~: 从表达式获得类型
+~decltype~ 根据表达式获得类型，但不求值。和 ~auto~ 的核心区别就是:
+- ~auto~: 根据初始化器推导变量类型，通常会丢弃引用和 top-level const
+- ~decltype~: 尽量精确地保留表达式的类型和值类别信息
+
+
+所以会出现:
+#+begin_src cpp
+  int i = 0;
+  int &r = i;
+
+  auto a = r; // int
+  decltype(r) b = i; // int&
+#+end_src
+~decltype~ 在业务代码中出现得少，但是在泛型库、返回类型推导、类型适配中非常重要。
+** ~struct~ 和 ~class~: 定义自己的类型
+第二章收束到自定义类型。数据结构不只是数据元素的集合，也包含使用这些数据的策略； C++通过定义 class 来定义自己的数据类型，标准库的 ~string~, ~istream~, ~ostream~ 都是 class 类型。
+
+本章的 ~Sales_data~ 是一个最小自定义类型:
+#+begin_src cpp
+  struct Sales_data {
+    std::string bookNo;
+    unsigned units_sold = 0;
+    double revenue = 0.0;
+  };
+#+end_src
+它只包含数据成员，不提供操作。 class type 是内置类型机制的扩展：对象仍然有类型、存储、初始化、作用域、成员访问和生命周期，只是这个类型由程序员定义。
+** 头文件与 header guard
+类定义通常放在头文件中，因为编译器要定义对象或访问成员时，必须知道类的完整定义。
+
+~Sales_data~ 通常放在 ~Sales_data.hpp~:
+#+begin_src cpp
+  #ifndef SALES_DATA_H
+  #define SALES_DATA_H
+
+  #include <string>
+
+  struct Sales_data {
+    std::string bookNo;
+    unsigned unit_sold = 0;
+    double revenue = 0.0;
+  };
+
+  #endif
+#+end_src
+头文件可能被多次包含，所以需要 header guard. C++ Primer 解释， ~#include~ 是预处理器功能，预处理器看到 ~#include~ 后会用指定头文件的内容替换这条指令； header guard 依赖预处理变量的“已定义/未定义”状态来避免重复包含。
+
+实践规则是:
+1. 每个头文件都写 header guard
+2. guard 名字全大写
+3. guard 名字尽量唯一
+4. 头文件应 self-contained, 需要什么自己就 include 什么
+** 本章的最终主线
+第二章建立了C++最重要的一组基础概念:
+- 类型决定意义
+- 对象是带类型的存储区域
+- 变量是带名字的对象
+- 初始化和赋值不同
+- 声明让名字可见，定义创建实体
+- 作用域决定名字在哪里有效
+- 引用提供别名语义
+- 指针提供地址语义
+- const 把不可修改性纳入类型系统
+- constexpr 把编译期求值纳入类型系统
+- auto 和 decltype 让编译器参与类型书写
+- struct/class 让程序员定义自己的类型
+
+
+更浓缩地说:
+#+begin_quote
+C++程序不是“变量+语句”的简单组合，而是有一组有类型的对象，以及一组受类型约束的操作。
+#+end_quote
