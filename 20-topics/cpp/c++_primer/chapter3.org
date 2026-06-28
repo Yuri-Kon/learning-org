@@ -1,0 +1,1693 @@
+#+title: String, Vectors, and Arrays
+#+author: Yurikon
+#+language: zh-cn
+* 第三章总览
+第三章是从“C++ 语言内建机制”走向“C++ 标准库抽象设施”的关键章节。前两章主要讨论对象、类型、变量、引用、指针、 ~const~ 、类型别名和自定义数据结构，这些内容构成了C++的语言基础；而第三章开始引入标准库中最常用、最核心的序列抽象: ~std::string~, ~std::vector~, 迭代器以及内置数组。
+
+本章的主题是理解C++如何在“底层硬件模型”和“高层抽象接口”之间建立平衡。内置类型更接近机器模型：元素连续存储、大小固定、访问成本低，但使用时容易出现越界、退化为指针、生命周期和大小信息丢失等问题。 ~std::string~ 和 ~std::vector~ 则是标准库提供的更高层抽象：它们管理自己的存储，记录自身大小，支持拷贝、赋值、比较、动态增长和统一的遍历方式，使程序员得以更安全、更直接地表达“字符序列”和“对象序列”。
+
+本章可以看作围绕“序列”这一概念展开。~std::string~ 是字符序列，~std::vector~ 是某种类型 ~T~ 的对象序列，内置数组是固定长度的底层序列，而迭代器则是访问这些序列元素的通用机制。理解本章后，很多 C++ 代码会从“手动管理一段内存和若干下标”转向“使用标准库类型表达数据结构，再通过迭代器、范围 ~for~ 和标准算法处理数据”。
+
+本章的第一节先讲 ~using~ 声明，是为了简化标准库名字的使用。标准库名字位于 ~std~ 命名空间中，例如 ~std::cin~、~std::cout~、~std::string~、~std::vector~。~using std::name;~ 可以把某个具体名字引入当前作用域，从而减少重复书写 ~std::~。但是这不是鼓励滥用 ~using namespace std;~。在工程实践中，尤其是在头文件中，应避免把整个命名空间或标准库名字暴露给包含者，否则容易造成名字污染和冲突。
+
+第二节学习 ~std::string~。它是可变长度字符序列，用来替代多数场景下的 C 风格字符串。这里需要重点掌握字符串的初始化、输入输出、~getline~、~empty~、~size~、比较、拼接、字符访问、范围 ~for~、下标访问和字符处理函数。更重要的是，要意识到 ~std::string~ 是一个类类型：它封装了资源管理和常见操作，使字符串不再只是一个以 ~'\0'~ 结尾的字符数组约定。
+
+第三节学习 ~std::vector~。~vector~ 是 C++ 标准库中最重要的顺序容器之一，表示某种类型对象的可变长度序列。它支持动态增长，通常拥有连续存储，因此既有接近数组的访问效率，又比数组更易用、更安全。学习 ~vector~ 时要特别区分“已有元素的下标访问”和“向容器新增元素”的区别：~v[i]~ 只能访问已经存在的元素，不能创建元素；新增元素通常使用 ~push_back~ 或之后会学到的 ~emplace_back~。
+
+第四节引入迭代器。迭代器可以暂时理解为“广义指针”：它指向序列中的某个位置，可以解引用、递增、比较，并用来遍历容器。迭代器是标准库设计的核心接口之一，因为它把“数据结构的内部表示”和“算法如何访问元素”解耦。以后标准算法如 ~find~、~sort~、~copy~、~accumulate~ 等，基本都通过迭代器描述操作范围。
+
+第五节回到内置数组。数组是 C++ 从 C 继承而来的底层序列类型，大小固定，元素连续存储，很多情况下会自动退化为指向首元素的指针。数组本身非常接近机器，但也因此危险：它不记录运行期大小，越界访问通常无法由编译器发现，许多操作实际是在操作指针。理解数组不是为了鼓励频繁使用裸数组，而是为了理解 C++ 的底层对象模型、指针算术、字符串字面值、C 接口以及为什么标准库容器更适合现代 C++。
+
+第六节介绍多维数组。多维数组本质上是“数组的数组”，不是数学上抽象的矩阵对象。理解这一点很重要：二维数组的行列访问、指针类型、范围 ~for~ 中引用的必要性，都来自“外层数组元素本身又是数组”这一事实。多维数组会进一步加深对数组类型、指针、引用和类型声明的理解。
+
+从现代 C++ 的角度，本章应形成几个实践倾向：
+
+1. 优先使用 ~std::string~ 表达文本，而不是 C 风格字符串。
+2. 优先使用 ~std::vector~ 表达动态长度对象序列，而不是手写动态数组。
+3. 需要固定长度数组时，现代工程中通常优先考虑 ~std::array~，但理解内置数组仍然必要。
+4. 遍历整个序列时优先考虑范围 ~for~；需要位置、区间或与标准算法配合时使用迭代器。
+5. 下标访问必须保证下标有效；~operator[]~ 通常不做边界检查。
+6. 注意 ~size()~ 返回的通常是无符号类型，避免随意与 ~int~ 混合比较。
+7. 在头文件中避免使用 ~using~ 声明或 ~using namespace~ 污染包含者作用域。
+8. 把标准库容器看作“带有不变量和资源管理能力的抽象类型”，而不是“语法更漂亮的数组”。
+
+
+本章和前两章联系非常紧密。引用会在范围 ~for~ 修改元素时重新出现，~const~ 会影响字符串和容器元素是否可修改，~auto~ 和 ~decltype~ 会帮助书写复杂的 ~size_type~ 和迭代器类型，指针知识则是理解数组与迭代器的基础。因此第三章不是离开语言基础去学库，而是在标准库类型中重新使用并巩固前两章的类型系统、对象模型和作用域规则。
+* Namespace ~using~ Declaration
+
+我们有更方便的方法去使用命名空间的成员。最安全的方法是 ~using declaration~, ~using~ 声明。一个 ~using~ 声明可以让我们使用命名空间中的名字，而不需要再使用 ~namespace_name::~ 前缀。具体形式为:
+#+begin_src cpp
+  using namespace::name;
+#+end_src
+一旦书写了 ~using~ 声明，我们可以直接访问这个名字:
+#+begin_src cpp
+  #include <iostream>
+  // using decalration; when we use the name cin, we get the one from the namespace std
+  using std::cin;
+  int main() {
+    int i;
+    cin >> i; // ok: cin is a synonym for std::cin
+    cout << i; // error: no using declaration; we must use the full name
+    std::cout << i; // ok: explicitly use cout from namespace std
+    return 0;
+  }
+#+end_src
+** 每一个名字都需要一个独立的 ~using~ 声明
+每一个 ~using~ 声明引入一个单独的命名空间成员，这会让我们具体说明我们正在使用哪个名字。比如，我们可以写如下的程序:
+#+begin_src cpp
+  #include <iostream>
+  // using declaration for names from standard library
+  using std::cin;
+  using std::cout; using std::endl;
+  int main() {
+    cout << "Enter two numbers: " << endl;
+    int v1, v2;
+    cin >> v1 >> v2;
+    cout << "The sum of " << v1 << " and " << v2 << " is " v1 + v2 << endl;
+    return 0;
+  }
+#+end_src
+这里的 ~cin~, ~cout~, ~endl~ 的 ~using~ 声明意味着我们可以使用这些名字，而不需要带有 ~std::~ 前缀。由于 C++ 程序是是自由形式的，所以我们可以将每个声明的元素单独放在每一行，或者将多个合并到一行中。关键是我们使用的每个名字都必须有 ~using~ 声明，并且每一个 ~using~ 声明必须以分号结尾。
+** 头文件不应该包含 ~using~ 声明
+在头文件中的代码一般不应使用 ~using~ 声明。因为头文件中的内容会被拷贝到包含它的程序的文本中。如果一个头文件包含 ~using~ 声明，那么每一个 ~include~ 这个头文件的程序都会得到相同的 ~using~ 声明。因此，如果原本并不打算使用这个指定库名称的程序可能会遇到意想不到的冲突。
+* Library ~string~ Type
+库类型 ~string~ 。
+
+~string~ 是一组可变长度的字符序列。为了使用 ~string~ 类型，我们必须 ~include <string>~ 。因为它是库的一部分， ~string~ 在 ~std~ 的命名空间中定义。我们的例子假设都具有下面的代码:
+#+begin_src cpp
+  #include <string>
+  using std::string;
+#+end_src
+这一节将描述最常见的 ~string~ 操作。后续将覆盖更多的操作。除了规定库类型提供的操作之外，C++标准还对实现者提出了效率要求。因此，库类型在一般都用途中具有足够的效率。
+** 定义和初始化 ~string~
+每一个类型都定义该类型的对象如何初始化。一个类可以定义多种不同的初始化方法。每种方法都必须通过我们提供的初始化程序 ~initializer~ 数量，或者通过这些 ~initializer~ 的类型与其他方式区分。
+
+下面是初始化 ~string~ 的一些方式:
+#+begin_src cpp
+  string s1; // default initialization; s1 is the empty string
+  string s2 = s1; // s2 is a copy of s1
+  string s3 = "hiya"; // s3 is the string literal (字符串字面值)
+  string s4(10, 'c'); // s4 is cccccccccc
+#+end_src
+我们可以通过默认方式创建一个 ~string~, 这会定义一个空字符串，它没有任何字符。当我们通过一个字符串字面值定义 ~string~ 时，该字面值中的字符——直到但不包括默认的空字符——会被复制到新创建的字符串中。当我们提供一个计数和一个字符时，将会创建一个包含指定计数字符的 ~string~ 。
+*** Direct and Copy Forms of Initialization
+:PROPERTIES:
+:ID:       00de4e25-b133-441f-b055-593e30b8ed2e
+:END:
+通过 ~string~, 我们能够理解为什么这些初始化形式彼此不同。
+
+当我们使用 ~=~ 初始化变量时，实际上是在要求编译器通过将右侧的初始化表达式的值复制到正在初始化的对象中，来对该对象进行 *copy initialize* 。反之，如果省略 ~=~ ，则进行 *direct initialize* 。
+
+当我们只有一个 ~initializer~ 时，我们既可以使用 copy initialize 也可以使用 direct initialize 。当我们使用多个值初始化变量时，比如上面的 ~s4~ ，那么必须使用 direct initialize:
+#+begin_src cpp
+  string s5 = "hiya"; // copy initialize
+  string s6("hiya"); // direct initialize
+  string s7(10, 'c'); // direct initialize
+#+end_src
+
+下表展示了初始化 ~string~ 的方法:
+| 方式                  | 含义                                         |
+|-----------------------+----------------------------------------------|
+| ~string s1~           | 默认初始化； ~s1~ 是空字符串                |
+| ~string s2(s1)~       | ~s2~ 是 ~s1~ 的拷贝                          |
+| ~string s2 = s1~      | 与上面一条等价                              |
+| ~string s3("value")~  | s3 是一个字符串字面值的拷贝，并不包括 null |
+| ~string s3 = "value"~ | 与上面一条等价                              |
+| ~string s4(n, 'c')~   | 使用 n 个 c 初始化 ~s4~                     |
+** ~string~ 上的操作
+一个类不仅可以定义如何创建和初始化对象，还可以定义拥有该类型的对象能够进行的操作。类能够定义可以通过名字调用的操作，比如 ~Sales_item~ 中的 ~isbn()~ 函数。一个类同样可以定义各种运算符号在作用于该类时的具体含义，比如 ~+~ 或 ~<<~ 等。
+
+下表展示了 ~string~ 常用的操作:
+
+| 操作             | 含义                                                        |
+|------------------+-------------------------------------------------------------|
+| ~os << s~        | 将 ~s~ 写入到输出流 ~os~ 中。返回 ~os~ 。                  |
+| ~is >> s~        | 从输入流 ~is~ 中，以空格为间隔读入到 ~s~ 中。返回 ~is~ 。 |
+| ~getline(is, s)~ | 将 ~is~ 中的一行读入到 ~s~ 中。返回 ~is~ 。                |
+| ~s.empty()~      | 返回 ~true~ 如果 ~s~ 是空的；否则返回 ~false~ 。           |
+| ~s.size()~       | 返回 ~s~ 中的字符数量                                      |
+| ~s[n]~           | 返回 ~s~ 中 ~n~ 位置上的字符的引用。 ~s~ 的位置从 0 开始  |
+| ~s1 + s2~        | 返回 ~s1~ 和 ~s2~ 的组合的字符串                           |
+| ~s1 = s2~        | 用 ~s2~ 的拷贝代替 ~s1~                                    |
+| ~s1 == s2~       | 如果 ~s1~ 和 ~s2~ 包含相同的元素则它们相等                |
+| ~s1 != s2~       | 区分大小写。                                               |
+| ~<, <=, >, >=~   | 比较是大小写敏感的，使用字典顺序                          |
+*** 读写 ~string~
+#+begin_src cpp
+  #include <iostream>
+  #include <string>
+  using std::string;
+  using std::cin; using std::cout; using std::endl;
+  int main() {
+      string s;
+      cin >> s;
+      cout << s << endl;
+      return 0;
+  }
+#+end_src
+
+读取时会忽略开头的任何空白字符，然后开始读取，并到下一个空白字符为止。也就是说，如果输入的是:
+#+begin_example
+     Hello World     
+#+end_example
+那么输出将会是 ~Hello~, 不带有任何多余的空格。
+*** 读取未知数量的 ~string~
+#+begin_src cpp
+  int main(){
+    string word;
+    while (cin >> word) {
+      cout << word << endl;
+    }
+    return 0;
+  }
+#+end_src
+在这个程序里我们会读入 ~string~ 。条件会在读入结束后测试流，如果流是合法的——没到文件尽头或者无非法输入——那么 ~while~ 的执行体就会被执行。如果我们到了文件尽头（或非法输入），那么我们就会跳出 ~while~ 。
+*** 使用 ~getline~ 读取一整行
+~getline~ 不会忽略行中的空格。它接受两个参数：输入流和一个字符串。它会从给定的输入流中读取内容，直到遇到第一个换行符（包括该换行符），并将读取到的内容存储在其字符串参数中。当 ~getline~ 遇到换行符时，即便是输入中的第一个字符，也会停止读取并返回。如果输入中的第一个字符是换行符，那么返回的字符串是空字符串。
+
+就像输入操作符， ~getline~ 会返回它的 ~istream~ 参数。因此，我们可以同样适用 ~getline~ 作为判断条件。可以将上面的程序改写为一次读入一整行的:
+#+begin_src cpp
+  int main(){
+    string line;
+    while (getline(cin, line)) {
+      cout << line << endl;
+    }
+    return 0;
+  }
+#+end_src
+因为存入到的每一行 ~line~ 并不包括换行符，因此我们需要自己写。通常，我们会使用 ~endl~ 去结束当前行并刷新buffer.
+*** ~empty~ 和 ~size~ 操作符
+~empty~ 是 ~string~ 的成员函数。我们使用点操作符以指定我们希望运行 ~empty~ 函数的对象。我们可以将上面的程序改写成只输出非空行:
+#+begin_src cpp
+  while (getline(cin, line)) {
+    if (!line.empty())
+      cout << line << endl;
+  }
+#+end_src
+~empty~ 会在字符串对象为空时输出 ~true~, 否则输出 ~false~ 。
+
+~size~ 成员函数会输出一个 ~string~ 对象的长度。比如，我们可以改写上面的程序为只输出长度超过80的行:
+#+begin_src cpp
+  string line;
+  while (getline(cin, line)) {
+    if (line.size() > 80)
+      cout << line << endl;
+  }
+#+end_src
+*** ~string::size_type~ 类型
+逻辑上讲，我们可能希望 ~string.size()~ 返回的类型是 ~int~ 或者 ~unsigned~ 。但是， ~size~ 返回的是 ~string::size_type~ 值。
+
+~string~ 类型以及绝大多数库类型，都定义了几种伴生类型(companion types) 。这些伴生类型使得能够以与机器无关的方式使用这些库类型。 ~size_type~ 就是其中一个伴生类型。如果要使用这个类型，我们需要用到作用域运算符来表明 ~size_type~ 是由 ~string~ 定义的。
+
+目前我们还不知道 ~string::size_type~ 的精确类型，但是我们可以知道它是一个 ~unsigned~ 类型，并且足够大以容纳任何 ~string~ 对象的大小。任何被用于去存储 ~string::size~ 操作的对象的类型都应该是 ~string::size_type~ 。
+
+可以使用 ~auto~ 去令编译器自动推导类型:
+#+begin_src cpp
+  auto len = line.size();
+#+end_src
+因为 ~size~ 会返回一个无符号类型，因此需要注意混合了无符号与有符号数据的表达式可能导致意外的结果。比如，如果 ~n~ 是 ~int~ 并且为负数，那么 ~s.size() < n~ 很可能是 ~true~, 因为负数会在运算中被转换成很大的无符号值。
+*** 比较 ~string~
+比较操作符比较的是字符串中的字符，这些比较都是大小写敏感的。
+
+~==~ 和 ~!=~ 运算符比较两个字符串是否相等。如果两个字符串具有相同的长度，宾馆iqe包含一致的字符，则它们是相等的。关系运算符 ~<,<=,>, >=~ 比较一个字符串是否小于，小于等于，大于，大于等于另一个。它们的比较大小写敏感，且使用字典策略:
+1. 如果两个字符串具有不同的长度，同时较短字符串中的每一个字符都与较长字符串中的对象字符相等，那么较短的字符串小于较长的字符串。
+2. 如果对应位置存在不匹配的字符，那么字符串比较的结果就是第一对不匹配字符的比较结果。
+
+
+比如:
+#+begin_src cpp
+  string str = "Hello";
+  string phrase = "Hello World";
+  string slang = "Hiya";
+#+end_src
+通过规则1,可以判断 ~str~ 比 ~phrase~ 更小。通过规则2, 判断 ~slang~ 比 ~str~ 和 ~phrase~ 都大。
+*** 字符串赋值
+库类型会力求让用户使用时，与内置类型一样方便。为此，大部分库类型都提供赋值操作。比如字符串我们可以将一个字符串对象赋值给另一个:
+#+begin_src cpp
+  string st1(10, 'c'), st2; // st1 is cccccccccc; st2 is an empty string
+  st1 = st2; // assignment: replace contents of st1 with a copy of st2. Both st1 and st2 is empty
+#+end_src
+*** 两个字符串相加
+将两个字符串相加会返回一个新字符串。该新字符串由左侧操作数和右侧操作数依次连接而成。
+#+begin_src cpp
+  string s1 = "hello, ", s2 = "world\n"
+  string s3 = s1 + s2; // s3 is hello, world\n
+  s1 += s2; // equivalent to s1 = s1 + s2
+#+end_src
+*** 字面值与字符串相加
+如果给定类型与预期类型之间存在某种转换，那么我们就可以在预期某种类型的地方使用另一种类型。字符串库允许我们将字符串字面值与字符字面值转化为字符串。因此，我们可以将前面的程序转化为:
+#+begin_src cpp
+  string s1 = hello, s2 = "world";
+  string s3 = s1 + ", " + s2 + '\n';
+#+end_src
+
+当混合 ~string~ 类型和字符串字面值或字符字面值时，每一个 ~+~ 运算符两侧至少有一个操作数必须是 ~string~ 类型。
+#+begin_src cpp
+  string s4 = s1 + ", "; // ok: adding a string and a literal
+  string s5 = "hello" + ", "; // error: no string operand
+  string s6 = s1 + ", " + "world"; // ok: each + has a string operand
+  string s7 = "hello" + ", " + s2; // error: can't add string literals
+#+end_src
+~s6~ 的初始化为:
+#+begin_src cpp
+  string s6 = (s1 + ", ") + "world";
+#+end_src
+子表达式 ~s1 + ", "~ 会返回一个 ~string~ ，它又构成了第二个 ~+~ 的左侧操作数。因此，该语句是合法的。
+
+~s7~ 的初始化为:
+#+begin_src cpp
+  string s7 = ("hello" + ", ") + s2;
+#+end_src
+很容易看出来，两个字符串字面值之间不允许相加。
+
+由于历史的原因，以及和C保持兼容性，字符串字面值并不是标准库的 ~string~ 类型。
+** 处理 ~string~ 中的字符
+我们经常需要处理 ~string~ 中的单个字符。这种处理的一部分包括我们如何获取对这些字符的访问。有时我们需要处理每一个字符，有时候我们需要只处理单个字符，或者在达成某些条件时停止处理。处理这些场景的最好的方法往往需要借助不同的语言和库功能。
+
+处理这些字符的另一部分是了解和更改字符的特性。这一部分工作由一组库函数负责，这些函数在 ~cctype~ 中定义。
+*** 使用 Range-Based ~for~ 处理每一个字符
+处理每一个字符的最好方法是使用 *range for* 语句。这条语句会在给定序列中的元素间迭代，并对该序列中的每个值执行某些操作。语法形式为:
+#+begin_src cpp
+  for (declaration : expression)
+    statement
+#+end_src
+其中， ~expression~ 是一个表示序列类型的对象，而 ~declaration~ 定义了我们将用于访问序列中底层元素的变量。在每次迭代中， ~declaration~ 中的变量都会根据表达式中的下一个元素的值进行初始化。
+
+~string~ 是字符的序列，所以我们可以使用 ~string~ 作为用于 range for 的 ~expression~ 。一个简单的例子，我们可以使用 range ~for~ 去打印 ~string~ 中的每一个字符，以换行符结尾:
+#+begin_src cpp
+  string str("some string");
+
+  for (auto c : str) // for every char in str
+    cout << c << endl; // print the current character followed by a newline
+#+end_src
+~for~ 循环将变量 ~c~ 与 ~str~ 关联起来。我们使用 ~auto~ 去让编译器决定 ~c~ 的类型，在上述场景中是 ~char~ . 每一轮迭代中， ~str~ 中的下一个字符都会被拷贝到 ~c~ 中。因此，我们可以这样读该循环： “对于每一个 ~string str~ 中的字符 ~c~ ，” 做一些事情。该例中的 “做一些事情” 就是打印每一个字符和一个新行。
+
+对于稍微复杂一点的例子，我们可以使用 ~ispunct~ 函数和 range for 去统计字符串中标点符号的个数:
+#+begin_src cpp
+  string s("Hello World!!!");
+
+  decltype(s.size()) punct_cnt = 0;
+
+  for (auto c : s)
+    if (ispunct(c))
+      ++punc_cnt;
+  cout << punc_cnt << "punctuation characters in " << s <<endl;
+#+end_src
+这里我们使用了 ~decltype~ 以声明计数器 ~punct_cnt~ 。复习一下， [[id:1a07c3d9-cebe-427a-8b1b-27490f1b7827][decltype: 从表达式获得类型，但不求值]] 。 ~decltype~ 只会获取 ~s.size()~ 的类型，并声明为 ~punct_cnt~ 的类型，但不会对 ~s.size()~ 进行求值。
+
+下面是 ~cctype~ 中常用的函数:
+| 函数名        | 返回值及作用                                               |
+|---------------+-------------------------------------------------------------|
+| ~isalnum(c)~  | 如果 ~c~ 是字母或数字，返回 ~true~                         |
+| ~isalpha(c)~  | 如果 ~c~ 是字母，返回 ~true~                               |
+| ~iscntrl(c)~  | 如果 ~c~ 是 control character, 返回 ~true~                 |
+| ~isdigit(c)~  | 如果 ~c~ 是数字，返回 ~true~                               |
+| ~isgraph(c)~  | 如果 ~c~ 不是空格但可打印，返回 ~true~                     |
+| ~islower(c)~  | 如果 ~c~ 是小写字母，返回 ~true~                           |
+| ~isprint(c)~  | 如果 ~c~ 是可打印字符，返回 ~true~                         |
+| ~ispunct(c)~  | 如果 ~c~ 是标点符号，返回 ~true~                           |
+| ~isspace(c)~  | 如果 ~c~ 是空格字符，返回 ~true~                           |
+| ~issuper(c)~  | 如果 ~c~ 是大写字母，返回 ~true~                           |
+| ~isxdigit(c)~ | 如果 ~c~ 是十六进制数字，返回 ~true~                       |
+| ~tolower(c)~  | 如果 ~c~ 是大写字母，返回它的小写形式；否则返回 ~c~ 自身 |
+| ~toupper(c)~  | 如果 ~c~ 是小写字母，返回它的大写形式；否则返回 ~c~ 自身                           |
+*** 使用 Range ~for~ 改变 ~string~ 中的字符
+如果我们想改变字符串中的字符的值，必须将循环变量定义为 *引用类型* 。引用只是给定对象的别名，当我们使用引用类型作为控制变量时，这个变量就绑定依次绑定到序列中的每个元素。也就是说，使用引用类型，我们可以直接修改其绑定到的序列中的字符。
+
+还是上面的程序，我们希望将每个字母都转化为大写形式:
+#+begin_src cpp
+  string s("Hello world!!!");
+  for (auto &c : s) {
+    c = toupper(c); // c is a reference, so the assignment changes the char in s
+  }
+  cout << s << endl;
+#+end_src
+输出结果是:
+#+begin_example
+HELLO WORLD!!!
+#+end_example
+每一次迭代， ~c~ 都会引用到 ~s~ 中的下一个字符。当我们对 ~c~ 进行赋值时，就会改变 ~s~ 中的底层字符。
+*** 只处理一些字符
+range ~for~ 对需要处理每个字符的场景非常适合。但有时我们仅需要访问一个字符或者处理一些字符直到达成某些条件。比如，我们可能希望只将字符串中的第一个字符大写，或者第一个单词的首字母大写。
+
+访问 ~string~ 中的特定字符有两种方式： 下标和迭代器。本节我们只讲解下标。
+
+下标运算符 (*~[]~ operator*) 接收一个 ~string:size_type~ 类型的值，该值表示我们要访问的字符位置。该运算符返回指向给定位置的字符的 *引用* 。
+
+~string~ 的下标从 ~0~ 开始，如果一个 ~string~ 至少有两个字符，那么 ~s[0]~ 就是第一个字符， ~s[1]~ 就是第二个字符，最后一个字符是 ~s[s.size()-1]~ 。
+
+~string~ 的下标必须 ~>=0~ 且 ~<size()~ 。超出范围的下标是未定义行为。由此可知，空字符串的下标调用是未定义行为。
+
+下标中的值被称为 “下标” 或 “索引”。我们提供的索引可以是任何能返回整数值的表达式。但是，如果该索引的类型是有符号的，则其值将被转换成 ~string::size_type~ 所表示的无符号类型。
+
+下面的例子使用下标运算符打印一个 ~string~ 的第一个元素:
+#+begin_src cpp
+  if (!s.empty())
+    cout << s[0] << endl;
+#+end_src
+在访问该字符之前，我们检查 ~s~ 是非空的。无论何时我们使用一个下标，我们都必须确保给定位置有值。如果 ~s~ 是空的，那么 ~s[0]~ 就是未定义的。
+
+只要该字符串不是 ~const~ ，我们就可以将新的值赋给该下标所返回的字符。例如，我们可以将首字母转化成大写:
+#+begin_src cpp
+  string s("some string");
+  if (!s.empty())
+    s[0] = toupper(s[0]);
+#+end_src
+输出将是:
+#+begin_example
+Some string
+#+end_example
+*** 使用下标迭代
+对于另一个例子，我们希望将第一个单词全部转换为大写:
+#+begin_src cpp
+    for (decltype(s.size()) index = 0; index != s.size() && !std::isspace(s[index]); ++index) {
+        s[index] = std::toupper(s[index]);
+    }
+#+end_src
+我们使用 ~decltype~ 以给 ~index~ 正确的类型。同时，将 ~index~ 初始化为0以保证第一次迭代从 ~s~ 中的第一个字符开始。每一次迭代我们将会自增 ~index~ 以访问下一个字符。在循环体中我们转换当前的字母。
+
+关于 ~for~ 的判断条件中，逻辑运算符 ~&&~ (和运算符) 的重点是：它会首先求值左边的操作数，只有左边的为 ~true~ 后才会继续求值右边的操作数。因此，我们必须保证只有 ~index~ 在范围内时才能够进行下标运算。
+
+#+begin_quote
+使用下标时，我们必须确保下标在范围内。也就是说，下标必须大于等于0且小于 ~string~ 对象的 ~size()~ 。一种简化代码的方法是， *总是* 使用 ~string::size_type~ 作为下标变量的类型。因为这个类型是 ~unsigned~ ，所以我们能够确保它始终大于等于0 。因此，将其作为下标变量时，只需要确保它小于 ~size()~ 即可。
+
+库并不会自动检查下标的值是否合法。使用超出范围的下标是 ~undefiend~ 。
+#+end_quote
+*** 使用下标以随机访问
+前面的例子中我们一次只自增一个下标。也可以通过计算下标直接访问到指定的字符，并不需要按序遍历。
+
+比如，假设有一个0-15的数字，我们想生成他的十六进制表示。可以通过初始化一个容纳16进制字符的 ~string~ 来解决:
+#+begin_src cpp
+  #include <iostream>
+  #include <string>
+
+  using std::cin;
+  using std::cout;
+  using std::endl;
+  using std::string;
+
+  int main() {
+    const string hexdigits = "0123456789ABCDEF";
+    cout << "Enter a series of numbers between 0 and 15"
+    << " seperate by spaces. Hit ENTER when finished: " << endl;
+
+    string result;
+    decltype(hexdigits.size()) n = 0;
+    while (cin >> n) {
+      if (n < hexdigits.size())
+        result += hexdigits[n];
+    }
+    cout << "Your hex number is: " << result << endl;
+    return 0;
+  }
+#+end_src
+无论何时我们使用下标，我们都必须思考如何确认它在范围内。在这个程序里， ~n~ 的类型是 ~string::size_type~ ，它是一个 ~unsigned~ 类型，因此它一定大于等于0 。所以我们还需要确保它小于 ~hexdigits~ 的 ~size~ 。
+* Library ~vector~ Type
+~vector~ 是一组对象的集合，它们都具有相同的类型。每一个集合中的对象都有一个关联的索引，通过索引能够访问该对象。一个 ~vector~ 通常被形容为一个 “容器”，因为它 “包含” 别的对象。关于容器我们将在第二部分继续讨论。
+
+使用头文件引入 ~vector~:
+#+begin_src cpp
+  #include <vector>
+  using std::vector;
+#+end_src
+~vector~ 是一个类模板。C++同时具有函数模板和类模板。书写模板需要对 C++ 有足够深的理解。事实上，我们将在很长一段时间内不会看到如何创建自己的模板。然而，我们可以在不知道模板是如何写的情况下使用它们。
+
+模板本身并不是函数或类。相反，它们可以被视为是给编译器的指令，用于生成类或函数。编译器利用模板进行创建类或函数的过程叫做 *实例化 (instantiation)* 。当我们使用模板时，需要指定希望编译器实例化何种类型的类或函数。
+
+对于类模板，我们通过提供额外的信息来指定要实例化的类，这些信息的具体形式取决于模板本身。指定信息的方式始终一致：我们将信息放在模板名称后的一对尖括号 ~<>~ 内。
+
+对于 ~vector~ 模板，我们提供的额外信息是 ~vector~ 将要容纳的对象的类型:
+#+begin_src cpp
+  vector<int> ivec; // ivec holds objects of type int
+  vector<Sales_item> Sales_vec; // holds Sales_item
+  vector<vector<string>> file; // vector whose elements are vectors
+#+end_src
+在此示例中，编译器会根据 ~vector~ 模板生成三种不同的类型: ~vector<int>~, ~vector<Sales_item>~, ~vector<vector<string>>~ .
+
+~vector~ 是模板，并不是类型。从 ~vector~ 中生成的类型必须带有元素的类型，比如 ~vector<int>~ .
+
+我们可以通过定义 ~vector~ 来存储几乎所有类型的对象。而由于引用并不是对象，我们并不能拥有容纳引用的 ~vector~ 。然而我们仍然可以定义包含大多数其他（非引用）内置类型以及大多数类类型的 ~vector~ 。特别地，我们可以定义包含 ~vector~ 作为其元素的 ~vector~ 。
+** 定义和初始化 ~vector~
+默认的初始化方式:
+#+begin_src cpp
+  vector<string> svec; // default initialization; svec has no elements
+#+end_src
+会创建一个特定类型的空 ~vector~ 。
+
+现在看来可能没什么用，但是在之后我们将看到，我们可以高效地在运行时给 ~vector~ 添加元素。事实上， ~vector~ 最经常的使用方式就是定义一个初始化为空的列表，其元素将在运行时被求值并添加到其中。
+
+此外，也可以给元素提供初始化值。比如，我们可以从另一个 ~vector~ 拷贝元素。当我们拷贝 ~vector~ 时，新 ~vector~ 中的每个元素都是旧 ~vector~ 中对应元素的拷贝。这两个 ~vector~ 必须具有同样的类型:
+#+begin_src cpp
+  vector<int> ivec; // initially empty
+  vector<int> ivec2(ivec); // copy elements of ivec into ivec2
+  vector<int> ivec3 = ivec; // copy elements of ivenc into ivec3
+  vector<string> svec(ivec2); // error: svec holds strings, not ints
+#+end_src
+*** 列表初始化 ~vector~
+另一种初始化方法是通过 ~{}~ 列表初始化，可以提供0个或多个元素。
+#+begin_src cpp
+  vector<string> articles = {"a", "b", "c"};
+#+end_src
+这会初始化一个 ~vector~ ，包含三个元素。
+*** 创建指定数量的元素
+数量决定了 ~vector~ 会拥有多少个元素，值决定这些元素的初始值:
+#+begin_src cpp
+  vector<int> ivec(10, -1); // 10 个 int 元素，每一个都初始化为 -1
+  vector<string> svec(10, "hi!"); // 10 个 string 元素，每一个都初始化为 "hi!"
+#+end_src
+*** 值初始化
+通常可以省略值，只给 ~vector~ 提供大小。这种情况下，库会为我们生成一个初始化的元素初始化器。这个由库生成的值用于初始化容器中的每个元素。其值取决于容器中元素的类型。
+
+如果 ~vector~ 中是内置类型，比如 ~int~ ，那么元素会被初始化为 ~0~ 。如果是类类型，比如 ~string~ ，那么会使用元素类型自身的初始化。
+#+begin_src cpp
+  vector<int> ivec(10); // 10 个元素，每一个初始化为 0
+  vector<string> svec(10); // 10 个元素，每一个初始化为空字符串
+#+end_src
+值初始化有两个显示：
+1. 一些类要求我们总是提供特定的初始化值。如果一个 ~vector~ 其元素的类型是无法被默认初始化的，那么我们必须提供一个初始化的元素值；无法仅仅通过提供大小就创建这类 类的 ~vector~ .
+2. 当我们仅通过提供大小，而不提供初始值来定义一个 ~vector~ 时，必须使用 初始化的直接形式: [[id:00de4e25-b133-441f-b055-593e30b8ed2e][Direct and Copy Forms of Initialization]] , 也就是:
+
+      #+begin_src cpp
+	vector<int> vi(10);
+	vector<int> vi = 10; // error
+      #+end_src
+* ~vector~ 总结
+** ~vector~ 的主线
+本节的主线是: ~vector~ 是拥有元素的变长序列容器。 ~vector~ 的核心定义可以概括为:
+#+begin_src cpp
+  std::vector<T>
+#+end_src
+它表示一个保存若干个 ~T~ 类型对象的容器。所有元素类型相同，每个元素都有位置编号，可以用下标访问。书中强调它是一个 container, 因为它 "contain" 对象；使用它需要包含 ~<vector>~ ，并且 ~vector~ 是一个 *class template*, 不是单独的类型。只有 ~vector<int>~ 这类实例化后才能成为类型。
+
+注意: ~vector~ 不是类型， ~vector<int>~ 才是类型。 ~vector<string>~ 和 ~vector<int>~ 是两个不同的类型，不能互相拷贝初始化。
+
+又因为 ~vector~ 保存的是对象，所以不存在 ~vector<int&>~ 。引用不是对象，不能作为容器元素。需要保存“引用语义”时，通常考虑使用 ~vector<T*>~ 、 ~vector<std::reference_wrapper<T>>~ ，或直接重构所有权关系。
+
+~vector<vector<int>>~ 是合法的。C++11之后，连续的 ~>>~ 能够被正确解析为两个模板右尖括号；老标准中经常写成 ~vector<vector<int> >~ 使用空格分隔两个尖括号。
+** ~vector~ 初始化
+圆括号 ~()~ 倾向于调用构造函数；花括号 ~{}~ 优先尝试列表初始化。
+
+一个经典例子是:
+#+begin_src cpp
+  vector<int> v1(10); // 10 个 int, 每个都初始化为 0
+  vector<int> v2{10}; // 1 个 int, 值是 10
+
+  vector<int> v3(10, 1); // 10 个 int, 每个都初始化为 1
+  vector<int> v4{10, 1}; // 2 个 int, 值分别是 10 和 1
+#+end_src
+这些是 *语义差异* 。 ~(10, 1)~ 被解释为 “元素个数 + 初始值”； ~{10, 1}~ 能够作为元素列表，于是就被解释为两个元素。书中这里强调：花括号会优先尝试把里面的值解释为元素初始值；只有当列表初始化不可用时，才退回考虑其他构造方式。
+
+更微妙的是 ~vector<string>~:
+
+#+begin_src cpp
+  vector<string> v5{"hi"}; // 一个元素: "hi"
+  vector<string> v6("hi"); // 错误：不能用一个字符串字面值构造 vector<string>
+
+  vector<string> v7{10}; // 10 个默认初始化的 string
+  vector<string> v8(10, "hi"); // 10 个 string, 每个都是 "hi"
+#+end_src
+这里为什么 ~v7{10}~ 不是一个元素 ~"10"~ ? 因为 ~10~ 不能初始化一个 ~string~ 元素，所以列表初始化失败，编译器才转而寻找 “用数量构造 vector” 的构造函数。
+
+从现代 C++ 的角度去看，这和 Scott Meyers 在 /Effective Modern C++/ 中强调的 “大括号初始化并不总是直观” 一致。尤其当类型有 ~initializer_list~ 构造函数时， ~{}~ 的重载选择会非常偏向列表初始化。因此，实际工程里，不要机械的 “所有初始化都用花括号”；对于 ~vector~ ，当需要表达 “数量” 时， ~()~ 往往更清晰；当表达 “元素列表” 时， ~{}~ 更清晰。
+** 添加元素: ~push_back~
+书中的建议是，实际程序中经常不知道最终元素数量，或者元素值来自运行时输入，所以常见写法不是一开始就构造固定大小，而是先创建空 ~vector~ ，再逐个 ~push_back~ 。例如:
+#+begin_src cpp
+  vector<int> v;
+
+  for (int i = 0; i != 100; ++i) {
+    v.push_back(i);
+  }
+#+end_src
+或者:
+#+begin_src cpp
+  string word;
+  vector<string> text;
+
+  while (cin >> word) {
+    text.push_back(word);
+  }
+#+end_src
+书中特别强调， ~vector~ 的实现必须能高效地在运行时增长，所以很多情况下 “先空 vector, 再 push_back” 是合理且高效的。如果元素值各不相同，提前创建一个指定大小的 vector 反而可能更差。
+
+底层上，典型的 ~vector~ 会维护三类信息:
+#+begin_src cpp
+  begin pointer // 已分配内存起点
+  finish pointer // 已构造元素的末尾
+  end_of_storage pointer // 已分配内存的末尾
+#+end_src
+libstdc++ 的 ~std::vector~ 源码中就有类似 ~_M_start~, ~_M_finish~, ~_M_end_of_storage~ 三个指针成员； ~_M_start~ 到 ~_M_finish~ 是已经构造好的元素区间， ~_M_finish~ 到 ~_M_end_of_storage~ 是已经分配但尚未构造元素的容量空间。
+
+所以:
+#+begin_src cpp
+  v.size()
+#+end_src
+大体等价于: ~finish - start~ 。而 ~v.capacity()~ 大体等价于 ~end_of_storage - start~ 。
+
+~push_back~ 时，如果还有剩余 capacity, 就在 ~_M_finish~ 位置构造新元素，然后移动 ~_M_finish~ 。如果 capacity 不够，就要重新分配一块更大的连续内存，把旧元素移动或拷贝过去，销毁旧元素，释放旧内存。标准层面保证 ~vector~ 尾部插入是摊还常数时间，也就是说单次 ~push_back~ 可能是 O(n) ，但长期连续追加的平均成本是 O(1) ；当前标准草案也把 ~vector~ 描述为尾部插入/删除摊还常数时间、中间插入/删除线性时间的序列容器。
+** ~size~, ~capacity~, ~reserve~, ~resize~
+这一部分在书中的3.3节还没有完全展开，但应该建立正确模型:
+#+begin_src cpp
+  vector<int> v;
+  v.reverse(10);
+#+end_src
+这表示：预留至少能放10个元素的空间，但 *size 仍然是0* 。所以:
+#+begin_src cpp
+  v[0] = 42; // 错误: 没有第 0 个已存在元素
+#+end_src
+cppreference 对于 ~reverse~ 的说明也很清楚: 它增加的是元素在无需重新分配前可容纳的元素数量，不改变 ~size()~ ；如果发生重新分配，所有迭代器和元素引用都会失效。
+
+所以可以这样记:
+- ~reserve(n)~: 我可能要放 n 个，帮我准备好内存，但不要创建元素
+- ~resize(n)~: 我现在就需要 n 个元素，不够就构造，多了就销毁
+- ~push_back(x)~: 在尾部新增一个元素
+- ~operator[](i)~: 访问已经存在的第 i 个元素
+** 下标访问: ~v[i]~ 只访问已存在元素，不检查边界
+对这个例子:
+#+begin_src cpp
+  vector<int> ivec;
+
+  for (decltype(ivec.size()) ix = 0; ix != 10; ++ix) {
+    ivec[ix] = ix; // 灾难: ivec 为空，没有任何元素
+  }
+#+end_src
+正确写法是:
+#+begin_src cpp
+  for (decltype(ivec.size()) ix = 0; ix != 10; ++ix) {
+    ivec.push_back(ix);
+  }
+#+end_src
+~operator[]~ 的语义是 “取已有元素”， 不是“自动扩容”。 Primer 还指出：访问不存在的元素通常不是编译器能检查出来的错误，而是运行期未定义行为；这类错误也是缓冲区溢出和安全问题的常见来源。
+
+现代标准库还提供:
+#+begin_src cpp
+  v.at(i)
+#+end_src
+它会做边界检查。越界时抛出 ~std::out_of_range~ 。 cppreference 对 ~vector::at~ 的描述是：返回指定位置元素的引用，并进行边界检查；如果 ~pos~ 不在范围内，就抛出 ~std::out_of_range~ 。
+
+所以工程上更常见的取舍是:
+- ~v[i]~: 性能敏感，已经证明 ~i~ 合法
+- ~v.at(i)~: 调试、边界不确定、接口层防御
+
+
+不过安全代码不应该依赖 ~at()~ 替代设计。更好的做法是让循环结构本身保证边界正确，例如范围 ~for~, 迭代器、算法或 ~ranges~ 。
+** 范围 ~for~: 读、改、复制的差别
+在3.2节已经讲解过 range for, 本节推广到 ~vector~ 。
+#+begin_src cpp
+  vector<int> v{1, 2, 3, 4, 5};
+  for (auto &i : v) {
+    i *= i; // 修改元素
+  }
+
+  for (auto i : v) {
+    cout << i << " "; // 复制元素，只读打印
+  }
+#+end_src
+重点是 ~auto i~ 会复制元素。对于 ~int~ 没问题，对于 ~string~, 大对象，复杂结构体可能不必要地昂贵。
+
+~auto &i~ 会绑定到真实元素，可以修改。
+
+~const auto &i~ 会绑定到真实元素，但不允许修改，适合只读遍历大对象。实际上建议:
+#+begin_src cpp
+  for (const &x : vec) {
+    // 只读
+  }
+
+  for (const &x : vec) {
+    // 修改
+  }
+#+end_src
+还有一个重要的限制: *不要在 ~for~ 的循环体中改变正在遍历的 ~vector~ 大小* 。range-for 的循环体不应改变正在迭代的序列大小。
+
+原因和底层 reallocation 有关。范围 ~for~ 本质上会拿到 ~begin~ 和 ~end~ ，如果循环体里 ~push_back~ 导致重新分配，原来的迭代器、引用、指针可能失效。之后继续使用它们就是未定义行为。
+** ~vector~ 的比较、赋值和元素类型要求
+~vector~ 支持赋值。
+#+begin_src cpp
+  vector <int> a{1, 2, 3};
+  vector<int> b;
+
+  b = a; // b 获得 a 的副本
+  b = {4, 5, 6}; // b 被替换为新列表
+#+end_src
+这是元素级拷贝，不是让两个 ~vector~ 共享同一块数组。修改 ~b[0]~ 不会影响 ~a[0]~ 。
+
+~vector~ 也可以比较:
+#+begin_src cpp
+  vector<int> a{1, 2, 3};
+  vector<int> b{1, 2, 4};
+
+  a < b; // true
+#+end_src
+Primer 说明，两个 ~vector~ 相等当且仅当元素数量相同、对应元素相等；关系比较采用类似字典序的规则。但前提是元素类型本身支持相应比较。
+
+现代标准里有一点接口层面的变化: C++20 之后，标准库容器比较转向 ~operator==~ 和三路比较 ~operator<=>~ ， ~<~, ~>~, ~<=~, ~>=~, ~!=~ 等表达式可由它们合成； ~vector~ 的比较仍然按字典顺序比较。
+** 现代C++对3.3节的补充
+C++11 已经是 Primer 的重要背景：列表初始化、范围 ~for~, ~auto~, 移动语义， ~emplace_back~ 都开始进入现代C++风格。
+
+Scott Meyers 在 /Effective Modern C++/ 中特别指出， ~std::vector<T>::push_back(T&&)~ 里的 ~T&&~ 不是万能引用，因为 ~T~ 已经由 ~vector<T>~ 的实例化确定了；而 ~emplace_back(Args&& ...)~ 才涉及独立的模板参数推导。
+
+~emplace_back~ 可以直接在 ~vector~ 内部构造元素，避免某些临时对象。例如：
+#+begin_src cpp
+  vector<string> vs;
+
+  vs.push_back("hello"); // 可能先构造临时 string, 再移动进 vector
+  vs.emplace_back("hello"); // 直接用 "hello" 在 vector 内构造 string
+#+end_src
+建议是 "consider emplacement instead of insertion", 不是 “永远用 emplace” 。当参数正好是一个 ~T~ 对象时， ~push_back~ 往往更直观；当要用构造参数直接创建元素时， ~emplace_back~ 更合适。
+
+C++17 以后有自动类型推导 CTAD:
+#+begin_src cpp
+  std::vector v{1, 2, 3}; // 推导为类型 std::vector<int>
+#+end_src
+C++17 还把 ~std::vector<T>~ ，除了 ~std::vector<bool>~ 特化，正式归入 contiguous container 要求；也就是说元素连续存储，可以通过 ~data()~ 与 C API 交互。cppreference 也说明， ~vector~ 的元素连续存储，元素指针可传给期望数组指针的函数。
+
+C++20 起， ~vector~ 的许多成员函数变成 ~constexpr~, 可以在常量求值中使用；但由于动态分配必须在同一常量求值中释放，定义长期存在的 ~constexpr std::vector~ 通常仍不符合直觉。
+** 特殊处理: ~vector<bool>~
+
+~vector<bool>~ 是标准库里的历史特化，不是普通意义上的 ~vector<T>~ 。它可能把多个 bool 压缩成 bit 存储，因此 ~operator[]~ 返回的可能不是 ~bool&~ ，而是代理对象。 cppreference 明确说 ~vector<bool>~ 不一定把元素存为连续数组，并且通过 ~vector<bool>::reference~ 代理访问单个位。
+
+所以工程里通常避免: ~vector<bool> flags~ ；更稳妥的选择是:
+#+begin_src cpp
+  vector<char> flags;
+  vector<unit8_t> flags;
+  bitset<N> flags; // 编译期固定大小
+  boost::dynamic_bitset<>; // 动态 bitset, 若项目允许 Boost
+#+end_src
+** 本节小结: 3.3
+总结一个模型为:
+#+begin_quote
+~std::vector<T>~ \\
+= 拥有 T 对象的动态连续序列 \\
+= ~size~ 表示已有元素数 \\
+= ~capacity~ 表示已分配容量 \\
+= ~push_back~ / ~emplace_back~ 增加元素 \\
+= ~operator[]~ 访问已有元素，不检查边界 \\
+= ~reserve~ 只预留空间，不创建元素 \\
+= ~resize~ 改变元素数量，会构造或销毁元素 \\
+= 增长可能重新分配，导致迭代器、引用、指针失效
+#+end_quote
+更实践化:
+#+begin_src cpp
+  std::vector<T> v;
+  v.reserve(expected_count); // 如果能估计数量
+  while(...) {
+    v.push_back(value); // 或 v.emplace_back(args...)
+  }
+#+end_src
+这是最常见、最健康的构造模式。
+
+而下面这些写法要警惕:
+#+begin_src cpp
+  vector<int> v;
+  v[0] = 1; // 错误，没有元素
+
+  vector<int> v;
+  v.reserve(10);
+  v[0] = 1; // 错误，reserve 不创建元素
+
+  for (auto x : big_vec) {
+    // 如果 x 很大，每次都需要复制
+  }
+
+  for (auto &x : v) {
+    v.push_back(x); // 危险，改变正在遍历的 vector 大小
+  }
+#+end_src
+* ~iterator~ 总结
+** ~iterator~ 的中心思想: 迭代器是容器元素位置的抽象
+~string~ 和 ~vector~ 都能使用下标。比如 ~s[i]~ 和 ~v[i]~ 。但下标不是所有标准容器库都有。比如后面会遇到 ~list~, ~map~, ~set~ 都不能像数组一样高效下标访问。于是标准库提供了更通用的机制：iterator, 迭代器。
+
+Primer 对迭代器的定位是：迭代器像指针一样，提供对对象的间接访问；它可以指向容器中的某个元素，也可以通过自增移动到下一个元素。有效迭代器要么指向某个元素，要么指向末尾元素的后一个位置；其他的迭代器值都是无效的。
+
+但是 *迭代器不是一定等于指针* 。对 ~vector~ 来说，很多实现里普通迭代器可能就是裸指针或包装指针；但标准并不要求我们依赖这个实现细节。一起在 debug STL 中，迭代器常常是带检查信息的对象。
+** ~begin~ / ~end~: C++ 标准区间模型的入口
+容器通过成员函数返回迭代器:
+#+begin_src cpp
+  auto b = v.begin();
+  auto e = v.end();
+#+end_src
+~begin()~ 指向第一个元素； ~end()~ 指向最后一个元素之后的位置，也就是 *one-past-the-end iterator* / *off-the-end iterator* 。它不指向真实元素，这是一个边界标记。空容器的 ~begin()~ 和 ~end()~ 相等。
+
+这是C++标准库极其重要的半开区间模型:
+#+begin_example
+[begin, end)
+#+end_example
+意思是：包含 ~begin~ 指向的元素，不包含 ~end~ 。因此标准的遍历写法是:
+#+begin_src cpp
+  for (auto it = v.begin(); it != v.end(); ++it) {
+    // 使用 *it
+  }
+#+end_src
+这和数组中的 ~[0, size)~ 是同一个思想。只是迭代器的版本更泛化。
+** 迭代器基本操作: 解引用、移动、比较
+迭代器的核心操作包括：
+- ~*iter~: 访问 iter 指向的元素
+- ~item->mem~: 等价于 ~(*iter).mem~
+- ~++iter~: 前进到下一个元素
+- ~--iter~: 后退到前一个元素
+- ~iter1 == iter2~
+- ~iter1 != iter2~
+
+
+其中最关键的是 ~*iter~, 它返回迭代器所指向元素的引用，所以可以读，也可以在允许时写：
+#+begin_src cpp
+  string s("some string");
+
+  if (s.begin() != s.end()) {
+    auto it = s.begin();
+    ,*it = toupper(*it);
+  }
+#+end_src
+这段代码和之前:
+#+begin_src cpp
+  s[0] = toupper(s[0]);
+#+end_src
+效果相同。但是它使用的是迭代器而不是下标。 Primer 也强调：只能解引用指向真实元素的有效迭代器；解引用无效迭代器和尾后迭代器是未定义行为。 ~end()~ 只能作为边界，不能当作元素。
+** 循环条件用 ~!=~, 不用 ~<~
+从 Java 和 C 迁移到程序员，很可能会写这样的代码:
+#+begin_src cpp
+  for (auto i = 0; i < v.size(); ++i)
+#+end_src
+但迭代器通常写:
+#+begin_src cpp
+  for (auto it = v.begin(); it != v.end(); ++it)
+#+end_src
+这是 C++ 程序员的习惯，因为所有标准库容器的迭代器都支持 ~==~ / ~!=~ ，但不是所有迭代器都支持 ~<~ 。只有少数容器，例如 ~vector~ 和 ~string~ ，其迭代器支持随机访问意义上的大小比较。
+
+其背后是一个重要的设计思想： *少假设，写出更泛化的代码* 。
+
+除非需要明确的随机访问能力，否则尽量使用 ~!=~ 用来作为循环的边界条件。
+** ~iterator~ 与 ~const_iterator~
+容器通常定义两个相关类型:
+#+begin_src cpp
+  vector<int>::iterator;
+  vector<int>::const_iterator;
+  string::iterator;
+  string::const_iterator;
+#+end_src
+~iterator~ 可以读写元素； ~const_iterator~ 可以读元素，但不能通过它修改元素。 Primer 把 ~const_iterator~ 类比为指向 ~const~ 的指针：它能移动，但不能改变它指向的元素。
+
+例如:
+#+begin_src cpp
+  vector<int> v{1, 2, 3};
+
+  vector<int>::iterator it = v.begin();
+  ,*it = 42; // 可以
+
+  vector<int>::const_iterator cit = v.cbegin();
+  ,*cit = 42; // 错误，不能通过 const_iterator 修改元素
+  ++cit; // 可以，迭代器对象本身可以移动
+#+end_src
+这里非常容易混淆:
+#+begin_src cpp
+  const vector<int>::iterator it = v.begin();
+#+end_src
+这不是 ~const_iterator~ 。它的意思是: ~it~ 这个迭代器对象本身是 const, 不能移动；但它指向的元素可以修改。类似:
+#+begin_src cpp
+  int *const p; // const pointer
+  const int *p; // pointer to const
+#+end_src
+所以 ~const_iterator~ 更接近 ~const int*~ ，而不是 ~int *const~ 。
+
+现代C++的实践建议是： *只读就用 ~const_iterator~* 。
+
+Primer 已经提示，只读不写时通常应使用 ~const~ 类型，并介绍了 C++11 新增的 ~cbegin()~ / ~cend()~ ，它们无论是容器本身是否 ~const~ ，都返回 ~const_iterator~ 。所以只读遍历建议写:
+#+begin_src cpp
+  for (auto it = v.cbegin(); it != v.cend(); ++it) {
+    cout << *it << '\n';
+  }
+#+end_src
+** ~(*it).member~ 与 ~it->member~
+如果迭代器指向的是类类型对象，例如:
+#+begin_src cpp
+  vector<string> text;
+#+end_src
+那么 ~it~ 指向的就是一个 ~string~ 。要调用这个 ~string~ 的成员函数，理论上可以写:
+#+begin_src cpp
+  (*it).empty();
+#+end_src
+C++ 提供了箭头运算符:
+#+begin_src cpp
+  it->empty();
+#+end_src
+和上面的式子等价。
+
+有一个存储文本行的例子:
+#+begin_src cpp
+  for (auto it = text.cbegin(); it != text.cend() && !it->empty(); ++it) {
+    cout << *it << '\n';
+  }
+#+end_src
+注意这个条件的顺序:
+#+begin_src cpp
+  it != text.cend() && !it->empty()
+#+end_src
+必须先判断左边部分，再解引用或访问成员。因为 ~&&~ 有短路求值：左边为假时右边不会执行，否则如果 ~it == text.cend()~ ，再执行 ~it->empty()~ 就是未定义行为。
+** 迭代器失效
+~vector~ 会动态增长，因此像 ~push_back~ 这样改变 ~vector~ 大小的操作，可能会使已有的迭代器失效；使用迭代器的循环不应该向同一个容器添加元素。例如:
+#+begin_src cpp
+  vector<int> v{1, 2, 3};
+
+  for (auto it = v.begin(); it != v.end(); ++it) {
+    v.push_back(*it); // 危险
+  }
+#+end_src
+因为 ~vector~ 元素通常连续存储。如果 ~push_back~ 时容量不够， ~vector~ 会重新分配一块更大的内存，把旧元素移动或拷贝过去。原来的迭代器还指向旧内存，于是全部失效。
+
+当前标准草案对 ~vector~ 的规则也很明确：发生 reallocation 时，指向序列元素的引用、指针、迭代器、以及 past-the-end iterator 都会失效；如果插入未导致重新分配，则插入点之前的引用、指针、迭代器仍然有效，插入点及其之后的会失效。
+
+#+begin_quote
+拿着 ~vector~ 的 ~iterator~  / ~reference~ / ~pointer~ 时，不要轻易修改 vector 的结构。 \\
+尤其要警惕 ~push_back~, ~insert~, ~erase~, ~resize~, ~reserve~ 这类可能会改变大小的操作。
+#+end_quote
+更安全的写法通常是先记录索引或重新获取迭代器:
+#+begin_src cpp
+  vector<int> v{1, 2, 3};
+
+  auto old_size = v.size();
+  for (decltype(v.size()) i = 0; i != old_size; ++i) {
+    v.push_back(v[i]);
+  }
+#+end_src
+或者先 ~reserve~ ，但这样也要非常清楚后续是否超过 capacity. 不要把它当作万能保险。
+** 迭代器算术
+只有某些类型支持迭代器算术。 ~vector~ 和 ~string~ 的迭代器支持:
+#+begin_src cpp
+  iter + n;
+  iter - n;
+  iter += n;
+  iter -= n;
+  iter1 - iter2;
+#+end_src
+以及 ~<~, ~>~, ~<=~, ~>=~ 这些运算符。
+
+这些操作都前提是：结果仍然在同一个容器的元素范围内，或者刚好是尾后位置。两个迭代器相减也必须来自同一个容器。两个迭代器相减得到的是距离，结果类型是有符号整数类型 ~difference_type~, ~vector~ 和 ~string~ 都定义了它，因为差值可能为负。
+
+但是只能用于随机访问迭代器，不是所有容器都可以这样:
+#+begin_src cpp
+  auto mid = lst.begin() + lst.size() / 2; // list 不支持
+#+end_src
+** 二分查找
+本节用二分查找展示迭代器算术:
+#+begin_src cpp
+  auto beg = text.begin();
+  auto end = text.end();
+  auto mid = beg + (end - beg) / 2;
+
+  while (mid != end && *mid != sought) {
+    if (sought < *mid)
+      end = mid;
+    else
+      beg = mid + 1;
+    mid = beg + (end - beg) / 2;
+  }
+#+end_src
+这段代码背后的区间不变量是:
+#+begin_quote
+目标值如果存在，就一定位于 [beg, end) 中
+#+end_quote
+不过在实际的C++工程里，通常不会手写二分查找，而是使用标准算法:
+#+begin_src cpp
+  auto it = std::lower_bound(text.begin(), text.end(), sought);
+
+  if (it != text.end() && *it == sought) {
+    // found
+  }
+#+end_src
+** 现代C++迭代器的视角: 从 iterator 到 ranges
+C++20之后，迭代器体系又被 concepts 和 ranges 重新表达了一遍。
+
+C++20标准库引入了 iterator concepts, 例如 ~input_iterator~, ~forward_iterator~, ~bidirectional_iterator~, ~random_access_iterator~, ~contiguous_iterator~ 等。标准草案说明，forward iterator 满足 input iterator 要求，bidirectional iterator 满足 forward 要求，random access iterator 满足 bidirectional 要求，contiguous iterator 满足 random access 要求。
+
+大致层级可以理解为:
+#+begin_example
+input/output iterator
+        ↓
+forward iterator
+        ↓
+bidirectional iterator
+        ↓
+random access iterator
+        ↓
+contiguous iterator
+#+end_example
+~vector<T>~ 的迭代器在现代标准中不仅是随机访问迭代器，而且除 ~vector<bool>~ 这种特殊情况之外，可以视为连续存储相关的迭代能力； ~contiguous_iterator~ 的概念强调被指向的元素在内存中连续存储。
+
+C++20 ranges 则进一步把 “迭代器 + 终止位置” 抽象为 ~range~ 。 cppreference 对 ranges 的总结是:  ~ranges~ 是算法和迭代器库的扩展与泛化，使它们更可组合、更不容易出错。
+
+传统写法:
+#+begin_src cpp
+  std::sort(v.begin(), v.end());
+#+end_src
+~ranges~ 写法:
+#+begin_src cpp
+  std::ranges::sort(v);
+#+end_src
+传统写法的核心单位是: ~iterator pair: begin, end~ \\
+ranges 写法的核心单位是: ~range object~ 。
+
+但底层思想没有变：仍然是通过迭代器或类似迭代器的机制访问元素序列。
+** 迭代器中易混点
+第一， ~end()~ 不是最后一个元素，而是尾后元素。最后一个元素是 ~v.end() - 1~, 更常用的是 ~v.bach()~ 。
+
+第二， ~const_iterator~ 不是 “const 的迭代器对象”，而是 “不能通过它修改元素的迭代器” 。
+
+第三， ~item->mem~ 等价于 ~(*item).mem~ 而不是 ~*(item.mem)~ 。
+
+第四，迭代器可能会失效。尤其是 ~vector~ 的 ~push_back~, ~insert~, ~erase~, ~resize~, ~reserve~ 都需要小心。
+
+第五，不是所有迭代器都支持 ~+ n~, ~- n~, ~<~ 等这些运算符。这些只属于随机读写能力。泛型循环中优先使用:
+#+begin_src cpp
+  it != end;
+
+  ++it;
+#+end_src
+第六，两个迭代器不能相加。
+** 迭代器小结
+- ~iterator~ 是访问容器元素的通用位置抽象
+- ~begin()~ 指向第一个元素， ~end()~ 指向尾后位置
+- 标准区间通常写作 ~[begin, end)~
+- ~*it~ 访问元素， ~++it~ 移动到下一个元素
+- 只能解引用指向真实元素的有效迭代器
+- 只读时优先使用 ~const_iterator~ / ~cbegin~ / ~cend~
+- ~item->mem~ 等价于 ~(*item).mem~
+- ~vector~ 的结构性修改可能会导致迭代器失效
+- ~vector~ 和 ~string~ 的迭代器支持随机访问算术
+- 泛型代码中优先使用 ~!=~, 不要使用 ~<~
+* ~ranges~ 总结
+C++20 之后正式引入 ~ranges~ 库。标准草案描述为 “处理元素范围的组件”，其中包括 range access, requirements, utilities, factories, adaptors 等内容。
+** 从 ~iterator~ 到 ~ranges~: 抽象层级的提升
+在迭代器中，我们已经习惯了:
+#+begin_src cpp
+  std::vector<int> {3, 1, 4, 1, 5};
+
+  auto beg = v.begin();
+  auto end = v.end();
+
+  for (auto it = beg; it != end; ++it) {
+    std::cout << *it << '\n';
+  }
+#+end_src
+这里的核心抽象是: ~[beg, end)~ ，也即是一对迭代器描述一个区间。
+
+而 ~ranges~ 的基本思路是：既然很多时候我们本来就有一个完整容器，为什么每次都要拆成 ~begin()~ 和 ~end()~ ?
+
+于是C++20可以写:
+#+begin_src cpp
+  #include <algorithm>
+  #include <iostream>
+  #include <vector>
+
+  int main() {
+    std::vector<int> v{1, 3, 2, 1, 5, 3, 7, 9};
+
+    std::ranges::sort(v);
+
+    for (auto x : v) {
+      std::cout << x << " ";
+    }
+    std::cout << std::endl;
+    return 0;
+  }
+#+end_src
+传统算法的写法是:
+#+begin_src cpp
+  std::sort(v.begin(), v.end());
+#+end_src
+ranges 的写法是:
+#+begin_src cpp
+  std::ranges::sort(v);
+#+end_src
+
+C++20 在 ~std::ranges~ 命名空间中提供了多数标准算法的受约束版本；这些算法既可以接收 iterator-sentinel pair, 也可以接收一个 range 对象，并且支持 projections, 返回类型也常常携带更多有用信息。
+** 什么是 range
+标准层面的 ~range~ 概念非常朴素：一个类型只要能通过 ~std::ranges::begin(t)~ 和 ~std::ranges::end(t)~ 得到起点和终点，就可以满足 range 的基本要求。标准草案中 ~range~ concept 的核心形式就是要求 ~ranges::begin(t)~ 和 ~ranges::end(t)~ 可用。
+
+所以这些东西都是 ~range~ :
+#+begin_src cpp
+  std::vector<int> v;
+  std::string s;
+  std::array<int, 3> a;
+  int arr[5];
+#+end_src
+甚至很多“不是容器”的东西本身也可以是 range, 比如:
+#+begin_src cpp
+  auto nums = std::views::iota(1, 10); // 1 到 9 的惰性序列
+#+end_src
+所以 range 和 container 的关系是:
+- container 通常是 range
+- range 不一定是 range
+
+
+~vector<int>~ 是 container, 也是 range. ~views::iota(1, 10)~ 是 range, 但它不是一个真装了1到9的容器。
+** ~iterator~ 和 ~sentinel~: ~end~ 不再必须和 ~begin~ 是同类型
+传统 STL 中我们习惯:
+#+begin_src cpp
+  auto first = v.begin();
+  auto last = v.end();
+#+end_src
+这里， ~first~ 和 ~end~ 通常是同一类型的迭代器。 ~ranges~ 泛化了这一点：起点仍然是 ~iterator~, 但终点可以是 ~sentinel~ 。 sentinel 的职责只是判断“是否结束”，不一定被解引用，也不一定能自增。
+
+现在只需要知道， *ranges 的终点比传统 iterator pair 更灵活* 。
+** range category: 把迭代器能力提升到 range 级别
+不是所有迭代器都支持 ~+ n~, ~- n~, ~<~ 。 ranges 也有类似分层:
+#+begin_example
+input_range
+forward_range
+bidirectional_range
+random_access_range
+contiguous_range
+#+end_example
+标准草案中这些概念基本是通过对应的 iterator concept 定义来的： ~input_range~ 要求其迭代器满足 input iterator, ~forward_range~ 则进一步要求 forward iterator, ~random_access_range~ 进一步要求 random access iterator, ~contiguous_range~ 还要求连续存储相关能力。
+
+大致可以这样理解:
+#+begin_example
+input_range             只能单向读一遍
+forward_range           可以多次遍历
+bidirectional_range     可以前后移动
+random_access_range     可以跳跃访问
+contiguous_range        元素内存连续
+#+end_example
+例子:
+#+begin_src cpp
+  std::vector<int> v; // random_access_range, 通常也是 contiguous_range
+  std::list<int>lst; // bidrectional_range
+  std::forward_list<int> for_lst; // forward_range
+  std::string s; // random_access_range / contiguous_range
+#+end_src
+这对于写代码的直接影响是：某些 ranges 算法或 view adaptor 需要更强能力。例如排序需要随机访问能力，所以 ~std::ranges::sort(v)~ 可以用于 ~vector~ ，不能直接用于 ~list~ 。
+#+begin_src cpp
+  std::vector<int>{3, 1, 2};
+  std::ranges::sort(v); // OK
+
+  std::list<int> lst{3, 1, 2};
+  // std::ranges::sort(lst); // 错误，list 不是 random_access_range
+  lst.sort(); // OK, list 有自己的成员函数 sort
+#+end_src
+** range algorithm: 更少 begin / end, 更强约束，更好诊断
+先看传统写法:
+#+begin_src cpp
+  std::vector<int> v{7, 1, 4, 0, -1};
+
+  std::sort(v.begin(), v.end());
+#+end_src
+~ranges~ 写法:
+#+begin_src cpp
+  std::ranges::sort(v);
+#+end_src
+这降低了一个常见错误: 传错 ~begin/end~ 。当然，如果想处理子区间，也可以写:
+#+begin_src cpp
+  std::ranges::sort(v.begin() + 1, v.end());
+#+end_src
+所以 ranges 并没有废弃迭代器，而是提供了更高层入口。
+
+常见的 ranges 算法有:
+#+begin_src cpp
+  std::ranges::sort(v);
+  std::ranges::reverse(v);
+  auto it = std::ranges::find(v, 4);
+  bool ok = std::ranges::is_sorted(v);
+  auto mn = std::ranges::min_element(v);
+#+end_src
+C++20 的 ~ranges~ 算法位于 ~std::ranges~ 中，而 view adaptor 主要在 ~<ranges>~ 中； cppreference 的算法库页面列出许多算法都有 ~ranges::~ 版本。
+** projection: ranges 算法非常重要的新能力
+~projection~ 可以理解为: *在比较或查找之前，先从元素中取出某个字段或映射值* 。
+
+例如:
+#+begin_src cpp
+  #include <iostream>
+  #include <algorithm>
+  #include <string>
+  #include <vector>
+
+  struct Student {
+    std::string name;
+    int score;
+  };
+
+  int main() {
+    std::vector<Student> students{{"Alice", 85}, {"Bob", 90}, {"Carol", 45}};
+    std::ranges::sort(students, {}, &Student::score);
+    for (auto &stu : students) {
+      std::cout << "name: " <<  stu.name << " " << "scores:  " << stu.score << std::endl;
+    }
+    return 0;
+  }
+#+end_src
+这里的 ~std::ranges::sort(students, {}, &Student::score)~ 的含义是：按照 ~Student::score~ 排序。
+
+第二个参数 ~{}~ 表示默认比较器，也就是 ~std::ranges::less{}~ 一类默认升序比较；第三个参数 ~&Student::score~ 是 projection 。
+
+传统写法需要 lambda:
+#+begin_src cpp
+  std::sort(students.begin(), students.end(),
+  	  [](const Student &a, const Student &b) {
+  	    return a.score < b.score;
+  	  });
+#+end_src
+~ranges~ 的写法更直接:
+#+begin_src cpp
+  std::ranges::sort(students, {}, &Student::score);
+#+end_src
+查找也可以用 projection:
+#+begin_src cpp
+  auto it = std::ranges::find(students, "Bob", &Student::name);
+
+  if (it != students.end()) {
+      std::cout << it->score << '\n';
+  }
+#+end_src
+这表示：在 ~students~ 中查找 ~name == "Bob"~ 的元素。
+
+总体来看， projection 可以让 ranges 算法很方便地获取到元素中的某个字段或某个值，从而简化代码。
+
+这点是 ranges algorithm 相比传统 algorithms 的重要实践价值之一。
+** ~views~: ranges 最具有 “现代感” 的部分
+如果说 ranges algorithms 是 “把整个range交给算法”，那么 ~views~ 是:
+#+begin_quote
+构造一个不急着计算的新 range
+#+end_quote
+cppreference 对 ranges 的概括是： range algorithms 是 eager 的，而 range adaptors 作用于 views 是 lazy 的。 adaptors 可以组合成 pipeline, 实际操作会在 view 被迭代时发生。
+
+例子:
+#+begin_src cpp
+  #include <iostream>
+  #include <algorithm>
+  #include <ranges>
+  #include <vector>
+
+  int main() {
+    std::vector<int> v{1, 2, 3, 4, 5, 6, 7};
+    auto r = v | std::ranges::views::filter([](int x) { return x % 2 == 0; }) |
+             std::ranges::views::transform([](int x) { return x * x; });
+
+    for (int x : r) {
+      std::cout << x << ' ';
+    }
+    return 0;
+  }
+#+end_src
+输出是:
+#+begin_quote
+4 16 36
+#+end_quote
+这里没有先创建一个 “偶数 vector”, 再创建一个 “平方 vector” 。 ~r~ 是一个 view pipeline, 只有当 ~for~ 真正迭代 ~r~ 时， ~filter~ 和 ~transform~ 才逐个发生。
+
+可以把它读成:
+- 从 ~v~ 中取元素
+- 过滤出偶数
+- 把每个偶数平方
+- 遍历结果
+
+
+这就是 ~ranges~ 的组合性。
+** range-for, ranges algorithms, views 如何选择
+*** 只想遍历所有元素
+#+begin_src cpp
+  for (const auto &x : v) {
+    std::cout << x << '\n';
+  }
+#+end_src
+*** 想对整个 range 执行已有算法
+#+begin_src cpp
+  std::ranges::sort(v);
+  std::ranges::reverse(v);
+  auto it = std::ranges::find(v, value);
+#+end_src
+*** 想筛选、截取、再遍历
+#+begin_src cpp
+  auto r = v
+  	 | std::ranges::views::filter(pred)
+  	 | std::ranges::views::transform(func)
+  	 | std::ranges::views::take(10);
+  for (auto x : r) {
+    // ...
+  }
+#+end_src
+*** 想得到新容器
+C++20:
+#+begin_src cpp
+  std::vector<int> out;
+  for (int x : r) {
+    out.push_back(x);
+  }
+#+end_src
+C++23:
+#+begin_src cpp
+  auto out = r | std::ranges::to<std::vector>();
+#+end_src
+** 一个完整例子：从命令式循环到 ranges
+假设有一组分数，要求:
+1. 只保留及格分数
+2. 每个分数加5分
+3. 只取前3个
+4. 输出
+
+
+传统写法:
+#+begin_src cpp
+  #include <iostream>
+  #include <vector>
+
+  int main() {
+      std::vector<int> scores{55, 60, 72, 88, 40, 91, 66};
+
+      int count = 0;
+
+      for (int score : scores) {
+          if (score >= 60) {
+              std::cout << score + 5 << ' ';
+              ++count;
+              if (count == 3) {
+                  break;
+              }
+          }
+      }
+  }
+#+end_src
+ranges 写法:
+#+begin_src cpp
+  #include <iostream>
+  #include <ranges>
+  #include <vector>
+
+  int main() {
+      std::vector<int> scores{55, 60, 72, 88, 40, 91, 66};
+
+      auto result = scores
+                  | std::views::filter([](int x) { return x >= 60; })
+                  | std::views::transform([](int x) { return x + 5; })
+                  | std::views::take(3);
+
+      for (int x : result) {
+          std::cout << x << ' ';
+      }
+  }
+#+end_src
+这段代码的表达力更接近问题本身:
+- 过滤及格
+- 加5分
+- 取前三个
+- 输出
+
+
+这就是 ranges 的主要价值： *把“怎么循环”隐藏起来，把“要什么序列变化”显露出来* 。
+** 修改元素： view 不是永远只读
+如果底层 range 非 const, 且 view 返回的是引用，那么就可以通过 view 修改原始元素。
+
+#+begin_src cpp
+  #include <iostream>
+  #include <ranges>
+  #include <vector>
+
+  int main() {
+    std::vector<int> v{1, 2, 3, 4, 5, 6};
+
+    for (int &x :
+         v | std::ranges::views::filter([](int x) { return x % 2 == 0; })) {
+      x *= 10;
+    }
+
+    for (int x : v) {
+      std::cout << x << ' ';
+    }
+    std::cout << std::endl;
+
+    return 0;
+  }
+#+end_src
+输出结果是:
+#+begin_example
+1 20 3 40 5 60 
+#+end_example
+这里，原始的 ~vector~ 就被改变了。因为前面传递的是一个引用 ~int &x~ 。
+
+但如果使用了 ~transform~ 返回值:
+#+begin_src cpp
+  auto r = v | std::ranges::views::transform([](int x) { return x *= 10; });
+#+end_src
+这里每个元素都是算出来的临时值，不是原始元素引用，不能通过它们修改原容器。
+
+要判断能不能修改，关键看迭代出来的是 ~int~ 还是 ~int&~ 。
+** ranges 和 string: 有用，但有坑
+例如取消字符串中的标点:
+#+begin_src cpp
+  #include <cctype>
+  #include <iostream>
+  #include <ranges>
+  #include <string>
+
+  int main() {
+      std::string s = "Hello, world!";
+
+      auto no_punct = s | std::views::filter([](unsigned char c) {
+          return !std::ispunct(c);
+      });
+
+      for (char c : no_punct) {
+          std::cout << c;
+      }
+
+      return 0;
+  }
+#+end_src
+输出:
+#+begin_quote
+Hello world
+#+end_quote
+这里把 lambda 参数写成 ~unsigned char~ ，是因为 ~<cctype>~ 中的 ~std::ispunct~ 、 ~std::isdigit~ 等函数要求参数要么是 ~EOF~, 要么能表示为 ~usigned char~ ，直接传递负值 ~char~ 在某些实现上会有未定义行为。这是处理字符串分类函数时的坑。
+** 和 3.4 节对应的模型
+我们可以把 3.4 的内容这样升级:
+- iterator:
+  - ~begin~ / ~end~ 描述区间
+  - iterator 操作元素
+  - 算法操作 ~[begin, end)~
+- ranges:
+  - range 自身描述区间
+  - iterator / sentinel 仍是底层基础
+  - ~std::ranges::*~ 直接操作 range
+  - ~std::views::*~ 惰性构造新 range
+  - 管道 ~|~ 组合多个 view adaptor
+
+
+也就是说， ranges 并没有推翻迭代器，而是在迭代器基础上建立了更高层的表达方式。
+* ~Arrays~ 总结
+** 内置数组
+前面讲解了 ~string~, ~vector~, ~iterator~ ； 3.5 和 3.6 节回到更底层的 *built-in array / 内置数组* 。 ~string~ 和 ~vector~ 是对底层数组模型的高级抽象，而内置数组更接近硬件，代价是接口贫乏、容易出错、语义不如库类型一致。书中明确说，数组作为内置类型代表硬件层面的设施，因此使用上不如 ~string~ 或 ~vector~ 方便。
+
+数组不是C++默认的首选容器，但它解释了很多底层规则：数组到指针的转换、迭代器思想的来源、多维数组的本质、函数参数退化、C风格字符串等。
+*** 数组是 “固定大小、同类型、连续存储” 的对象集合
+内置数组的类型里包含元素类型和维度：
+#+begin_src cpp
+  int a[10];
+  double d[5];
+#+end_src
+这和 ~vector<int>~ 不同。 ~vector<int>~ 的元素个数是运行时状态； ~int[10]~ 的 ~10~ 是类型的一部分。因此：
+
+#+begin_src cpp
+  int a[10];
+  int b[20];
+#+end_src
+a 和 b 不是同一种数组类型。
+
+数组维度必须是编译期可知的 *常量表达式*:
+#+begin_src cpp
+  constexpr std::size_t n = 10;
+  int a[n]; // OK
+
+  int m = 10;
+  int b[m]; // 标准 C++ 不允许
+#+end_src
+现代C++里如果大小运行时才知道，就使用 ~vector~ 。如果大小编译期固定，用:
+#+begin_src cpp
+  std::array<int, 10> a;
+#+end_src
+~std::array~ 是 C++11 引入的固定大小数组封装；它保留类似C数组的固定大小和紧凑存储，但不会自动退化为 ~T*~ ，并且有迭代器、 ~size()~, 赋值、比较等容器式接口。
+*** 数组初始化: 未初始化是最大风险之一
+数组初始化要非常注意 “默认初始化” 和 “值初始化” 的区别。
+#+begin_src cpp
+  int a[10]; // 局部作用域：元素未初始化，值不稳定
+  int b[10]{}; // 所有元素初始化为0
+  int c[10] = {}; // 同上
+  int d[10] = {1, 2, 3}; // 前三个初始化为 1, 2, 3, 其余初始化为 0
+#+end_src
+现代实践中，除非明确要追求极限性能而且马上覆盖后面的元素，否则建议:
+#+begin_src cpp
+  int a[10]{};
+#+end_src
+数组未初始化导致的 bug 很隐蔽，因为程序可能 “偶尔正常” 。
+*** 字符数组与字符串字面值: ~\0~
+#+begin_src cpp
+  char s1[] = "hello"; // 实际大小是 6, 包括 '\0'
+  char s2[6] = "hello"; // OK
+  char s3[5] = "hello"; // error, 放不下结尾的 '\0'
+#+end_src
+这部分的核心是: *字符串字面值不是 ~std::string~ ，而是以空字符结尾的字符数组* 。
+
+现代C++中:
+#+begin_src cpp
+  std::string s = "hello"; // 拥有字符串
+  std::string_view sv = "hello"; // 不拥有字符串，只读
+#+end_src
+绝大多数情况下，不要手写C风格字符串处理。除非在和C API, 系统 API，底层网络/文件缓冲区交互。
+*** 数组不能整体赋值，也不能直接拷贝初始化另一个数组
+#+begin_src cpp
+  int a[3] = {1, 2, 3};
+
+  int b[3] = a; // 错误
+  b = a; // 错误
+#+end_src
+这和 ~std::array~ ， ~std::vector~ 完全不同:
+#+begin_src cpp
+  std::array<int, 3> a{1, 2, 3};
+  auto b = a; // OK, 拷贝整个 array
+
+  std::vector<int> v{1, 2, 3};
+  auto w = v; // OK, 拷贝整个 vector
+#+end_src
+这也是为什么现代C++中 *固定大小数据优先考虑 ~std::array~ ，而不是裸数组* 。
+** 数组和指针总结
+*** “数组名就是指针” 是错误说法
+
+更准确地说:
+#+begin_quote
+在很多表达式上下文中，数组会自动转换为指向首元素的指针。
+#+end_quote
+例如:
+#+begin_src cpp
+  int a[3] = {1, 2, 3};
+
+  int *p = a; // a 退化为 &a[0]
+  int *q = &a[0]; // 等价
+#+end_src
+但数组本身并不是指针:
+#+begin_src cpp
+  sizeof(a); // 整个数组的字节数，通常是 3 * sizeof(int)
+  sizeof(p); // 指针本身大小，通常是 8 字节
+#+end_src
+有几个例外:
+#+begin_src cpp
+  int a[10]{};
+
+  auto x = a; // x 是 int*, 数组退化
+  decltype(a) y{}; // y 是 int[10], decltype 不退化
+
+  sizeof(a); // 不退化
+  &a; // 不退化，类型是 int (*)[10]
+#+end_src
+~auto~ 和数组结合时尤其容易误判：
+#+begin_src cpp
+  int a[10]{};
+
+  auto p = a; // int*
+  auto &r = a; // int (&)[10]
+#+end_src
+这就是为什么多为数组里 ~for (auto row : matrix)~ 会出问题。后面会进一步讲解
+** 指针可以像迭代器一样遍历数组，但规则更危险
+数组元素连续存储，所以指向数组元素的指针支持类似迭代器的操作:
+#+begin_src cpp
+  int a[] = {1, 2, 3, 4, 5};
+
+  int *first = std::begin(a);
+  int *end = std::end(a);
+
+  for (int *p = begin; p != end; ++p) {
+    std::cout << *p << '\n';
+  }
+#+end_src
+C++11 引入了非成员函数 ~beign~ / ~end~ 来处理内置数组：数组不是类，没有成员函数 ~.begin()~ / ~.end()~ ，因此需要使用定义在头文件中的 ~begin()~ 和 ~end()~ 获取首元素指针和尾后指针。尾后指针只能比较、相减，不能解引用、自增。
+
+指针算术有严格的前提:
+#+begin_src cpp
+  int a[5]{};
+
+  int *p1 = a + 5; // OK, 尾后位置
+  int *p2 = a + 6; // Undefined Behavior, 越过尾后
+#+end_src
+两个指针相减也要求它们指向 *同一个数组内* 的元素或尾后位置。
+
+#+begin_src cpp
+  auto n = std::end(a) - std::begin(a); // OK, 结果类型是 std::ptrdiff_t
+#+end_src
+不要比较两个无关对象的指针大小。
+*** 内置下标的本质: ~p[n] == *(p + n)~
+内置下标可以作用域指针上:
+#+begin_src cpp
+  int a[] = {0, 2, 4, 6, 8};
+
+  int *p = &a[2];
+
+  p[0]; // a[2]
+  p[1]; // a[3]
+  p[-2]; // a[0]
+#+end_src
+这和 ~vector~, ~string~ 的 ~operator[]~ 不同。内置下标的索引不强制是无符号类型； ~p[-2]~ 在语法上仍然可以成立，但必须保证结果仍然指向同一个数组范围内的元素。
+** C 风格字符串：理解，但不要作为默认工具
+C 风格字符串的问题在于：函数通常只拿到 ~char*~ 或 ~const char*~ ，并不知道真实数组大小，只能依靠 ~'\0'~ 判断结束。
+#+begin_src cpp
+  char s1[] = "hello";
+  char s2[] = "world";
+  char result[11]; // 危险：必须自己算对容量
+#+end_src
+使用 ~strcpy~,  ~strcat~ 这类函数时，目标数组必须足够大，否则就是经典缓冲区溢出。书中也明确说，C风格的字符串是很多bug和安全问题的来源，并且更难使用。
+
+现代写法：
+#+begin_src cpp
+  std::string s1 = "hello";
+  std::sting s2 = "world";
+
+  std::string result = s1 + " " + s2;
+#+end_src
+和旧接口交互时:
+#+begin_src cpp
+  std::string s = "hello";
+  const char *p = s.c_str();
+#+end_src
+
+但 ~p~ 的有效性依赖 ~s~ 。如果后续修改 ~s~, ~p~ 可能失效。
+** C++11/17/20 之后，数组相关的现代工具
+*** ~std::array<T, N>~: 固定大小数组的现代默认选择
+
+#+begin_src cpp
+  #include <array>
+
+  std::array<int, 4> a{1, 2, 3, 4};
+
+  a.size();
+  a.begin();
+  a.end();
+  a[2];
+#+end_src
+它的优势是:
+1. 大小仍然是编译期常量
+2. 通常和裸指针一样连续、紧凑
+3. 不会在普通表达式中退化为 ~T*~
+4. 支持整体拷贝、赋值、比较
+5. 可与标准算法、ranges 更自然配合
+
+
+例如:
+#+begin_src cpp
+  std::array<int, 5> a{1, 2, 3, 4, 5};
+
+  std::ranges::fill(a, 0);
+#+end_src
+*** ~std::size~, ~std::ssize~
+C++17 有 ~std::size~, C++20 有 ~std::ssize~:
+#+begin_src cpp
+  int a[10]{};
+
+  auto n = std::size(a); // 无符号大小
+  auto sn = std::ssize(a); // 有符号大小， C++20
+#+end_src
+~std::ssize~ 在需要倒序遍历或避免 signed / unsigned 混用时很有用。
+#+begin_src cpp
+  for (auto i = std::ssize(a) - 1; i >= 0; --i) {
+    std::cout << a[i] << '\n';
+  }
+#+end_src
+不过这个循环要小心空数组；固定大小裸数组不能为0,但容器可能为空，所以通用代码里仍然要先判断。
+*** ~std::span<T>~: C++20 最重要的数组补丁
+~std::span~ 是C++20引入的非拥有视图，适合替代传统的 “指针 + 长度” 参数。
+
+旧写法:
+#+begin_src cpp
+  void print(const int *p, std::size_t n) {
+    for (std::size_t i = 0; i != n; ++i) {
+      std::cout << p[i] << ' ';
+    }
+  }
+#+end_src
+现代写法:
+#+begin_src cpp
+  #include <span>
+
+  void print(std::span<const int> xs) {
+    for (int x : xs) {
+      std::cout << x << ' ';
+    }
+  }
+#+end_src
+它可以接收裸数组、 ~std::array~, ~std::vector~ 。
+
+~span~ 不拥有数据，所以不能返回指向局部数组的 ~span~:
+#+begin_src cpp
+  std::span<int> bad() {
+    int a[3]{1, ,2, 3};
+    return a; // 错误设计：返回悬垂视图
+  }
+#+end_src
+它的价值很大: *函数参数层面保留“连续区间”的抽象，而不丢失长度信息* 。
+*** ~std::to_array~: C++20 从裸数组/列表构造 ~std::array~
+#+begin_src cpp
+  #include <array>
+
+  auto a = std::to_array({1, 2, 3}); // std::array<int, 3>;
+  auto s = std::to_array("abc"); // std::array<char, 4>, 包含 '\0'
+#+end_src
+*** ranges 与数组
+数组、 ~std::array~, ~vector~ 都是 range:
+#+begin_src cpp
+  int a[] = {1, 2, 3, 4};
+
+  for (int x : a) {
+    std::cout << x << '\n';
+  }
+
+  std::ranges::for_each(a, [](int x) {
+    std::cout << x << '\n';
+  });
+#+end_src
+C++20 ranges 的意义不是让我们忘记迭代器，而是把“区间”进一步提升为一等表达对象。
+** 多维数组：核心是“数组的数组”
+#+begin_quote
+严格来说C++没有真正的多维数组，所谓多维数组本质上是数组的数组
+#+end_quote
+#+begin_src cpp
+  int ia[3][4];
+#+end_src
+读法:
+1. ~ia~ 是一个数组
+2. 它有3个元素
+3. 每个元素又是一个 ~int[4]~
+4. 所以 ~ia~ 的类型是 ~int[3][4]~
+5. ~ia[0]~ 的类型是 ~int[4]~
+6. ~ia[0][0]~ 的类型是 ~int~
+
+
+这不是 “一个矩阵类”，也不是“二维vector”，而是:
+#+begin_src cpp
+  array< array<int, 4>, 3 >
+#+end_src
+的低层语言版本。
+** 多维数组初始化: 推荐保留内层花括号
+#+begin_src cpp
+  int ia[3][4] = {
+    {0, 1, 2, 3},
+    {4, 5, 6, 7},
+    {8, 9, 10, 11}
+  };
+#+end_src
+特别注意这两个初始化的区别:
+#+begin_src cpp
+  int ia[3][4] = {
+      {0},
+      {4},
+      {8}
+  };
+
+  int ix[3][4] = {0, 3, 6, 9};
+#+end_src
+第一个的含义是:
+#+begin_example
+0 0 0 0
+4 0 0 0
+8 0 0 0
+#+end_example
+第二个的含义只初始化第一行:
+#+begin_example
+0 3 6 9
+0 0 0 0
+0 0 0 0
+#+end_example
+** 多维数组下标
+
