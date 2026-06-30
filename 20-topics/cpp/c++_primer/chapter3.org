@@ -608,11 +608,11 @@ cppreference 对于 ~reverse~ 的说明也很清楚: 它增加的是元素在无
 
 ~const auto &i~ 会绑定到真实元素，但不允许修改，适合只读遍历大对象。实际上建议:
 #+begin_src cpp
-  for (const &x : vec) {
+  for (const auto &x : vec) {
     // 只读
   }
 
-  for (const &x : vec) {
+  for (auto &x : vec) {
     // 修改
   }
 #+end_src
@@ -1690,4 +1690,177 @@ C++20 ranges 的意义不是让我们忘记迭代器，而是把“区间”进�
 0 0 0 0
 #+end_example
 ** 多维数组下标
+#+begin_src cpp
+  int ia[3][4]{};
 
+  ia[2][3] = 42;
+#+end_src
+分解一下:
+#+begin_src cpp
+  ia[2]; // 第 3 行，类型是 int[4]
+  ia[2][3]; // 第 3 行第 4 列，类型是 int
+#+end_src
+所以可以写:
+#+begin_src cpp
+  int (&row)[4] = ia[1];
+#+end_src
+这表示 ~row~ 是一个对含4个int的数组的引用，绑定到 ~ia~ 的第二行。
+
+这类声明可以从名字向外读，从 ~row~ 开始：
+1. ~row~ 被 ~&~ 修饰，所以是引用
+2. 向右看， ~(&row)[4]~ 表示它引用的是大小为4的数组
+3. 向左看， ~int~ 表示数组元素是 ~int~
+** 多维数组与范围 for: 外层必须引用
+正确写法：
+#+begin_src cpp
+  int ia[3][4]{};
+
+  std::size_t cnt = 0;
+
+  for (auto &row : ia) {
+    for (auto & col : row) {
+      col = cnt++;
+    }
+  }
+#+end_src
+为什么外层 ~row~ 必须是引用？
+
+因为 ~ia~ 的元素是 ~int[4]~, 如果写:
+#+begin_src cpp
+  for (auto row : ia) {
+    for (auto col : row) {
+      // ...
+    }
+  }
+#+end_src
+外层 ~row~ 不是引用，于是每一行 ~int[4]~ 在初始化 ~row~ 时会发生数组到指针的退化， ~row~ 的类型会退化成 ~int*~ ，然后内层:
+#+begin_src cpp
+  for (auto col : row)
+#+end_src
+试图遍历一个 ~int*~ ，这不是一个完整范围，所以不成立。
+
+只读时也一样:
+#+begin_src cpp
+  for (const auto &row : ia) {
+    for (auto col : row) {
+      std::cout << col << ' ';
+    }
+  }
+#+end_src
+这里内层 ~col~ 可以不是引用，因为 ~int~ 拷贝很便宜，且你不能修改元素；外层 ~row~ 仍然要引用，是为了避免数组退化。
+** 指向多维数组的指针：指向的是“行”
+#+begin_src cpp
+  int ia[3][4]{};
+
+  int (*p)[4] = ia;
+#+end_src
+~p~ 不是 ~int*~ ，而是 ~int (*)[4]~, 即 “指向含4个int的数组的指针”。
+#+begin_src cpp
+  p; // 指向 ia[0]
+  p + 1; // 指向 ia[1]
+  ,*p; // ia[0], 类型是 int[4]
+  (*p)[2]; // ia[0][2]
+#+end_src
+遍历可以写:
+#+begin_src cpp
+  for (auto p = std::begin(ia); p != std::end(ia); ++p) {
+    for (auto q = std::begin(*p); q != std::end(*p); ++q) {
+      std::cout << *q << ' ';
+    }
+  }
+#+end_src
+使用类型别名会清楚很多:
+#+begin_src cpp
+  using int_array = int[4];
+
+  for (int_array *p = std::begin(ia); p != std::end(ia); ++p) {
+    for (int *q = std::begin(*p); q != std::end(*p); ++q) {
+      std::cout << *q << ' ';
+    }
+  }
+#+end_src
+** 现代C++中如何表达二维数据
+*** 固定行列: ~std::array<std::array<T, C>, R>~
+#+begin_src cpp
+  std::array<std::array<int, 4>, 3> m{{
+    {{0, 1, 2, 3}},
+    {{4, 5, 6, 7}},
+    {{8, 9, 10, 11}}
+  }};
+#+end_src
+*** 运行期行列：一维 ~std::vector<T>~ + 索引函数
+常见二维矩阵不一定用 ~vector<vector<T>>~ 。如果需要连续存储、缓存友好、便于和 C/数值库交互，常用扁平化:
+#+begin_src cpp
+  std::size_t rows = 3;
+  std::size_t cols = 4;
+
+  std::vector<int> m(rows * cols);
+
+  auto at = [&](std::size_t r, std::size_t c) -> int& {
+    return m[r * cols + c];
+  };
+
+  at(2, 3) = 42;
+#+end_src
+这和内置二维数组的行主序布局一致： ~ia[i][j]~ 本质上也是按连续内存存放，第 ~i~ 行第 ~j~ 列通常对应偏移 ~i * col_count + j~ 。
+*** ~std::vector<std::vector<T>>~ 不是严格意义上的连续矩阵
+对于这个数组:
+#+begin_src cpp
+  std::vector<std::vector<int>> m(rows, std::vector<int>(cols));
+#+end_src
+它好用，但每一行是独立的 ~vector~ ，整体不保证一整块内存连续存储。它适合行长度可能不同、表达 “行的集合” 的场景。不适合强依赖连续内存、缓存局部性、SIMD 、 C API 交互的场景。
+*** ~std::mdspan~
+~std::mdspan~ 是多视图设施，但不是 C++20 标准库内容，在 C++23 才进入标准。
+** 数组易错点集中整理
+| 易错点                                  | 正确理解                                                              |
+|-----------------------------------------+-----------------------------------------------------------------------|
+| “数组名就是指针”                       | 数组是数组；很多表达式中会退化为首元素指针                          |
+| ~auto x = a~                            | 若 ~a~ 是数组， ~x~ 多半是指针                                       |
+| ~decltype(a)~                           | 保留数组类型，不发生退化                                             |
+| ~sizeof(a)~                             | 对真实数组得到整个数组大小；对函数参数中的 “数组” 常常得到指针大小 |
+| 函数参数 ~int a[]~                      | 等价于 ~int *a~ ，数组大小信息丢失                                   |
+| ~int a[n]~                              | ~n~ 必须是编译期常量表达式；运行时 VLA 不是标准C++                  |
+| ~char s[] = {'h', 'i'}~                 | 不是C风格字符串，因为没有 ~'\0'~                                     |
+| ~char s[] = "hi"~                       | 大小是3,包含 ~'\0'~                                                  |
+| ~ia[1]~, 其中 ~ia~ 是 ~int[3][4]~       | 得到一行，即 ~int[4]~                                                |
+| 多维数组范围for外层 ~auto row~         | 错，行数会退化为 ~int*~, 应使用 ~auto &row~                          |
+| ~int *p = ia~, 其中 ~ia~ 是 ~int[3][4]~ | 错， ~ia~ 退化后是 ~int (*)[4]~                                      |
+| ~std::array<int, N> a;~                 | 局部对象里的 ~int~ 可能未初始化；建议 ~a{}~                                          |
+* 第三章总结
+第三章其实围绕一个核心概念： *sequence 序列* .
+
+- ~std::string~: 字符序列，拥有数据，可变长度
+- ~std::vector<T>~: T 对象序列，拥有数据，可变长度，连续存储
+- ~iterator~: 访问序列的通用位置抽象
+- built-in array: 固定大小底层序列，连续存储，容易退化为指针
+- C string: 以 '\0' 结尾的字符数组约定
+- multidim array: 数组的数组
+
+
+所以现在应该形成一个实用的现代C++判断：
+
+- 文本: ~std::string~ / ~std::string_view~
+- 动态序列: ~std::vector<T>~
+- 固定大小序列: ~std::arry<T, N>~
+- 非拥有连续视图: ~std::span<T>~
+- 底层 C 接口: ~T* + size~ 或 ~span.data()~ / ~span.size()~
+- 底层理解: built-in array / pointer
+- 二维固定矩阵: ~std::array<std::array<T, C>, R>~
+- 二维动态矩阵: ~std::vector<T>~ + ~row * cols + col~
+* 第三章练习
+*成绩文本统计器*:
+1. 从标准输入读入若干行文本，每行可能包括多个整数成绩和普通单词
+2. 把所有合法成绩 ~0...100~ 存入 ~std::vector<int>~
+3. 统计成绩段: ~0-9~, ~10-19~, ... ~90-99~, ~100~
+4. 使用迭代器或 ranges 找出第一个不及格成绩
+5. 处理输入行，跳过标点
+6. 最后把结果打印成一个简单表格，例如:
+   #+begin_example
+   0-9:    0
+   10-19:  1
+   ...
+   90-99:  4
+   100:    1
+   #+end_example
+
+程序位于: [[file:~/Learning/projects/cpp-primer/exercises_with_chapters/chapter3/scores.cpp][第三章总结练习代码]]

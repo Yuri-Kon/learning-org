@@ -1562,6 +1562,9 @@ const pointer to const double.
 对于 ~const pointer~ 和 ~pointer to const~ ，这是两个不同的维度。我们使用从右往左读的方法判断其类型。
 
 ** top-level const 与 low-level const
+:PROPERTIES:
+:ID:       95b1563a-0899-4768-85c1-9a387ef79697
+:END:
 *top-level const*: 顶层const, 对象本身是 const
 *low-level const*: 底层 const, 复合类型所指向、引用、间接访问的对象是 const .
 #+begin_src cpp
