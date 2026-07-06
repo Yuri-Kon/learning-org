@@ -1,0 +1,6 @@
+#+title: C++ Primer 学习目录
+* 目录结构
+- [[file:preface.org][前言]]
+- [[file:chapter1.org][第一章: Getting Start]]
+- [[file:chapter2.org][第二章: Variables and Basci Types]]
+- [[file:chapter3.org][第三章: Strings, Vectors and Arraysg]]

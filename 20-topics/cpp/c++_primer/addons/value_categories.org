@@ -1,0 +1,851 @@
+#+title: Value Categories and Move
+#+author: yurikon
+#+language: zh-cn
+* 为什么C++需要移动语义
+C++很多对象管理资源, 比如 ~string~, ~vector~ 等等。这些对象本身不是资源，真正昂贵或不可复制的是它们背后管理的东西：
+
+#+begin_quote
+std::string -> 堆上的字符缓冲区 \\
+std::vector<int> -> 堆上的连续数组 \\
+std::uniqur_ptr<T> -> 独占所有权的指针
+fstream -> 操作系统文件句柄
+#+end_quote
+C++98时代，如果将 ~std::vector<int>~ 从一个对象移动到另一个对象，主要依赖“复制”：新对象拥有一份独立资源，旧对象仍然保持原状：
+#+begin_src cpp
+  std::vector<int> a(1000000, 42);
+  std::vector<int> b = a; // 深拷贝：复制一百万个 int
+#+end_src
+但很多时候，我们并不需要复制资源，只希望把资源的所有权移动过去:
+#+begin_src cpp
+  std::vector<int> make_data() {
+    std::vector<int> v(1000000, 42);
+    return v;
+  }
+
+  std::vector<int> data = make_data();
+#+end_src
+这里的 ~v~ 很快就要离开 ~make_data()~ 的作用域了，所以它的资源没必要再复制一份。只需要把它的内部指针、大小、容量等移动给 ~data~ 就足够了。
+
+因此， *移动语义的核心是* ：
+#+begin_quote
+当一个对象即将不再被连续使用，或者用户明确表示愿意放弃其资源内容时，允许新对象“接管”旧对象的资源，而不是复制资源。
+#+end_quote
+[[https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2006/n2027.html][WG21 的右值引用介绍文档]] 也把目标说的很清楚：右值引用允许程序员避免逻辑上不必要的复制，并支持完美转发。主要用于服务更高性能、更健壮的库设计。
+* 复制与移动的区别
+比如一个简化的资源模型:
+#+begin_src cpp
+  class Buffer {
+  public:
+    Buffer(std::size_t n)
+    : size_{n}, data_{new int[n]} {}
+    
+    ~Buffer() {
+      delete[] data_;
+    }
+
+  private:
+    std::size_t size_{};
+    int* data_{};
+  };
+#+end_src
+如果要复制一个 ~Buffer~, 合理的语义应该是深拷贝:
+#+begin_example
+a.data_ -> [1 2 3 4]
+b.data_ -> [1 2 3 4] // 新分配一块内存，内容复制过去
+#+end_example
+如果要移动一个 ~Buffer~, 合理的语义应该是资源转移:
+#+begin_example
+移动前:
+a.data_ -> [1 2 3 4]
+b.data_ -> nullptr
+
+移动后:
+a.data_ -> nullptr
+b.data_ -> [1 2 3 4]
+#+end_example
+也就是说:
+- ~copy~: 复制资源，原对象仍然保持原值
+- ~move~: 转移资源，原对象仍然有效，但内容通常不再保证原样
+* 移动语义需要解决的核心问题
+语言必须能区分两种表达式:
+1. 这个对象还要继续使用，不能确定它的资源
+2. 这个对象快没用了，或者用户明确允许移动它的资源
+
+例如：
+#+begin_src cpp
+  std::string a = "hello";
+  std::string b = a; // a 还要用，所以复制
+  std::string c = std::move(a); // 用户明确允许引用
+#+end_src
+~a~ 的类型一直是 ~std::string~, 真正变化的是表达式类别:
+#+begin_src cpp
+  a; // lvalue
+  std::move(a); // xvalue
+#+end_src
+
+* C++值类别与移动语义
+值类别， Vaule categories, 或者称为表达式类别。
+
+~lvalue~, ~rvalue~, ~xvalue~ , ~prvalue~, ~glvalue~ 不是对象的类型，而是 *表达式的 value category* 。每个表达式都基于三个基本类别之一: ~lvalue~, ~xvalue~, ~prvalue~; ~glvalue~ 和 ~rvalue~ 是组合出来的类别。
+
+现代C++的分类关系是:
+#+begin_example
+expression
+├── glvalue
+│   ├── lvalue
+│   └── xvalue
+└── rvalue
+    ├── prvalue
+    └── xvalue
+#+end_example
+所以并不是5个并列类别，而是:
+- 基本类别: ~lvalue~ / ~prvalue~ / ~xvalue~
+- 组合类别:
+  - ~glvalue~ = ~lvalue~ + ~xvalue~
+  - ~rvalue~ = ~prvalue~ + ~xvalue~
+
+
+定义可以这样理解:
+- ~glvalue~: 求值结果能确定某个对象、函数、非静态数据成员等的“身份”
+- ~prvalue~: 求值结果用于初始化对象，或计算某个操作数的值
+- ~xvalue~: 一种 ~glvalue~, 表示资源可以被复用的对象，通常接近生命周期末尾
+- ~lvalue~: 不是 ~xvalue~ 的 ~glvalue~
+- ~rvalue~: ~prvalue~ 或 ~xvalue~
+
+
+也就是说，判断标准不再是 “是否能放在等号左边”。标准中提示， ~lvalue~ / ~rvalue~ 的名字来自赋值左右侧，但现在已经不能用这个规则完整判断；这些术语描述的是表达式，而不是“值本身”。
+
+* 三个基本类别如何理解
+
+** ~lvalue~: 有身份，通常不能被默认移动资源
+#+begin_src cpp
+  int i = 0;
+  std::string s = "hello";
+
+  i; // lvalue
+  s; // lvalue
+#+end_src
+~i~ 和 ~s~ 是有名字的对象。表达式 ~s~ 指向一个明确对象，而且这个对象之后还可能继续被使用，所以编译器默认不会从它那里移动资源。
+#+begin_src cpp
+  std::string a = "hello";
+  std::string b = a; // a 是 lvalue, 所以复制
+#+end_src
+
+** prvalue: 纯右值，通常是临时结果
+#+begin_src cpp
+  42; // prvalue
+  i + 1; // prvalue
+  std::string("abc"); // prvalue
+  make_string(); // 如果按值返回 std::string, 则是 prvalue
+#+end_src
+~prvalue~ 常常表示 _“刚算出来的值”或“临时对象”_ 。它通常没有持久身份，适合用来初始化对象。
+#+begin_src cpp
+  std::string s = std::string{"hello"}; // 临时对象可用于初始化 s, prvalue
+#+end_src
+C++17后， ~prvalue~ 的模型又进一步调整，很多场景中不是先创建临时对象再移动，而是直接在目标位置构造结果对象；[[https:://eel.is/c%2B%2Bdraft/basic.lval][标准草案]]中也描述了 ~prvalue~ 和 result object 和临时物化规则。
+
+** ~xvalue~: 有身份，但资源可被复用
+#+begin_src cpp
+  std::string s = "hello";
+
+  std::move(s); // xvalue
+  static_cast<std::string&&>(s); // xvalue
+#+end_src
+~xvalue~ 是一种 ~gvalue~, 表示一个对象的资源可以复用。
+
+- ~lvalue~: 有身份，但不能被移动
+- ~prvalue~: 通常是临时值
+- ~xvalue~: 有身份，但可以被移动
+* ~std::move~ 是什么
+标准库中 ~std::move~ 的本质是:
+#+begin_src cpp
+  template<class T>
+  constexpr std::remove_reference_t<T>&& move(T&& t) noexcept;
+#+end_src
+返回值等价于:
+#+begin_src cpp
+  static_cast<std::remove_reference_t<T>&&>(t)
+#+end_src
+也就是说， ~std::move~ 语句本身 _并不移动任何东西_ ，只是把表达式强制转化为 _右值引用类型_, 从而产生一个 ~xvalue~ 。
+
+所以， ~std::move(x)~ 的语义是：
+#+begin_quote
+我允许你把 x 当作可以被移动的对象来处理
+#+end_quote
+真正的移动发生在后续操作中，比如移动构造函数、移动赋值运算符或重载解析。
+#+begin_src cpp
+  std::string s = "hello";
+
+  std::move(s); // 只产生一个 xvalue, 并不发生移动
+  std::string b = std::move(a); // 调用移动构造，才可能移动资源
+#+end_src
+~std::move~ 是无条件转换为右值。
+* 右值引用 ~T&&~
+右值引用是移动语义的语言基础。
+#+begin_src cpp
+  void consume(std::string&& s);
+#+end_src
+这个函数参数只能绑定到右值。
+#+begin_src cpp
+  std::string a = "hello";
+
+  consume(a); // error: a is lvalue
+  consume(std::move(a)); // ok: std::move(a) is xvalue
+  consume(std::string{"world"}); // ok: 临时对象是 rvalue
+#+end_src
+但有一个非常重要的规则:
+
+*有名字的右值引用本身是 lvalue* ：
+#+begin_src cpp
+  void f(std::string &&s) {
+    use(s); // s 是 lvalue
+    use(std::move(s)); // std::move(s) 是 xvalue
+  }
+#+end_src
+命名的右值被当作 lvalue, 未命名的右值引用被当作 xvalue 。这样设计是因为，一旦对象有了名字，说明可以在函数体内多次使用它。编译器不能假定第一次使用后就可以移动其资源。
+* 移动构造函数与移动赋值运算符
+一个类型支持移动，通常意味着它有这两个函数:
+#+begin_src cpp
+  class Buffer {
+  public:
+    Buffer(Buffer &&other) noexcept;
+    Buffer &operator=(Buffer &&other) noexcept;
+  };
+#+end_src
+完整例子:
+#+begin_src cpp
+  #include <algorithm>
+  #include <cstddef>
+  #include <utility>
+
+  class Buffer {
+  public:
+    explicit Buffer(std::size_t n) : size_{n}, data_{new int[n]} {}
+    ~Buffer() { delete[] data_; }
+
+    Buffer(const Buffer &other)
+    : size_{other.size_}, data_{new int[other.size_]} {
+      std::copy(other.data_, other.data_ + other.size_, data_);
+    }
+
+    Buffer &operator=(const Buffer &other) {
+      if (this == &other) {
+        return *this;
+      }
+
+      Buffer tmp(other);
+      swap(tmp);
+      return *this;
+    }
+
+    Buffer(Buffer &&other) noexcept
+        : size_{std::exchange(other.size_, 0)},
+          data_{std::exchange(other.data_, nullptr)} {}
+
+    Buffer &operator=(Buffer &&other) noexcept {
+      if (this == &other) {
+        return *this;
+      }
+
+      delete[] data_;
+
+      size_ = std::exchange(other.size_, 0);
+      data_ = std::exchange(other.data_, nullptr);
+
+      return *this;
+    }
+    
+    void swap(Buffer &other) {
+      using std::swap;
+      swap(size_, other.size_);
+      swap(data_, other.data_);
+    }
+    
+  private:
+    std::size_t size_{};
+    int *data_{};
+    
+  };
+#+end_src
+这段代码体现了移动语义的本质:
+#+begin_src cpp
+  Buffer(Buffer &&other) noexcept
+      : size_{std::exchange(other.size_, 0)},
+        data_{std::exchange(other.data_, nullptr)} {}
+#+end_src
+~std::exchange~ 的作用是:
+#+begin_quote
+取走 ~other.data_~ 的旧值，同时把 ~other.data_~ 改为 ~nullptr~
+#+end_quote
+移动后，源对象必须还能安全 destruct(析构) ，因此不能留下两个对象同时拥有同一块内存。
+* moved-from 对象还用吗
+可以用，但不要依赖原来的值了。
+#+begin_src cpp
+  std::string s = "hello";
+  std::string t = std::move(s);
+
+  // s 仍是有效对象
+  s = "world"; // OK
+  s.clear(); // OK
+  s.size(); // 通常 OK, 但不要假设还是5
+#+end_src
+- moved-from 对象处于 valid but unspecific state
+- 可以析构，可以重新赋值，可以调用满足该状态前提的成员函数
+- 不要依赖它还保存原内容
+* 移动语义与重载解析
+移动语义能工作，是因为C++可以根据表达式类别选择不同重载。
+#+begin_src cpp
+  #include <iostream>
+  #include <string>
+
+  void use(const std::string &s) {
+    std::cout << "copy/read\n";
+  }
+
+  void use(std::string &&s) {
+    std::cout << "move/consume\n";
+  }
+
+  int main() {
+    std::string a = "hello";
+
+    use(a); // lvalue -> const std::string &
+    use(std::move(a)); // xvalue -> std::string &&
+    use(std::string{}); // prvalue -> std::string &&
+  }
+#+end_src
+- ~T&~: 只能绑定到非 const lvalue
+- ~const T&~: 可以绑定到 lvalue, 也可以绑定到 rvalue
+- ~T&&~: 优先绑定到 rvalue
+
+
+所以常见接口设计是:
+#+begin_src cpp
+  void read(const std::string &s); // 只读，不接管资源
+  void consume(std::string &&s); // 消费/接管资源
+#+end_src
+* ~const~ 会阻止移动
+这是很常见的坑:
+#+begin_src cpp
+  const std::string s = "hello";
+
+  std::string t = std::move(s);
+#+end_src
+这里我们可能会以为会移动，但其实通常是复制。
+
+~std::move(s)~ 产生的是 ~const std::string &&~ ，而多数移动构造函数是:
+#+begin_src cpp
+  std::string(std::string &&);
+#+end_src
+它需要的是非 const 右值引用，因为移动通常要修改对象，比如把源对象内部指针置空。 ~const~ 对象不能被修改，所以不能真正移动。
+
+因此，
+#+begin_quote
+不要对 const 对象使用 std::move 期待移动
+#+end_quote
+* 返回局部对象不要写 ~std::move~
+不要这样写:
+#+begin_src cpp
+  std::vector<int> make_data() {
+    std::vector<int> v{1, 2, 3};
+    return std::move(v); // 通常不推荐
+  }
+#+end_src
+应该写:
+#+begin_src cpp
+  std::vector<int> make_data() {
+    std::vector<int> v{1, 2, 3};
+    return v;
+  }
+#+end_src
+原因是:
+- ~return v~: 可以触发 NRVO, 直接在调用者处构造
+- ~return std::move(v)~: 可能组织 NRVO, 只剩下移动
+* Rule of Zero / Five
+如果类不直接管理资源，优先让标准库成员自己处理移动和复制:
+#+begin_src cpp
+  class Person {
+  public:
+    Person(std::string name, std::vector<int> scores)
+    : name_{std::move(name)}, scores_{std::move(scores)} {}
+
+  private:
+    std::string name_;
+    std::vector<int> scores_;
+  };
+#+end_src
+这叫 Rule of Zero:
+#+begin_quote
+不手写析构、复制、移动，让成员对象自己管理资源
+#+end_quote
+
+如果你的类直接管理资源，比如裸指针、文件句柄、互斥量封装，就要考虑 Rule of Five:
+- 析构函数
+- 复制构造
+- 复制赋值
+- 移动构造
+- 移动赋值
+
+
+但现在C++实践的标准是: *尽量用标准库资源管理类型，让自己回到 Rule of Zero* 。
+
+例如:
+#+begin_src cpp
+  class Buffer {
+  public:
+    explicit Buffer(std::size_t n)
+    : data_(n) {}
+  private:
+    std::vector<int> data_;
+  };
+#+end_src
+这样根本就不用手写析构、复制、移动。
+* ~std::move~ 的常见使用场景
+** 场景1: 构造函数中接收值，然后移动进成员
+#+begin_src cpp
+  class User {
+  public:
+    explicit User(std::string name)
+    : name_{std::move(name)} {}
+
+  private:
+    std::string name_;
+  };
+#+end_src
+- 调用者传 lvalue: 先 _复制_ 进参数 ~name~ ，再移动进成员
+- 调用者传 rvalue: 先 _移动_ 进参数 ~name~, 再移动进成员
+** 场景2: 把对象放入容器
+#+begin_src cpp
+  std::vector<std::string> names;
+
+  std::string s = "Alice";
+  names.push_back(s); // Copy
+  names.push_back(std::move(s)); // move
+#+end_src
+** 场景3: 转移 ~unique_ptr~
+#+begin_src cpp
+  std::unique_ptr<int> p = std::make_unique<int>(42);
+
+  auto q = std::move(p); // 所有权转移
+#+end_src
+** 场景4: 从对象中取走资源
+#+begin_src cpp
+  class MessageQueue {
+  public:
+    std::vector<std::string> take_all() {
+      return std::move(messages_);
+    }
+
+  private:
+    std::vector<std::string> messages_;
+  }
+#+end_src
+这里使用 ~return std::move(...)~ 是合理的，因为成员 ~message_~ 不满足局部变量 NRVO, 同时函数语义就是 “取走” 。
+** 场景5: 移动捕获 lambda
+#+begin_src cpp
+  auto p = std::make_unique<int>(42);
+
+  auto task = [p = std::move(p)] {
+    return *p;
+  }
+#+end_src
+* ~std::forward~
+
+- ~std::move~: 无条件把表达式转成可移动
+- ~std::forward~: 有条件地保留原始实参的左值/右值属性
+
+
+典型用途在模板里:
+#+begin_src cpp
+  template <typename T>
+  void wrapper(T &&x) {
+    use(std::forward<T>(x));
+  }
+#+end_src
+如果调用:
+#+begin_src cpp
+  std::string s = "hello";
+
+  wrapper(s); // 转发为 lvalue
+  wrapper(std::string{}); // 转发为 rvalue
+#+end_src
+* 移动语义和 value category 总结
+1. value category 是表达式类型，不是对象类型
+2. lvalue: 有身份，通常表示还要继续用
+3. prvalue: 纯右值，通常是临时结果或初始化材料
+4. xvalue: 有身份，但资源可被复用，是移动语义的关键
+5. ~std::move~: 不移动，只是把表达式转换为 xvalue
+6. 真正移动发生在移动构造、移动赋值、重载解析等后续操作中
+7. 由名字的右值引用是 lvalue, 需要再次 ~std::move()~
+8. moved-from 的对象仍然有效，但值通常不应该继续依赖
+9. 不要对 const 对象期待引用
+10. 返回局部变量通常不要写 ~std::move~
+11. 自定义资源类型的移动操作通常应 ~noexpect~
+12. 优先 Rule of Zero: 只有直接管理资源时才手写移动/复制控制
+* 延伸: 函数参数
+对于函数参数如何选择，我们可以有如下判断:
+- 对于只读使用小类型，如 ~int~, ~double~, 指针、迭代器
+  - 推荐 ~f(int x)~
+  - 因为复制很便宜，按值传递最简单
+- 对于只读使用大对象，如 ~std::string~, ~std::vector~, 自定义类
+  - 推荐 ~f(const T &x)~
+  - 因为不复制、不修改、也不需要保留一份，传递引用也不会额外构造一个临时的参数对象
+- 对于想要修改调用者对象
+  - 推荐 ~f(T &x)~
+  - 明确会修改原对象
+- 对于接收可为空的对象
+  - ~f(T *p)~ 或 ~std::optional<T>~
+  - 因为引用不能为 null
+- 对于有接管资源/移动消耗语义的函数
+  - 推荐 ~f(T &&x)~
+  - 这里函数只能接收一个右值，这就会要求调用者要么传递 prvalue, 要么明确表达某个 lvalue 可以被移动。如果传入参数是个 lvalue, 则会直接报错。语义清晰。
+- 函数内部一定要保留一份参数
+  - 使用 ~f(T x)~ 然后 ~std::move(x)~
+  - 统一处理复制和移动
+
+此外还有一个经验判断：非常小、复制便宜的对象通常按值传递更好；较大的对象按值传递可能触发警告，建议改称 ~const &~
+
+* Value Categories 练习
+** A组: 判断 value category 与移动行为
+判断每个表达式是 ~lvalue~, ~xvalue~ 还是 ~prvalue~
+#+begin_src cpp
+  #include <string>
+  #include <utility>
+
+  std::string make_string();
+  std::string &get_ref();
+  std::string &&get_rref();
+  int main() {
+    std::string s = "hello";
+    std::string &r = s;
+    std::string &&rr = std::string{"temp"};
+
+    s;
+    (s);
+    r;
+    rr;
+    std::move(s);
+    std::move(rr);
+    std::string{"abc"};
+    make_string();
+    get_ref();
+    get_rref();
+    s + " world";
+  }
+#+end_src
+*** 解答
+- ~s~: lvaule
+- ~(s)~: lvalue, 加括号不改变表达式的类别
+- ~r~: lvalue, ~r~ 是引用变量的名字；名字表达式是 lvalue
+- ~rr~: lvalue, ~rr~ 的类型是 ~std::string&&~, 但表达式 ~rr~ 是个名字，所以是  lvalue
+- ~std::move(s)~: 转换为 xvalue
+- ~std::move(rr)~: xvlaue, 虽然 ~rr~ 本身是 lvalue, 但 ~move~ 是 xvalue
+- ~std::string{"abc"}~: prvalue, 创建一个临时的 ~std::string~ 对象的纯右值
+- ~make_string()~: prvalue, 返回类型是非引用的 ~std::string~, 按值返回的函数调用是 prvalue
+- ~get_ref()~: lvalue, 函数返回类型是 ~std::string&~, 返回左值引用的函数调用是 lvalue
+- ~get_rref()~: xvalue, 函数返回类型是 ~std::string&&~, 返回对象类型右值的函数调用是 xvalue
+- ~s + " world"~: prvalue, ~std::string~ 的 ~operator+~ 返回新的 ~std::string~ 对象，返回类型是非引用，所以是 prvalue
+** B组: 判断调用哪个重载
+#+begin_src cpp
+  #include <iostream>
+  #include <string>
+  #include <utility>
+
+  void f(std::string &s) { std::cout << "string&\n"; }
+  void f(const std::string &s) { std::cout << "const string&\n"; }
+  void f(std::string &&s) { std::cout << "string&&\n"; }
+  std::string make();
+
+  int main() {
+    std::string s = "hello";
+    const std::string cs = "const";
+    std::string &&rr = std::string{"temp"};
+
+    f(s);
+    f(cs);
+    f(std::string{"abc"});
+    f(make());
+    f(std::move(s));
+    f(rr);
+    f(std::move(rr));
+  }
+#+end_src
+要求: 写出每行输出，并解释为什么.
+*** 解答:
+输出为:
+#+begin_example
+string&
+const string&
+string&&
+string&&
+string&&
+string&
+string&&
+#+end_example
+
+因为:
+- ~f(s)~: ~string&~, 因为 ~s~ 是 lvalue, 传递给第一个函数
+- ~f(cs)~: ~string&&~, 因为 ~cs~ 是 const lvalue, 传递给第二个函数
+- ~f(std::string{"abc"})~: ~string&&~, 参数是 prvalue, 因此会传递给 ~f(std::string &&s)~
+- ~f(make())~: ~string&&~, ~make()~ 的返回值是 prvalue, 因此会传递给第三个函数
+- ~f(std::move(s))~: ~string&&~, 因为 ~std::move(s)~ 会返回一个 xvalue
+- ~f(rr)~: ~string&~, 因为 ~rr~ 是 lvalue
+- ~f(std::move(rr))~: ~string&&~, 因为 ~std::move(rr)~ 会返回一个 xvalue
+** C组: ~std::move~ 是否真的在移动
+判断下面每一行是复制还是移动。
+#+begin_src cpp
+  #include <string>
+  #include <utility>
+
+  int main() {
+    std::string a = "hello";
+    const std::string ca = "world";
+
+    std::string b = a;
+    std::string c = std::move(a);
+    std::string d = ca;
+    std::string e = std::move(ca);
+  }
+#+end_src
+*** C组解答
+- ~std::string b = a;~: 复制
+- ~std::string c = std::move(a);~: 移动
+- ~std::string d = ca;~: 复制
+- ~std::string e = std::move(ca);~: 复制，因为 const 的对象一般不能被移动，因为移动通常要修改对象
+** D组: 右值引用参数为什么还要 ~std::move~
+写一个 ~Tracker~ 类型，打印复制/引用:
+#+begin_src cpp
+  #include <iostream>
+  #include <string>
+  #include <utility>
+
+  struct Tracker {
+    std::string name;
+
+    Tracker(std::string n) : name{std::move(n)} { std::cout << "ctor\n"; }
+    Tracker(const Tracker &other) : name{other.name} {
+      std::cout << "copy ctor\n";
+    }
+    Tracker(Tracker &&other) noexcept : name{std::move(other.name)} {
+      std::cout << "move ctor\n";
+    }
+  };
+
+  void consume(Tracker t) {}
+
+  void test_bad(Tracker &&t) { consume(t); }
+
+  void test_good(Tracker &&t) { consume(std::move(t)); }
+
+  int main() {
+    test_bad(Tracker{"A"});
+    test_good(Tracker{"B"});
+    return 0;
+  }
+#+end_src
+编译运行结果是:
+#+begin_quote
+ctor
+copy ctor
+ctor
+move ctor
+#+end_quote
+*** D组解答
+~test_bad(Tracker{"A"})~:
+
+第一步会先创建 ~Tracker{"A"}~ 的对象，调用普通构造函数，所以打印 "ctor". 此时会有一个 Tracker 的临时对象(prvalue), name = "A" 。
+
+第二步会绑定到 ~test_bad~ 的参数 ~t~, 因为 ~Tracker &&t~ 是右值引用参数，所以可以发生绑定。但是， *绑定引用不会创建新的 ~Tracker~ 对象* ，所以这里不会触发构造函数里的打印，只是参数 ~t~ 引用那个构建的临时对象。
+
+第三步会传递给 ~consume(t)~ 。这里，虽然 ~t~ 的类型是 ~Tracker &&~, 但是它是由名字的表达式，因此其值类型为 lvalue. 所以，这里的实际含义是: 用一个 lvalue Tracker 去初始化 ~consume(Tracker t)~ 的形参。而 ~consume~ 的形参是按值接收，所以会构造一个新的 ~Tracker~ 对象，调用拷贝构造，打印 "copy ctor" .
+
+因此第一段总输出为:
+#+begin_quote
+ctor
+copy ctor
+#+end_quote
+
+~test_good(Tracker{"B"})~
+
+创建临时对象和绑定到 ~Tracker &&~ 都与 ~test_bad~ 一致。
+
+~consume(std::move(t))~ 这里和 ~test_bad~ 的区别在于，该语句的作用不是 “立即移动”，(~std::move~ 本身也不会立即移动) ，而是将表达式 ~t~ 转换为 xvalue 。而 ~consume(Tracker t)~ 会按值接受这个 xvalue, 现在会用一个 xvalue 初始化 ~consume~ 的形参，重载会优先选择移动构造函数: ~Tracker(Tracker &&other) noexcept~ ，因此会打印 "move ctor".
+
+所以第二段总输出:
+#+begin_quote
+ctor
+move ctor
+#+end_quote
+
+这里比较重要的一个规则是: xvalue 如果有名字，就会被当作 lvalue 处理。
+
+这也是为什么移动构造函数内部还需要写:
+#+begin_src cpp
+  Tracker(Tracker &&other) : name{std::move(other.name)}{}
+#+end_src
+因为即便 ~other~ 是 ~Tracker&&~ 右值引用，但是仍然是 lvalue, 如果不写 ~std::move~ 将其转换为 xvalue, 成员 ~name~ 仍然是复制，而不是移动。
+** E组: 实现一个 move-only 类型
+实现一个简化版的 ~UniqueInt~:
+
+#+begin_src cpp
+  class UniqueInt {
+  public:
+    explicit UniqueInt(int value);
+    ~UniqueInt();
+
+    UniqueInt(const UniqueInt&) = delete;
+    UniqueInt& operator=(const UniqueInt&) = delete;
+
+    UniqueInt(UniqueInt &&other) noexcept;
+    UniqueInt& operator=(UniqueInt &&other) noexcept;
+
+    int get() const;
+    bool empty() const;
+
+  private:
+    int *ptr_{};
+  };
+#+end_src
+要求:
+1. 构造时 ~new int{value}~
+2. 析构时 ~delete ptr_~
+3. 移动构造后，源对象 ~ptr_~ 变成 ~nullptr~
+4. 移动赋值要自动处理自赋值
+5. 禁止复制
+*** E组解答:
+具体实现可以参照 [[file:~/Learning/projects/cpp-primer/exercises_with_chapters/chapter4/UniqueInt.hpp][UniqueInt.hpp]] [[file:~/Learning/projects/cpp-primer/exercises_with_chapters/chapter4/UniqueInt.cpp][UniqueInt.cpp]] [[file:~/Learning/projects/cpp-primer/exercises_with_chapters/chapter4/vcE.cpp][vcE.cpp]]
+
+我们上面的函数使用的是 Rule of Five. 因为它直接拥有一个裸指针 ~int *ptr_{};~ ，而这个裸指针指向的是动态分配资源:
+
+#+begin_src cpp
+  ptr_ = new int{value};
+#+end_src
+所以类必须负责释放该资源: ~delete ptr_;~
+
+一旦类自己负责释放资源，就必须考虑:
+- 析构时怎么释放
+- 复制时怎么办
+- 赋值时怎么办
+- 移动时怎么办
+- 移动赋值时怎么办
+
+
+如果只写析构函数，不处理函数，那么默认拷贝会出大问题。例如默认拷贝大概会这样做:
+#+begin_src cpp
+  UniqueInt a{42};
+  UniqueInt b = a; // 如果允许默认拷贝
+#+end_src
+结果就是:
+#+begin_quote
+a.ptr_ 和 b.ptr_ 指向同一个 int
+#+end_quote
+然后 ~a~ 和 ~b~ 析构时都会:
+#+begin_src cpp
+  delete ptr_;
+#+end_src
+那么同一块内存会释放两次，行为未定义。所以我们必须禁止复制:
+#+begin_src cpp
+  UniqueInt(const UniqueInt &) = delete;
+  UniqueInt &operator=(const UniqueInt &) = delete;
+#+end_src
+但是我们又希望它能转移所有权，所以写移动构造和移动赋值:
+#+begin_src cpp
+  UniqueInt(UniqueInt &&other) noexcept;
+  UniqueInt &operator=(UniqueInt  &&other) noexcept;
+#+end_src
+这就是 Rule of Five 的典型动机: *类直接管理资源时，编译器默认生成的特殊成员函数通常不再安全* 。
+
+** F组: Rule of Zero 改写
+将上一题中的 ~UniqueInt~ 改写为:
+#+begin_src cpp
+  #include <memory>
+  class UniqueInt {
+  public:
+    explicit UniqueInt(int value);
+
+    int get() const;
+    bool empty() const;
+
+  private:
+    std::unique_ptr<int> ptr_;
+  };
+#+end_src
+
+*** F组解答
+要把上面的 ~UniqueInt~ 改写为 Rule of Zero 的话，就不能让这个类拥有裸指针，而是把所有权交给标准库资源管理对象。也就是把其中的 ~int *ptr_{}~ 换成 ~std::unique_ptr<int> ptr_~.
+
+这个对象本身就是一个“独占所有权”的 RAII 模型，它会自动:
+- 析构时 delete
+- 禁止复制
+- 允许移动
+- 移动后源 unique_ptr 变成 null
+- 移动赋值时释放旧资源并接管新资源
+
+
+** G组: 构造函数中的移动
+实现:
+#+begin_src cpp
+  #include <string>
+  #include <vector>
+
+  class User {
+  public:
+      User(std::string name, std::vector<int> scores);
+
+  private:
+      std::string name_;
+      std::vector<int> scores_;
+  };
+#+end_src
+要求:
+1. 参数按值传递
+2. 在初始化列表中 move 到成员
+3. 解释传 lvalue 和 rvalue 时分别发生什么
+
+
+*** G组解答
+#+begin_src cpp
+  #include <string>
+  #include <vector>
+  #include <utility>
+
+  class User {
+  public:
+    User(std::string name, std::vector<int> scores)
+    : name_{std::move(name)}, scores_{std::move(scores)} {}
+
+  private:
+    std::string name_;
+    std::vector<int> scores_;
+  };
+
+  int main() {
+    std::string name = "Alice";
+    std::vector<int> scores = {90, 95, 100};
+
+    User u1{name, scores};
+    User u2{std::move(name), std::move(scores)};
+
+  }
+#+end_src
+- ~u1~ 初始化时， ~name~ 和 ~scores~ 会按值传递给构造器，也就是传递一份拷贝。接着会在构造器内，这些形参拷贝会发生移动，初始化该对象。但并不会影响到主程序中的 ~name~ 和 ~scores~
+- ~u2~ 初始化时，传入的参数就是 ~std::move(name)~, 也就是说传入时已经被移动了，这两个参数被强制转换为 xvalue, 主程序中这两个变量的内容不应再被假设。
+  - 接着这两个 xvlaue 作为参数进入构造函数，因为它们现在有名字了，所以依然成为 lvalue, 因此在移动语义中仍然需要 ~std::move~
+
+
+这种按值传递的构造函数写法，和按右值引用传递的写法的区别:
+
+~User(std::string name, std::vector<int> scores) : name_{std::move(name)}, scores_{std::move(scores)} {}~ 这是按值传递的写法。这种写法的语义是:
+
+#+begin_quote
+~User~ 最终要保留一份自己的 ~name_~ 和 ~scores_~ 。如果调用者传递 lvalue, 我复制一份；如果调用者传递 rvalue, 我就移动进来
+#+end_quote
+
+而右值引用写法:
+
+~User(std::string &&name, std::vector<int> &&scores) : name_{std::move(name)}, scores_{std::move(scores)} {}~ 的语义是:
+
+#+begin_quote
+这个构造函数只接受 “可被消耗” 的参数。调用者必须传临时对象，或者显式写 ~std::move~ ，表示愿意放弃原对象的内容。
+#+end_quote
+

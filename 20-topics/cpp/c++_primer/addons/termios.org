@@ -1,0 +1,54 @@
+#+title: TerminalMode 短总结
+#+author: yurikon
+#+language: zh-cn
+#+date: <2026-07-01 三>
+
+根据我的项目，新建了一个 ~TerminalMode~ 类: [[file:~/Learning/projects/snake-tui/src/terminal_mode.hpp][terminal_mode.hpp]] [[file:~/Learning/projects/snake-tui/src/terminal_mode.cpp][terminal_mode.cpp]]
+* 目的
+- 默认终端是 canonical mode, 输入按照行提交，所以必须按 enter
+- 贪吃蛇需要按键立即生效，所以用 POSIX ~termios~ 把终端切到 *non-canonical mode* .
+
+
+核心代码结构如头文件所示。
+
+C++ *RAII* 思路: 构造时修改外部状态，析构时恢复外部状态。终端模式虽然不是内存资源，但也是必须恢复的外部状态。
+* 关键符号
+
+- ~termios~: 保存终端配置的结构
+- ~tcgetattr(fd, &old_)~: 获取当前终端属性
+- ~tcsetattr(fd, TSCANOW, &now)~: 设置新的终端属性，  ~TSCANOW~ 表示立即生效
+- ~STDIN_FILENO~: 标准输入的文件描述符，值为 ~0~, 对应 ~stdin~
+- ~ICANON~: canonical mode 的开关；关闭后不再等 Enter
+- ~ECHO~: 输入回显开关；关闭后按键不再直接显示到终端
+- ~VMIN~: non-canonical mode 下， ~read()~ 返回前至少需要读到的字节数
+- ~VTIME~: non-canonical mode 下, ~read()~ 的超时控制，单位通常是十分之一秒
+- ~read(STDIN_FILENO, &ch, 1)~: 从标准输入最多读取1个字节
+
+
+当前项目采用:
+#+begin_src cpp
+  now.c_lflag &= static_cast<tcflag_t>(~(ICANON | ECHO));
+  now.c_cc[VIMN] = 0;
+  now.c_cc[VTIME] = 0;
+#+end_src
+含义是:
+- 关闭 ICANON: 不用按 Enter, 逐字符读取
+- 关闭 ECHO: 按下的按键不再直接显示在终端上
+- ~VMIN = 0, VTIME = 0~: ~read()~ 不阻塞，没有输入就立即返回0
+
+
+注意事项:
+1. 这是 POSIX 接口，不是标准 C++
+2. Linux / macOS / BSD 可用； windows 需要另一套 Console API
+3. 暂时不要关闭 ISIG, 这样程序仍然可以通过 Ctrl-C 中断程序
+* 日后阅读索引
+Linux man-pages:
+- [[https://man7.org/linux/man-pages/man3/termios.3.html]]
+- [[https://man7.org/linux/man-pages/man2/read.2.html]]
+- [[https://man7.org/linux/man-pages/man3/stdin.3.html]]
+
+
+POSIX/The Open Group:
+- [[https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap11.html][Gernel Terminal Interface]]
+- [[https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/termios.h.html][termios.h]]
+- [[https://pubs.opengroup.org/onlinepubs/9699919799/functions/read.html][read()]]

@@ -22,8 +22,9 @@
 - [[file:../20-topics/rust-regex/index.org][Rust Regex]]
 - [[file:../20-topics/tools/index.org][Some Tools]]
 - [[file:../20-topics/emacs-org/index.org][Emacs ORG]]
+- [[file:../20-topics/cpp/c++_primer/index.org][C++ Primer]]
+- [[file:../20-topics/ocaml/index.org][OCaml]]
 
 * 项目
-- [[file:../30-projects/todo-task/index.org][todo-task]]
-- [[file:../30-projects/task-runner/index.org][task-runner]]
-- [[file:../30-projects/minishop/index.org][MiniShop]]
+- [[file:~/Learning/projects/cpp-primer/][c++ primer]]
+- [[file:~/Learning/projects/cs3110-ocaml-nix/][cs3110 ocaml]]
