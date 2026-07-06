@@ -891,6 +891,9 @@ this pattern-matching is not exhaustive.
 
 -----
 * ~function~: 立即匹配的语法糖
+:PROPERTIES:
+:ID:       7f102180-9e83-4c9b-8f1d-10384f083bc5
+:END:
 下面的函数:
 
 #+begin_src ocaml
