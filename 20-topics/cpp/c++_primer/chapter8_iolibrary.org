@@ -1,0 +1,419 @@
+#+title: The IO Library
+#+author: yurikon
+#+language: zh-ch
+* IO Library 核心结论
+
+本章可以压缩为三条主线:
+1. 所有 IO 都是 stream-oriented IO
+2. IO 对象有状态 condition state
+3. 文件流 file stream 和字符串流 string stream 是 istream/ostream 的扩展
+
+IO 是 “可替换的数据流接口”。
+
+C++本身不处理输入输出，标准库用一组 stream 类型处理终端、文件、字符串内存缓冲区IO等。
+
+这一章节的主线就是将 ~cin/cout~ 扩展到 ~ifstream/ofstream~ 和 ~istringstream/ostringstream~ 。
+
+#+begin_src cpp
+  void process(std::istream &in, std::ostream &out);
+#+end_src
+
+只要函数接受的是 ~istream&~ 和 ~ostream&~, 它就可以同时处理:
+#+begin_src cpp
+  process(std::cin, std::cout); // 终端
+  process(file_in, file_out); // 文件
+  process(string_in, string_out); // 字符串流
+#+end_src
+
+*输入输出逻辑不要绑死在 ~std::cin/std::cout~ 上，可以抽象成 stream 参数* 。
+*  IO Library 练习点
+** IO Classes
+*** ~iostate~
+传递关于流的状态。包含四个 ~constexpr~ 的值，每个代表一个 bit 模式。
+
+这些值用于表示一个特定的 IO 条件。
+
+- ~badbit~: 指示系统层级的失败。比如无法恢复的读取或写错误。
+- ~failbit~: 表示可恢复的错误发生，比如期望读取数字却读取到了字符。这些是可以被修复的，并在之后仍然可以ishiyogn这个流。
+- ~eofbit~: 读到文章末尾会同时设置 ~eofbit~ 和 ~failbit~ 。
+- ~goodbit~: 被保证为 0. 表示流中没有错误。
+
+
+如果 ~badbit~, ~failbit~, ~eofbit~ 中的任何一个被设置，则流的条件求值为 fail.
+*** ~rdstate~
+
+~rdstate~ 返回当前流的 ~iostate~ ，表示流的当前状态。
+
+~setstate~ 打开给定的条件 bit, 以表示该位代表的错误已经发生。
+
+~clear~ 能清理所有failure bits.
+*** Managing the Output Buffer
+#+begin_src cpp
+  os << "please enter a value: ";
+#+end_src
+字符串可能立即被打印，或者操作系统可能会将数据存放在一个 buffer里，之后被打印。
+
+使用 buffer 能够让操作系统将来自我们程序的 ouput operation 整合进单条系统级别的写操作。这能提供更好的性能。
+
+~flush~: 刷新
+
+有几种可以将 buffer flush 到输出设备或文件的方法:
+
+- 程序正常结束。所有 ouput buffers 都会被输出，作为 ~main~ 的 ~return~ 的一部分。
+- 在某些事件，一个 buffer 可能会装满。这时就会在写下一个值之前输出。
+- 可以使用 ~endl~ 之类的操作显式打印buffer
+- 使用 ~unitbuf~ 可以将流的内部状态设置为每次输出后清空 buffer. 默认状态下， ~unitbuf~ 已经被设置到 ~cerr~, 因此对 ~cerr~ 的写入操作会立即刷新buffer
+- 一个输出流可能与另一个流相关联。向其中一个流读取或写入时，其关联的流就会被 flush. 默认情况下， ~cin~ 和 ~cerr~ 都与 ~cout~ 关联，因此读取 ~cin~ 或写入 ~cerr~ 都会刷新 ~cout~ 的 buffer.
+
+  
+#+begin_src cpp
+  cout << "hi" << endl; // 写 hi 和一个新行，并刷新 buffer
+  cout << "hi" << flush; // 写 hi 并不添加字符，并刷新 buffer
+  cout << "hi" << end; // 写 hi 和添加一个 null, 并刷新 buffer
+#+end_src
+*** ~unitbuf~
+如果想在每次输出后都刷新的话，可以使用 ~unitbuf~. ~noununitbuf~ 可以恢复到正常的使用，即由系统管理 buffer 刷新:
+#+begin_src cpp
+  cout << unitbuf; // all writes will be flushed immediately
+  cout << nounintbuf; // return to normal buffering
+#+end_src
+*** ~tie~
+
+绑定。当输入流绑定到输出流时，任何尝试读取输入流的操作都会先刷新输出流的 buffer 。IO 库将 ~cin~ 绑定到 ~cout~, 因此 ~cin >> ival~ 会先刷新其关联的 ~cout~ 。
+
+~tie~ 有两个重载:
+- 无参数: 返回指向输出流的指针。如果绑定了对象，则该指针指向该对象；如果流并没有绑定，则返回空指针。
+- 有参数: 接收一个指向输出流的指针，并将自身绑定到该输出流。比如: ~x.tie(&o)~ 将自身绑定到输出流 ~o~ 。
+
+
+#+begin_src cpp
+  cin tie(&cout); // 库已经为我们将 cin 与 cout 绑定
+
+  ostream *old_tie = cin.tie(nullptr); // cin 不再绑定
+
+  cin.tie(&cerr); // 将 cin 与 cerr 绑定，读取 cin 将刷新cerr, 不会刷新 cout
+  cin.tie(old_tie); // 重新将cin与cout绑定
+#+end_src
+** File Input and Output
+~fstream~ 头文件定义三种支持文件 IO 的类型:
+- ~ifstream~: 读取给定文件
+- ~ofstream~: 写入给定文件
+- ~fstream~: 读写给定文件
+* IO 类型体系
+三组文件:
+#+begin_src cpp
+  #include <iostream> // cin, cout, istream, ostream
+  #include <fstream> // ifstream, ofstream, fstream
+  #include <sstream> // istringstream, ostringstream, stringstream
+#+end_src
+~ifstream~ 和 ~istringstream~ 可以当做 ~istream~ 用， ~ofstream~ 和 ~ostringstream~ 可以当做 ~ostream~ 用。这来自继承关系，所以同一个函数可以处理终端、文件和字符串流。
+* IO 对象不能拷贝，必须传递引用
+错误:
+#+begin_src cpp
+  std::ostream f(std::ofstream out); // error
+#+end_src
+正确:
+#+begin_src cpp
+  std::istream &read(std::istream &is);
+  std::ostream &write(std::ostream &os);
+#+end_src
+IO 对象管理外部状态：终端、文件描述符、缓冲区、状态位等。函数一般不要按值接收会返回 stream 对象，而应该通过 *non-const reference* 传递。读写会改变流状态，因此不能用 ~const std::istream&~ .
+* condition state: 流状态是 IO 的核心
+** 为什么需要状态
+IO 天然可能失败。进入错误状态后，后续读取会继续失败，直到程序员修复状态。只有当流处于 non-error state 时，才能继续读写；所以写代码要经常检查流状态。
+
+最常用的检查方式:
+
+#+begin_src cpp
+  while (cin >> word) {
+    // ...
+  }
+#+end_src
+这个循环有三种可能终止:
+1. 遇到 EOF
+2. 格式错误
+3. 底层设备错误，例如文件/终端不可用
+** 四个状态位
+~std::ios_base::iostate~ 表示流状态，它是一个 bitmask type(位掩码类型)。常见状态有:
+- ~goodbit~: 没有错误，值保证为 0
+- ~eofbit~: 遇到 EOF
+- ~failbit~: IO 操作失败，常见于格式错误
+- ~badbit~: 流损坏或系统级错误，通常不可恢复
+
+
+~s.fail()~ 在 ~failbit~ 或 ~badbit~ 被设置时都会返回 ~true~, 所以判断整体是否可用，常用:
+#+begin_src cpp
+  if (in) { ... } // 等价于检查流是否未失败
+  if (!in) { ... }
+  if (in.fail()) { ... }
+  if (in.good()) { ... }
+#+end_src
+** ~clear~ 只清除状态，不清除缓冲区
+~std::cin.clear()~ 只清除错误状态，不会把错误输出从缓冲区中删除。正确的恢复模式通常是:
+#+begin_src cpp
+  #include <iostream>
+  #include <limits>
+
+  int read_int() {
+    int x{};
+    while (true) {
+      if (std::cin >> x) {
+        return x;
+      }
+      if (std::cin.eof()) {
+        throw std::runtime_error("end of input");
+      }
+      std::cin.clear();
+
+      std::cin.ignore(
+  		    std::numeric_limits<std::streamsize>::max(),
+  		    '\n'
+  		    );
+      std::cout << "Please enter an integer";
+      
+    }
+  }
+#+end_src
+读到 EOF 或终止符后如何继续后续处理:
+
+*如果只是要后续处理结果，不必恢复 ~cin~; 如果还想继续从同一个流读取，就需要 ~clear()~, 并根据情况丢弃无效输入* .
+* output buffer: 输出缓冲区
+** 为什么有 buffer
+每个输出流都有 output buffer. 程序写出内容时，数据不一定立刻到终端或文件，而可能先进入缓冲区。这样操作系统可以合并多次小写入，减少系统调用，提高性能。书中列出多种触发 flush(刷洗缓冲区) 的情况：程序正常结束、缓冲区满、显式使用 ~endl~ 等 manipulator、使用 ~unitbuf~ 、或者输入输出流绑定导致刷新。
+** ~'\n'~, ~std::endl~, ~std::flush~ 的区别
+#+begin_src cpp
+  std::cout << "hello'\n"; // 换行，不强制flush
+  std::cout << "hello" << std::endl; // 换行，强制 flush
+  std::cout << "hello" << std::flush; // 不换行，强制 flush
+  std::cout << "hello" << std::ends; // 插入 '\0', 并 flush
+#+end_src
+现代C++约定优先使用 ~'\n'~ 。不要频繁使用 ~std::endl~, 这会强制 flush,可能明显降低性能。
+
+交互式提示必须立刻显示，这时才需要强制 flush 。
+** tie: 输入流和输出流绑定
+默认情况下， ~std::cin~ 和 ~std::cerr~ 都绑定到 ~std::cout~. 读取 ~std::cin~ 前， ~std::cout~ 会先 flush。
+
+#+begin_src cpp
+  std::cout << "Enter a number: ";
+  std::cin >> x;
+#+end_src
+即便没有 flush 输出缓冲区，仍然能立即显示提示。交互式系统应该把输入流绑定到输出流，这能保证信息在读取前被写出。
+
+可以查看或修改绑定:
+#+begin_src cpp
+  std::ostream *old = std::cin.tie(nullptr); // untie
+  std::cin.tie(old); // restore
+#+end_src
+* File Input and Output
+** 三种文件流
+#+begin_src cpp
+  std::ifstream input{"data.txt"}; // read from file
+  std::ofstream output{"out.txt"}; // write to file
+  std::fstream file{"data.txt"}; // read and write
+#+end_src
+它们和 ~cin~ / ~cout~ 一样支持 ~<<~,  ~>>~, ~getline~ 等分词操作，也额外支持 ~open~, ~close~, ~is_open~ 等文件管理操作。
+
+现代C++推荐这样检查文件是否打开成功:
+#+begin_src cpp
+  #include <fstream>
+  #include <iostream>
+  #include <string>
+
+  int main() {
+    std::ifstream in{"input.txt"};
+    if (!in) {
+      std::cerr << "cannot open input.txt\n";
+      return 1;
+    }
+
+    std::string line;
+    while(std::getline(in, line)) {
+      std::cout << line << '\n';
+    }
+  }
+#+end_src
+** RAII: 文件流析构时自动 close
+当 ~fstream~ 对象被销毁时，会自动调用 ~close~. 所以局部文件流对象非常适合 RAII(Rescources Acequisition Is Initialization, 资源获取即初始化)风格:
+#+begin_src cpp
+  void process_file(const std::string &filename) {
+    std::ifstream in{filename};
+    if (!in) {
+      std::cerr << "cannot open: " << filename << '\n';
+      return;
+    }
+
+    // use in
+  } // in leaves scope, file closed automatically;
+#+end_src
+一般不需要手动 ~close()~, 除非你需要在同一个流对象上打开另一个文件:
+#+begin_src cpp
+  std::ifstream in;
+  in.open("a.txt");
+
+  // ...
+  in.close();
+
+  in.open("b.txt");
+  // ... 
+#+end_src
+如果流已经打开，再调用 ~open~ 会失败并设置 ~failbit~, 若要把同一个文件流绑定到另一个文件，则必须先 ~close~ 。
+* file mode: 文件打开模式
+文件流有 file mode, 决定文件如何打开。
+#+begin_src cpp
+  std::ios::in; // open for input
+  std::ios::out; // open for output
+  std::ios::app; // append before every write
+  std::ios::ate; // seek to end immediately after open
+  std::ios::trunc; // truncate file
+  std::ios::binary; // binary mode
+#+end_src
+** 最危险的默认行为: ~ofstream~ 默认截断文件
+#+begin_src cpp
+  std::ofstream out{"log.txt"};
+#+end_src
+这会默认以 ~out | trunc~ 打开，原文件内容会被清空。书中专门强调: 以 ~out~ 模式打开 ~ofstream~ 默认会丢弃已有数据；若要保留旧内容，要显式使用 ~app~ 或某些读写组合模式。
+
+追加写:
+#+begin_src cpp
+  std::oftream log{"log.txt", std::ios::app};
+
+  if (!log) {
+    std::cerr << "cannot open log.txt'\n";
+  }
+
+  log << "new record\n";
+#+end_src
+** ~app~ 和 ~ate~
+- ~std::ios::app~: 每次写入都定位到文件末尾
+- ~std::ios::ate~: 打开后立即定位到文件末尾，但之后可以 seek 到别处
+
+
+所以:
+#+begin_src cpp
+  std::ofstream out{"x.txt", std::ios::app};
+#+end_src
+适合日志追加。
+#+begin_src cpp
+  std::fstream file{"x.txt", std::ios::in | std::ios::out | std::ios::ate};
+#+end_src
+适合打开后先到末尾，但之后可能随机移动位置。
+** ~binary~ 不等于自动序列化对象
+~bianry mode~ 只要影响底层字符转换，例如 Windows 上文本模式可能处理换行转换。它不意味着可以安全地把任意 C++ 对象内存直接写入文件再读回来。复杂对象涉及 padding(填充字节)、 endianness(字节序)、指针、版本兼容、对象不变量等问题。
+* string stream: 字符串流
+~sstream~ 允许把一个 ~std::string~ 当作字符串来读写.
+#+begin_src cpp
+  std::istringstream iss{"10 20 30"};
+
+  int a{}, b{}, c{};
+  iss >> a >> b >> c;
+#+end_src
+它适合两层解析:
+1. 先用 ~std::geline()~ 读取整行
+2. 再用 ~std::istringstream~ 解析这一行内部的单词或字段
+** ~istringstream~: 从字符串读取
+#+begin_src cpp
+  #include <sstream>
+  #include <string>
+  #include <vector>
+
+  std::vector<int> parse_ints(const std::string &line) {
+    std::istringstream iss{line};
+    std::vector<int> result;
+    int x{};
+    while (iss >> x) {
+      result.push_back(x);
+    }
+    return result;
+  }
+#+end_src
+** 复用 stringstream 要同时 reset 字符串和状态
+错误风险:
+#+begin_src cpp
+  std::isringstream record;
+  while(std::getline(in, line)) {
+    record.str(line);
+    // 可能还保留上一次 eof/fail 状态
+  }
+#+end_src
+更稳妥:
+#+begin_src cpp
+  std::istringstream record;
+  while (std::getline(in, line)) {
+    record.clear(); // reset condition state
+    record.str(line); // replace underlying string
+
+    // parse record
+  }
+#+end_src
+因为 ~.str(line)~ 只是替换内部字符串；如果上一次遇到 EOF ，流状态仍然可能是失败状态。
+** ~ostringstream~: 逐步构造字符串
+~std::ostringstream~ 适合 “先把输出拼好，最后再决定是否打印”。例如:
+#+begin_src cpp
+  #include <sstream>
+  #inlcude <string>
+
+  std::string make_message(const std::string &name, int score) {
+    std::ostringstream oss;
+    oss << "name=" << name << ", score=" << score;
+    return oss.str();
+  }
+#+end_src
+如果只是简单拼接，则 ~std::string~, ~std::format~, ~std::print~ 可能更直接。但是 ~ostringstream~ 是最统一、最容易和已有 ~<<~ 输出接口结合的做法。
+* IO Library 实践约定
+** 通用 IO 函数优先接受引用
+#+begin_src cpp
+  void process(std::istream &in, std::ostream &out);
+#+end_src
+这样可以用于:
+#+begin_src cpp
+  process(std::cin, std::cout);
+  std::ifstream fin{"input.txt"};
+  std::ofstream fout{"output.txt"};
+  process{fin, fout};
+
+  std::istringstream sin{"1 2 3"};
+  std::ostringstream sout;
+  process{sin, sout};
+#+end_src
+** 输出换行优先使用 ~'\n'~
+#+begin_src cpp
+  std::cout << value << '\n';
+#+end_src
+** 文件路径优先考虑 ~std::filesystem::path~
+C++17 之后可以使用:
+#+begin_src cpp
+  #include <filesystem>
+  #include <fstream>
+
+  namespace fs = std::filesystem;
+
+  void read_file(const fs::path &path) {
+    std::ifstream in{path};
+
+    if(!in) {
+      throw std::runtime_error{"cannot open file"};
+    }
+  }
+#+end_src
+这比到处传递 ~std::string~ 更适合跨平台路径处理。
+** 解析数字时要知道 stringstream 不是最快方案
+~std::stringstream~ 好用，统一、适合学习和普通业务代码。但性能敏感场景，比如大量日志解析、协议解析、算法竞赛输入，可能会考虑:
+#+begin_src cpp
+  std::from_chars
+#+end_src
+这是C++17的低层数字转换接口，不分配内存、不依赖 locale(区域设置)，但使用门槛更高。 *stringstream 是通用、安全、表达清楚； from_chars 是性能取向* 。
+** 不要把 IO 和业务逻辑混同
+不推荐:
+#+begin_src cpp
+  void process_file_named_input_txt();
+#+end_src
+更推荐:
+#+begin_src cpp
+  void process(std::stream &in, std::ostream &out);
+#+end_src
+再由外层打开文件:
+#+begin_src cpp
+  std::ifstream in{"input.txt"};
+  std::ostream out{"output.txt"};
+  process(in, out);
+#+end_src

@@ -1,0 +1,54 @@
+#+title: Generic Algorithms
+#+author: yurikon
+#+language: zh-cn
+* Generic Algorithms (泛型算法)
+
+标准库算法是一套建立在 iterator / range 之上的通用序列操作语言。容器本身只提供少量基础操作，而大量查找、统计、替换、复制、排序、去重等工作交给泛型算法去完成。这些算法通常不直接操作容器，而是通过一对迭代器表示的范围工作。
+* 泛型算法总纲
+算法不是容器成员，而是 “范围上的函数”。
+
+传统写法通常是:
+#+begin_src cpp
+  std::vector<int> v{1, 4, 2, 9, 4};
+  auto it = std::find(v.begin(), v.end(), 4);
+#+end_src
+~std:find~ 不知道 ~v~ 是 ~vector~ 、 ~list~ 、数组还是某个自定义容器，它只知道:
+#+begin_src cpp
+  [first, last)
+#+end_src
+也就是一个左闭右开范围 *(half-open range)* .
+
+这种设计有三个重要后果:
+1. 算法和容器解耦。只要某个对象能提供合适的迭代器，算法就能工作，内置数组也可以。
+2. 算法依赖的是 *迭代器能力 (iterator capability)*, 不是容器的名字。比如 ~std::find~ 只需要能逐个读取元素，所以 ~vector~, ~list~, ~forward_list~ 都可以；而 ~std::sort~ 需要随机访问迭代器，所以不能直接用于 ~std::list~ 。
+3. 泛型算法本身一般不会改变容器大小。它可以修改元素值、移动元素位置，但不会直接调用 ~push_back~, ~erase~, ~insert~ 等这类容器操作。算法以迭代器为基础，不能直接添加或删除容器元素；即是用了 ~back_inserter~, 真正扩容的是插入迭代器调用容器操作，而不是算法本身。
+
+
+#+begin_quote
+算法操作的是序列视图，不是容器对象本身
+#+end_quote
+* 算法的分类
+** 只读算法 (read-only algorithms)
+这些算法读取元素，不修改元素。
+
+常见有:
+#+begin_src cpp
+  std::find;
+  std::find_if;
+  std::count;
+  std::count_if;
+  std::accumulate;
+  std::equal;
+  std::all_of;
+  std::any_of;
+  std::none_of;
+#+end_src
+例子:
+#+begin_src cpp
+  std::vector<int> v{1, 2, 3, 4, 5, 6, 7};
+  auto n = std::count(v.cbegin(), v.cend(), 2);
+#+end_src
+对于只读算法，优先使用:
+#+begin_src cpp
+  v.cbegin(), v.cend();
+#+end_src

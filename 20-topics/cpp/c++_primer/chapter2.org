@@ -3406,6 +3406,9 @@ C++ Primer 对 object 使用宽泛定义: *object 是一块具有类型的内存
 #+end_src
 对类类型对象，默认初始化由类自己决定。例如 ~std::string s~ 会得到空字符串，因为 ~std::string~ 定义了自己的默认构造行为。
 ** 声明、定义与分离编译
+:PROPERTIES:
+:ID:       f55e22b4-3292-48ec-9af4-14e9f60ceed4
+:END:
 C++ 区分 declaration 和 definition:
 #+begin_src cpp
   extern int x; // 声明，不定义

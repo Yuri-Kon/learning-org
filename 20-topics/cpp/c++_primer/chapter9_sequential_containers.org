@@ -1,0 +1,414 @@
+#+title: Sequential Containers
+#+author: yurikon
+#+language: zh-cn
+* Sequential Containers 总纲
+一个判断框架: *我需要什么顺序、什么访问方式、什么插入删除成本、什么内存布局、什么迭代器稳定性？* 顺序容器 (sequential containers) 把同类型对象组织成严格线性排列。
+
+~array~ 是固定大小的连续容器， ~vector~, ~deque~, ~list~, ~forward_list~ 是本章真正需要反复比较的几类。
+
+现代C++补充了三点：第一，继续使用容器，但配合 ~auto~, ~const_iterator~, ~emplace~, ~erase_if~ 等现代写法；第二，用 ~std::span~ / ~std::string_view~ 表达 “只是观察一段连续数据，但不修改它”；第三，用 C++20 ranges / views 将 “容器 + 迭代器 + 算法” 提升为 “范围 + 惰性视图 + 管道式组合” 。 ~span~ 是 C++20 起的非拥有连续视图；ranges 抽象则通过 ~begin~ / ~end~ 或 sentinel 统一处理可迭代对象，并支持惰性 view 管道。
+* 容器的本质：对象集合 + 所有权 + 操作语义
+标准库容器通常有几个共同点:
+1. 拥有元素 (owning elements)
+
+   ~std::vector<int> v{1, 2, 3};~ 中， ~v~ 拥有三个 ~int~ 元素。容器销毁时，元素也销毁。
+
+2. 值语义 (value semantics)
+
+   容器可以拷贝、赋值、比较、移动
+   #+begin_src cpp
+     std::vector<int> a{1, 2, 3};
+     auto b = a; // 拷贝整个容器
+     auto c = std::move(a); // 移动资源， a 仍有效但值未指定
+   #+end_src
+
+3. 通过迭代器 (iterator) 统一访问
+
+   迭代器是指向容器元素的抽象“位置”。它像指针，但不一定真是指针。标准草案将 iterator 称为指针的泛化，让程序能够以一种统一方式处理不同数据结构。
+
+4. 容器操作有复杂度承诺 (complexity guarantee)
+
+   ~vector~ 尾插通常很快，但中间插入代价高； ~list~ 中间插入删除快，但随机访问差。这些复杂度是选择不同容器的核心。
+* 顺序容器对比表
+
+| 容器                   | 英文               | 内存布局             | 随机访问    | 首位插入删除        | 中间插入删除   |
+|------------------------+--------------------+----------------------+-------------+----------------------+-----------------|
+| ~std::vector<T>~       | dynamic array      | 连续存储 contiguous  | ~O(1)~      | 尾部快，摊还 ~O(1)~ | 慢， ~O(n)~     |
+| ~std::deque<T>~        | double-ended queue | 分段连续 segmented   | ~O(1)~      | 首尾都快             | 中间慢          |
+| ~std::list<T>~         | doubly linked list | 节点式 linked nodes  | 不支持 ~[]~ | 快                   | 已有位置时快   |
+| ~std::forward_list<T>~ | singly linked list | 单链表 singly linked | 不支持 ~[]~ | 头部快               | 只能 after 操作 |
+| ~std::arry<T,N>~       | fixed-size array   | 连续存储 contiguous  | 快          | 不能改变大小        | 不能改变大小   |
+| ~std::string~          | string             | 连续字符序列        | 快          | 类似 vector          | 类似 vector       |
+
+~vector~ 标准描述为支持首尾摊还常量时间插入/删除，中间插入删除线性时间； ~deque~ 支持随机访问，并特别优化首尾插入删除。
+
+*实践上：默认使用 ~std::vector~*
+
+除非明确需要双端高效操作，用 ~deque~; 明确需要节点稳定和 splice, 用 ~list~; 明确只需要单向链表，用 ~forward_list~; 明确固定大小，用 ~array~
+* ~vector~: 最重要的顺序容器
+~std::vector~ 是动态数组。
+#+begin_src cpp
+  std::vector<int> v;
+  v.push_back(1);
+  v.push_back(2);
+  v.push_back(3);
+#+end_src
+逻辑上它是:
+#+begin_quote
+[1][2][3]
+#+end_quote
+并且元素通常连续存储。所以它非常适合:
+#+begin_src cpp
+  v[i]; // 随机访问
+  v.data(); // 获取底层连续数组指针
+  std::span s{v}; // C++20: 将 vector 作为 span 非拥有视图 传入函数
+#+end_src
+
+~vector~ 的难点是 *size* 与 *capacity*:
+- ~size()~: 当前已有元素数量
+- ~capacity~: 当前已分配内存最多能容纳多少元素
+- ~reserve(n)~: 提前申请容量，避免多次扩容
+- ~resize(n)~: 改变元素数量，可能销毁或创建元素
+
+
+~vector~ 扩容时通常会分配一块更大的新内存，并把旧元素移动或拷贝过去，再释放旧内存。这就是为什么 ~push_back~ 是摊还常数时间 (amortized constant time)，而不是每次严格 ~O(1)~.
+* 迭代器失效
+iterator invalidation 迭代器失效 指：手里的 iterator, reference, pointer 因为容器修改而不再指向有效元素。
+
+典型错误是:
+#+begin_src cpp
+  std::vector<int> v{1, 2, 3, 4};
+
+  auto it = v.begin();
+  v.push_back(5); // 可能扩容
+  std::cout << *it; // 可能导致未定义行为
+#+end_src
+如果操作导致容量变化，所有的 iterator 和 reference 都可能失效；如果 ~insert~ / ~erase~ 没有导致重新分配，也会影响插入/删除点之后的位置。 ~vector~ 的失效表指出， ~reserve~ / ~shrink_to_fit~ 在容量改变时全部失效， ~erase~ 使被删元素及其后元素失效， ~push_back~ / ~emplace_back~ 在容量改变时全部失效。
+
+正确写法之一:
+#+begin_src cpp
+  for (auto it = v.begin(); it != v.end(); ) {
+    if (*it % 2 == 0) {
+      it = v.erase(it); // erase 返回下一个有效位置
+    } else {
+      ++it;
+    }
+  }
+#+end_src
+现代 C++20 更推荐:
+#+begin_src cpp
+  std::erase_if(v, [](int x) { return x % 2 == 0; });
+#+end_src
+C++20 的 ~std::erase~ / ~std::erase_if~ 为标准容器提供了非成员删除函数，可替代传统的 erase-remove idiom
+* 初始化: 花括号与圆括号
+
+这也是在之前讨论过的:
+#+begin_src cpp
+  std::vector<int> a(10); // 10 个 int，值为 0
+  std::vector<int> b{10}; // 1 个 int, 值为 10
+
+  std::vector<int> c(10, 20); // 10 个 int, 值为 20
+  std::vector<int> d{10, 20}; // 2 个 int, 值为 10 20
+#+end_src
+花括号初始化 (braced initialization) 会优先匹配 ~std::initializer_list~ 构造函数，也就是会优先匹配列表初始化。
+
+经验规则上:
+#+begin_src cpp
+  std::vector<int> v1(100); // 数量
+  std::vector<int> v2(100, -1) // 数量 + 初值
+  std::vector<int> v3{1, 2, 3}; // 具体元素列表
+#+end_src
+* 通用容器操作
+所有常见容器大致都支持这些操作:
+#+begin_src cpp
+  c.begin();
+  c.end();
+  c.cbegin();
+  c.cend();
+
+  c.empty();
+  c.size();
+  c.max_size();
+
+  c1 = c2;
+  c1 == c2;
+  c1 != c2;
+#+end_src
+现代写法推荐:
+#+begin_src cpp
+  for (const auto &x : c) {
+    // 只读
+  }
+
+  for (auto & x : c) {
+    // 修改
+  }
+#+end_src
+只读遍历时优先使用 ~const auto &~, 需要显式迭代器时，优先使用 ~cbegin()~ / ~cend()~:
+#+begin_src cpp
+  auto it = std::find(v.cbegin(), v.cend(), 42);
+#+end_src
+这与 “尽可能 const” 的思想保持一致。
+* 添加、访问、删除元素
+** 添加元素
+常见:
+#+begin_src cpp
+  v.push_back(x);
+  v.emplace_back(args...);
+
+  d.push_front(x);
+  d.push_back(x);
+
+  lst.insert(pos, x);
+  lst.emplace(pos, args...);
+#+end_src
+~push_back~ 是 “先构造对象，再放入容器”； ~emplace_back~ 是 “在容器内部原地构造” (in-place construction):
+#+begin_src cpp
+  struct Student {
+    std::string name;
+    int score;
+  };
+
+  std::vector<Student> stus;
+
+  stus.push_back(Student{"Alice", 89});
+  stus.emplace_back("Bob", 98);
+#+end_src
+~emplace~ 并不总是更好，但当本身就需要用构造参数去创建元素时，通常更加自然。
+** 访问元素
+#+begin_src cpp
+  v.front();
+  v.back();
+
+  v[i]; // 不检查越界, 越界是 UB
+  v.at(i); // 检查越界，越界是 std::out_of_range
+#+end_src
+~list~ / ~forward_list~ 没有 ~operator[]~, 因为链表不支持高效随机访问。
+** 删除元素
+#+begin_src cpp
+  v.pop_back();
+  v.erase(pos);
+  v.erase(first, last);
+  v.clear();
+#+end_src
+删除时要记住: *erase 的返回值就是下一个有效位置* 。
+#+begin_src cpp
+  auto it = v.begin();
+  it = v.erase(it);
+#+end_src
+* ~forward_list~ 的特殊操作
+~std::forward_list~ 是单链表 (singly-linked list). 它只有 “下一个节点” 的指针，所以很多操作必须表达为 *在某个位置之后操作* 。
+#+begin_src cpp
+  std::forward_list<int> f1{1, 2, 3};
+
+  auto before = f1.before_begin();
+  f1.insert_after(before, 0); // 在第 1 个元素之前插入，结果是 0 1 2 3
+#+end_src
+~before_begin()~ 返回 “第1个元素之前” 的特殊迭代器，它不能被解引用（类似于 ~end()~ ），只能被用于 ~insert_after~, ~emplace_after~, ~erase_after~, ~splice_after~ 等在首个元素进行的操作。
+
+典型的删除写法是:
+#+begin_src cpp
+  auto prev = f1.before_begin();
+  auto curr = f1.begin();
+
+  while (curr != f1.end()) {
+    if (*curr % 2 == 0) {
+      curr = f1.erase_after(prev);
+    } else {
+      prev = curr;
+      ++curr;
+    }
+  }
+#+end_src
+重要: *单链表删除当前节点时，需要知道 “前一个节点”。*
+* ~list~ 的特殊价值: 稳定节点与 splice
+~list~ 的优势是:
+- 已经有目标位置时，插入删除快
+- 插入删除操作不会让其他元素的 iterator / reference 失效
+- 可以用 ~splice~ 在链表之间移动节点、不拷贝元素
+- 有成员版 ~sort~, ~merge~, ~unique~, ~remove_if~
+
+
+但 ~list~ 的劣势也很明显:
+- 不连续存储，缓存局部性差
+- 每个节点额外保存指针，内存开销高
+- 不支持随机访问
+- 找位置本身需要线性遍历
+
+所以实践上， ~list~ 不是 “性能更高效的 vector”，而是一个专门工具。当真的需要节点稳定、频繁 splice、或不能移动元素时才优先考虑它。
+* ~deque~: 双端队列
+~std::deque~ 适合两端都频繁插入删除:
+#+begin_src cpp
+  std::deque<int> q;
+
+  q.push_back(1);
+  q.push_front(1);
+  q.pop_back();
+  q.pop_front();
+#+end_src
+并且支持随机访问: ~q[10]~.
+
+但它不是一整块连续内存，所以不能像 ~vector~ 那样自然传给 C API, 也不适合 ~std::span~.
+
+典型用途: BFS 队列、滑动窗口、任务队列、双端缓冲。
+* ~array~: 固定大小队列
+~std::array<T, N>~ 是现代C++对内置数组的封装:
+#+begin_src cpp
+  std::array<int, 4> a{1, 2, 3, 4};
+  a.size(); // 4
+  a[0]; // 1
+  a.begin();
+  a.end();
+#+end_src
+它的大小 ~N~ 是类型的一部分:
+#+begin_src cpp
+  std::array<int, 4> a;
+  std::array<in t, 5> b;
+#+end_src
+~a~ 和 ~b~ 不是同一个类型。
+
+用 ~array~ 代替数组的好处是: 能拷贝、能赋值、能知道大小、能和算法/ranges 组合。
+* ~string~: 字符专用顺序容器
+~std::string~ 本质上是字符序列，常用操作包括:
+#+begin_src cpp
+  std::string s = "hello world";
+  s.size();
+  s.empty();
+
+  s.substr(0, 5); // "hello"
+  s.find("world"); // 查找
+  s.replace(0, 5, "hi");
+  s.insert(0, ">>> ");
+  s.erase(0, 4);
+#+end_src
+数字转换:
+#+begin_src cpp
+  int x = std::stoi("123");
+  double y = std::stod("3.14");
+
+  std::string s = std::to_string(42);
+#+end_src
+在现代C++中， read-only 参数经常用 ~std::string_view~:
+#+begin_src cpp
+  void print_name(std::string_view name) {
+    std::cout << name << '\n';
+  }
+#+end_src
+~std::string_view~ 是C++17拥有的非拥有只读字符串视图，能引用一段连续的字符串序列，但它不延长被引用字符串的生命周期。
+
+错误例子是:
+#+begin_src cpp
+  std::string_view bad() {
+    std::string s = "hello";
+    return s; // 错误，返回悬垂 view
+  }
+#+end_src
+* 容器适配器: stack / queue / priority_queue
+容器适配器 (container adapters) 不是新的底层数据结构，而是把已有容器包装成受限接口。
+
+#+begin_src cpp
+  std::stack<int> st;
+  st.push(1);
+  st.top();
+  st.pop();
+
+  std::queue<int> q;
+  q.push(1);
+  q.front();
+  q.pop();
+
+  std::priority_queue<int> pq;
+  pq.push(3);
+  pq.push(10);
+  pq.top();
+#+end_src
+~std::stack~ 默认底层容器是 ~std::deque~ ; ~std::queue~ 是 FIFO 适配器，默认底层也是 ~std::deque~; ~std::priority_queue~ 提供优先队列，默认能常量时间查看最大元素，插入和取出是对数时间。
+
+容器适配器通常不暴露迭代器，因为它们刻意限制接口，强调抽象语义。
+* 现代C++补充: ranges / views / span
+** ~std::span~
+~span~ 的语义是： *函数不拥有数据，只需要一段连续元素* 。
+
+旧写法:
+#+begin_src cpp
+  void print(const std::vector<int> &v);
+#+end_src
+这种写法使用 reference to const, 但问题是只能接受 ~vector<int>~ 作为参数。
+
+更泛化的现代写法是:
+#+begin_src cpp
+  #include <span>
+
+  void print(std::span<const int> xs) {
+    for (int x : xs) {
+      std::cout << x << ' ';
+    }
+  }
+#+end_src
+这种写法可以传 ~vector~, ~array~, 内置数组,等等。但不能传递 ~list~, ~forward_list~, 一般 ~deque~, 因为它们不是一整段连续内存。
+** ranges / views
+C++20 ranges 让算法直接接受范围:
+#+begin_src cpp
+  std::vector<int> v{3, 1, 2};
+  std::ranges::sort(v);
+#+end_src
+views 是惰性的:
+#+begin_src cpp
+  auto events =
+    v | std::views::filter([](int x){ return x % 2 == 0; })
+    | std::views::transform([](int x){ return x * 10; });
+  for (int x : events) {
+    std::cout << x << '\n';
+  }
+#+end_src
+这里的 ~events~ 通常不是新容器对象，而是一个视图对象。它描述 “如何遍历和变换原容器”。只有需要真正迭代时， filter 和 transform 才发生。
+
+所以要特别注意生命周期:
+#+begin_src cpp
+  auto make_view() {
+    std::vector<int> v{1, 2, 3};
+    return v | std::views::filter([](int x){ return x > 1; });
+
+    // 危险: views 引用局部 v, 函数返回后 v 已销毁
+  }
+#+end_src
+* Sequential Containers 压缩笔记
+** 容器选择原则
+1. 默认 ~std::vector~
+2. 固定大小: ~std::array~
+3. 两端频繁 push/pop: ~std::deque~
+4. 需要稳定节点、splice、频繁已知位置插入删除: ~std::list~
+5. 只需要单向链表且极度在意节点开销: ~std::forward_list~
+6. 字符序列: ~std::string~, 只读不拥有: ~std::string_view~
+7. 连续元素只读/可写视图: ~std::span<T>~ 或 ~std::span<const T>~
+8. 栈、队列、优先队列语义: ~stack~ / ~queue~ / ~priority_queue~
+** 高频陷阱:
+#+begin_src cpp
+  std::vector<int> v(10, 1); // 10 个 1
+  std::vector<int> v{10, 1}; // 10 和 1 
+#+end_src
+
+#+begin_src cpp
+  v.reserve(100); // 容量，不增加元素
+  v.resize(100); // 大小，真的有100个元素
+#+end_src
+
+#+begin_src cpp
+  auto it = v.begin();
+  v.push_back(42);
+  ,*it; // 可能失效
+#+end_src
+** 推荐写法
+#+begin_src cpp
+  for (const auto &x : xs) { ... }
+
+  auto it = std::find(c.cbegin(), c.cend(), target);
+
+  v.emplace_back(args...);
+
+  std::erase_if(v, pred); // C++20
+
+  void f(std::span<const int> xs);
+
+  auto result = xs | std::views::filter(pred) | std::views::transform(fn);
+#+end_src
