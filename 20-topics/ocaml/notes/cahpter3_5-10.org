@@ -1,0 +1,148 @@
+#+title: Pattern Matching, Type Synonyms, Options, Association Lists and Algebraic Data
+#+author: yurikon
+#+language: zh-cn
+* 第三章剩余内容
+第三章的剩余内容可以合并进一条主线:
+
+#+begin_quote
+用类型描述数据的形状，用模式匹配拆开数据，用递归和高阶函数处理数据，用 option/result/exception 表达失败
+#+end_quote
+这正是函数式语言编程的核心，不只是OCaml语法。
+* 模式匹配：函数式语言中的 “结构化分支”
+OCaml manual 对 pattern 的定义很准确: pattern 是一种模板，用来选择某种形状的数据，并把数据结构中的组成成分绑定到名字上。
+
+所以可以把模式匹配理解为:
+
+#+begin_src ocaml
+  match 数据 with
+  | 形状1 -> 处理方式1
+  | 形状2 -> 处理方式2
+  | 形状3 -> 处理方式3
+#+end_src
+命令式语言中的 ~if~ 通常是在问:
+#+begin_quote
+这个条件是否成立?
+#+end_quote
+而 pattern matching 更像是在问:
+#+begin_quote
+这个值是什么结构？里面装了什么？
+#+end_quote
+例如 list:
+#+begin_src ocaml
+  let rec sum = function
+    | [] -> 0
+    | h :: t -> h + sum t
+#+end_src
+可以查看 [[id:7f102180-9e83-4c9b-8f1d-10384f083bc5][~function~: 立即匹配的语法糖]] 有关 ~function~ 的阐述.
+
+这里是直接在区分 list 的两种形状:
+
+#+begin_src ocaml
+  [] (* 空列表 *)
+  h :: t (* 头部 h + 剩余列表 t *)
+#+end_src
+** 高级 pattern 的几种方式
+有几种很常用的 pattern: or-pattern, 类型标注 pattern, 常量 pattern, 字符范围 pattern, 带 guard 的 pattern.
+
+#+begin_src ocaml
+  type sign = Neg | Zero | Pos
+
+  let sign = function
+    | 0 -> Zero
+    | n when n > 0 -> Pos
+    | _ -> Neg
+#+end_src
+字符范围:
+#+begin_src ocaml
+  let digit_value = function
+    | '0'..'9' as c -> Some (Char.Code c - Char.code '0')
+    | _ -> None
+#+end_src
+or-pattern:
+#+begin_src ocaml
+  let is_vowel = function
+    | 'a' | 'e' | 'i' | 'o' | 'u' -> true
+    | _ -> false
+#+end_src
+注意: or-pattern 的每个分支必须绑定相同变量。下面这种不合法:
+
+#+begin_src ocaml
+  （* 错误: 左边绑定 x, 右边不绑定 x *）
+  | Some x | None -> ...
+#+end_src
+** ~let~ 表达式的等号左边也可以是 pattern
+之前所写的:
+#+begin_src ocaml
+  let x = 1 in x + 1
+#+end_src
+但完整形式是:
+#+begin_src ocaml
+  let p = e1 in e2
+#+end_src
+也就是说， ~let~ 左边不一定只是变量名，也可以是 pattern. 其动态语义是:
+#+begin_quote
+先计算 ~e1~, 再根据 pattern ~p~ 匹配结果；匹配失败会抛出 ~Match_failure~; 匹配成功把绑定用于 ~e2~.
+#+end_quote
+例如:
+#+begin_src ocaml
+  let distance p1 p2 =
+    let (x1, y1) = p1 in
+    let (x2, y2) = p2 in
+    let dx = x1 -. x2 in
+    let dy = y1 -. y2 in
+    sqrt(dx *. dx + dy *. dy)
+#+end_src
+更 OCaml 的写法是直接在参数中匹配:
+#+begin_src ocaml
+  let distance (x1, y1) (x2, y2) =
+    let dx = x1 -. x2 in
+    let dy = y1 -. y2 in
+    sqrt (dx *. dx + dy *. dy)
+#+end_src
+函数定义里的参数位置也可以是 pattern, 真正核心形式是 ~fun p -> e~
+** 函数式思维: pattern matching 是 “消除规则”
+以后每当遇到一个类型，可以这样想:
+#+begin_src ocaml
+  type t =
+    | A of ...
+    | B of ...
+    | C of ...
+#+end_src
+构造值时用 constructor:
+#+begin_src ocaml
+  A ...
+  B ...
+  C ...
+#+end_src
+消费值时用 pattern matching:
+#+begin_src ocaml
+  match x with
+  | A .. -> ...
+  | B .. -> ...
+  | C .. -> ...
+#+end_src
+这就是函数式语言中非常重要的思维:
+#+begin_quote
+定义类型，就是定义数据可能有哪些形状；写函数，就是穷尽处理这些形状
+#+end_quote
+* Type Synonyms: 给类型取名，但不创造新类型
+#+begin_src ocaml
+  type point = float * float
+  type vector = float list
+  type matrix = float list list
+#+end_src
+这里 ~type point = float * float~ 只是类型别名。 ~point~ 和 ~float * float~ 完全可交换。目的只是为了让代码更自文档化，而不是引入新的不兼容类型。
+
+比如:
+#+begin_src ocaml
+  type point = float * float
+  let get_x (x, _) = x
+  let p : point = (1.0, 2.0)
+  let q : float * float  = (3.0, 4.0)
+
+  let a = get_x p
+  let b = get_x q
+#+end_src
+~p~ 和 ~q~ 都能传递进函数，因为 ~point~ 不是一个真正独立的新类型。
+
+
