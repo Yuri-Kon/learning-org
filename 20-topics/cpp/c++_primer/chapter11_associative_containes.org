@@ -1,0 +1,536 @@
+#+title: Associative Containers
+#+author: yurikon
+#+language: zh-cn
+* 关联容器的基本思想: 用 key 访问元素
+顺序容器 (~vector~, ~deque~, ~list~) 关系的是 “第几个元素”。关联容器关心的是 “某个 key 对应什么” 。
+
+例如:
+#+begin_src cpp
+  std::map<std::string, int> scores;
+  scores["Alice"] = 95;
+  scores["Bob"] = 87;
+#+end_src
+这里的 ~"Alice"~ 不是第0个、第1个位置，而是一个 *key*. ~95~ 是和这个 key 关联的 *mapped value* .
+
+~std::map~ 的基本语义是:
+#+begin_src cpp
+  Key -> Value
+#+end_src
+而 ~std::set~ 的语义是:
+#+begin_src cpp
+  Key exists?
+#+end_src
+所以:
+#+begin_src cpp
+  std::map<std::string, int> word_count;
+  // 单词 -> 出现次数
+
+  std::set<std::string> stop_words;
+  // 某个单词是否是停用词
+#+end_src
+* 八种关联容器
+标准库关联容器可以按三个维度分类:
+| 维度                | 选择              |
+|---------------------+-------------------|
+| 存key还是key-value | ~set~/~map~       |
+| key是否唯一        | unique/multi      |
+| 是否按顺序组织    | ordered/unordered |
+
+于是得到八种:
+| 容器                            | 含义                         | 头文件           |
+|---------------------------------+------------------------------+-------------------|
+| ~std::map<K, V>~                | 有序、key唯一、key-value    | ~<map>~           |
+| ~std::set<K>~                   | 有序、key唯一、只存key     | ~<set>~           |
+| ~std::multimap<K, V>~           | 有序、key可重复、key-value | ~<map>~           |
+| ~std::multiset<K>~              | 有序、key可重复、只存key   | ~<set>~           |
+| ~std::unordered_map<K, V>~      | 无序、key唯一、hash表      | ~<unordered_map>~ |
+| ~std::unordered_set<K>~         | 无序、key唯一、hash表      | ~<unordered_set>~ |
+| ~std::unordered_multimap<K, V>~ | 无序、key可重复、hash表    | ~<unordered_map>~ |
+| ~std::unordered_multiset<K>~    | 无序、key可重复、hash表    | ~<unorder_set>~   |
+
+~std::map~ 是按比较函数 ~Compare~排序的关联容器，查找、插入、删除具有对数复杂度；实现上通常是红黑树，但标准要求的是语义和复杂度，不要求具体必须用红黑树。
+
+~std::unordered_map~ 使用哈希表组织元素，查找、插入、删除平均常数复杂度，但它不保证元素顺序。
+* 如何选择 ~map~, ~set~, ~multimap~, ~multiset~
+** ~map~: 一个key对应一个value
+典型场景:
+#+begin_src cpp
+  std::map<std::string, int> word_count;
+
+  std::map<int, std::string> id_to_name;
+
+  std::map<std::string, std::vector<int>> index;
+#+end_src
+~map~ 的key唯一。插入已有key时，不会产生第二个元素。
+** ~set~ 只关心某个值是否存在
+#+begin_src cpp
+  std::set<std::string> stop_words = {
+    "the", "a", "an", "and", "or"
+  };
+  if (!stop_words.contains(word)) {
+    ++word_count[word];
+  }
+#+end_src
+~set~ 的本质是 “唯一key的集合”。
+** ~multimap~: 一个key可以对应多个value
+例如:
+#+begin_src cpp
+  std::multimap<std::string, std::string> author_books;
+
+  author_books.insert({"Dostoevsky", "Crime and Punishiment"});
+  author_books.insert({"Dostoevsky", "The Brothers Karamazov"});
+#+end_src
+这和下面的结构很像:
+#+begin_src cpp
+  std::map<std::string, std::vector<std::string>> author_books;
+#+end_src
+区别在于:
+- ~multimap<K, V>~ 是多个独立的 key-value pair
+- ~map<K, vector<V>>~ 是一个 key 对象一个聚合容器
+
+
+实际代码中更经常用后者。因为它更容易整体处理某个key的所有value. 但如果希望每个记录保持独立，或者需要按key排序遍历所有记录时， ~multimap~ 很自然。
+** ~multiset~: 允许重复元素的有序集合
+例如统计多个分数，并希望自动排序:
+#+begin_src cpp
+  std::multiset<int> scores = {90, 80, 90, 75, 80};
+#+end_src
+它会保存重复元素。 ~set~ 不会。
+* 有序关联容器的核心: strict weak ordering
+~map~ / ~set~ / ~multimap~ / ~multiset~ 都是 *order associative containers* .
+
+它们需要知道key之间如何排序，默认使用:
+#+begin_src cpp
+  std::less<Key>
+#+end_src
+也就是通常调用 ~operator<~
+
+例如:
+#+begin_src cpp
+  std::map<std::string, int> m;
+#+end_src
+默认按照字典序排序。
+
+如果key是自定义类型，则不能直接写比如: ~std::set<Point> points;~, 因为没有比较规则，无法排序。
+
+C++20中可以这样提供比较规则:
+#+begin_src cpp
+  #include <compare>
+
+  struct Point {
+    int x{};
+    int y{};
+
+    auto operator<=>(const Point &) const = default;
+  };
+#+end_src
+更现代、更局部的写法是提供一个 comparator:
+#+begin_src cpp
+  struct PointLess{
+    bool operator()(const Point &lhs, const Pointer &rhs) const {
+      if (lhs.x != rhs.x) {
+        return lhs.x < rhs.x;
+      }
+      return lhs.y < rhs.y;
+    }
+  };
+
+  std::set<Point, PointLess> points;
+#+end_src
+注意，比较器必须形成 *严格弱序* ，如果两个key互相都不小于对方，容器会把它们视为等价key.
+* ~unordered_*~ 的核心: hash + equality
+~unordered_map~ / ~unordered_set~ 不需要排序，但是需要两个东西:
+
+1. hash function
+2. equality predicate
+
+
+也就是说，它需要知道:
+#+begin_src cpp
+  hash(key)
+  key1 == key2
+#+end_src
+标准草案中 ~unordered_map~ 被定义为支持 unique keys, 并把 key 映射到 ~mapped_type~ 的 unordered associative container.
+
+例如自定义 Pointer 作为 ~unordered_set~ 的key:
+#+begin_src cpp
+  #inclued <cstddef>
+  #include <functional>
+  #include <unordered_set>
+
+  struct Point {
+    int x{};
+    int y{};
+
+    friend bool operator==(const Point &, const Point &) == default;
+  };
+
+  struct PointHash {
+    std::size_t operator()(const Point &p) const noexcept {
+      auto h1 = std::hash<int>{}(p.x);
+      auto h2 = std::hash<int>{}(p.y);
+
+      return h1 ^ (h2 << 1);
+    }
+  };
+
+  std::unordered_set<Point, PointHash> points;
+#+end_src
+比如满足一个基本规则:
+
+#+begin_quote
+如果 ~a == b~ , 那么 ~hash(a) == hash(b)~ 必须成立
+#+end_quote
+反过来则不要求成立。两个不相等的对象也可以有相同的 hash, 这叫 *hash collision(哈希冲突)*. 冲突太多会降低性能。
+* ~pair~, ~value_type~ 与 map 元素的真实类型
+~map<K, V>~ 中每个元素不是单独的 ~K~ 和 ~V~, 而是:
+#+begin_src cpp
+  std::pair<const K, V>
+#+end_src
+也就是说，
+#+begin_src cpp
+  std::map<std::string, int> m;
+#+end_src
+它的元素类型是:
+#+begin_src cpp
+  std::pair<const std::string, int>
+#+end_src
+所以对其进行遍历:
+#+begin_src cpp
+  for (const auto &elem : m) {
+    std::cout << elem.first << " " << elem.second << '\n';
+  }
+#+end_src
+其中， ~elem.first~ 是key, const; ~elem.second~ 是 value, 可以修改。
+
+C++17以后，更推荐使用 *structured binding(结构化绑定)*:
+#+begin_src cpp
+  for (const auto &[word, count] : word_count) {
+    std::cout << word << ": " << count << '\n';
+  }
+
+  for (auto *[word, count] : word_count) {
+    ++count;
+  }
+#+end_src
+但不能修改 key.
+
+~map~ 的 ~value_type~是 ~pair<const key_type, mapped_type>~, 所以可以修改 ~second~, 不能修改 ~first~ 。
+* ~operator[]~
+
+~map~ 和 ~unordered_map~ 支持:
+#+begin_src cpp
+  m[key]
+#+end_src
+但这个操作有一个副作用:
+#+begin_quote
+如果 key 不存在， ~operator[]~ 就会插入一个新元素，并把 mapped value 进行 value-initilazation(值初始化).
+#+end_quote
+例如:
+#+begin_src cpp
+  std::map<std::string, int> word_count;
+
+  ++word_count["apple"];
+#+end_src
+如果 ~"apple"~ 不存在，会先插入:
+#+begin_src cpp
+  {"apple", 0}
+#+end_src
+然后再自增，变成:
+#+begin_src cpp
+  {"apple", 1}
+#+end_src
+这就是词频统计可以写很短的原因。但是下面的这种写法可能有bug:
+#+begin_src cpp
+  if(m["Alice"] > 90) {
+    // ...
+  }
+#+end_src
+如果 ~"Alice"~ 不存在，这行代码会把 ~"Alice"~ 插入 map.
+
+只检查是否存在时，应该用:
+#+begin_src cpp
+  if (m.contains("Alice")) {
+    // C++20
+  }
+#+end_src
+或者 C++11/14/17:
+#+begin_src cpp
+  if(m.find("Alice") != m.end()){
+    //...
+  }
+#+end_src
+~map~ 的下标操作和 ~vector~ 不同，用不存在的 key 下标访问会添加元素；如果只是想判断是否存在，就不该使用下标。
+* 容器成员函数: ~find~, ~contains~, ~count~, ~lower_bound~, ~equal_range~
+** 判断是否存在:
+C++20推荐:
+#+begin_src cpp
+  if (m.contains(key)) {
+    // found
+  }
+#+end_src
+C++20以前:
+#+begin_src cpp
+  if (m.find(key) != m.end) {
+    // found
+  }
+#+end_src
+~contains~ 是 C++20 加入的成员函数，用于判断关联容器中是否有指定key.
+** 查找并使用 value
+如果要拿到 value:
+#+begin_src cpp
+  auto it = m.find(key);
+
+  if (it != m.end()) {
+    std::cout << it->second << '\n';
+  }
+#+end_src
+现代写法可以把 iterator 限定在 ~if~ 里:
+#+begin_src cpp
+  if (auto it = m.find(key); if != m.end()) {
+    std::cout << it->second << '\n';
+  }
+#+end_src
+** ~count~
+对 unique-key 容器:
+#+begin_src cpp
+  std::map<K, V>
+  std::set<K>
+  std::unordered_map<K, V>
+  std::unordered_set<K>
+#+end_src
+~count(key)~ 只能返回 0 或 1。
+
+对 multi-key 容器:
+#+begin_src cpp
+  std::multimap<K, V>
+  std::multiset<K>
+#+end_src
+~count(key)~ 可以大于1。
+
+但要注意， ~multimap.count(key)~ 是为了数出有多少个元素，可能需要遍历等价 key 的范围。如果只希望判断是否存在， ~find~ 更直接。
+** ~lower_bound~ / ~upper_bound~
+只适用于 ordered associative containers:
+#+begin_src cpp
+  auto first = m.lower_bound(key); // 第一个 >= key 的位置
+  auto last = m.upper_bound(key); // 第一个 > key 的位置
+#+end_src
+对 ~multimap~ 很有用:
+#+begin_src cpp
+  std::multimap<std::string, std::string> author_books;
+
+  auto [first, last] = author_books.equal_range("Dostoevsky");
+
+  for (auto it = first; it != last; ++it) {
+    std::cout << it->second << '\n';
+  }
+#+end_src
+~equal_range(k)~ 返回一对 iterator, 表示 key 等于 ~k~ 的元素范围。
+* 插入: ~insert~, ~emplace~, ~try_emplace~, ~insert_of_assign~
+** ~insert~
+#+begin_src cpp
+  std::map<std::string, int> m;
+
+  auto [it, inserted] = m.insert({"Alice", 95});
+
+  if (inserted) {
+    std::cout << "new element\n";
+  } else {
+    std::cout << "key already exists\n";
+  }
+#+end_src
+对 unique-key 容器， ~insert~ 返回:
+#+begin_src cpp
+  std::pair<iterator, bool>
+#+end_src
+其中:
+#+begin_src cpp
+  first // 指向对应元素
+  second // 是否真的插入成功
+#+end_src
+如果 key 已经存在， ~insert~ 不会覆盖旧 value.
+** ~operator[]~ vs ~insert~
+#+begin_src cpp
+  m["Alice"] = 100;
+#+end_src
+含义是:
+- 如果没有 ~"Alice"~, 插入默认值，然后赋值为100
+- 如果已有 ~"Alice"~, 直接覆盖 value
+
+
+而:
+#+begin_src cpp
+  m.insert({"Alice", 100});
+#+end_src
+如果 ~"Alice"~ 已经存在，不会覆盖。
+** ~insert_or_assign~: 插入或覆盖
+C++17 提供:
+#+begin_src cpp
+  m.insert_or_assign("Alice", 100);
+#+end_src
+语义是:
+- 如果key不存在，则插入；
+- 如果key存在，则给已有元素的 ~second~ 赋新值
+
+
+~insert_or_assign~ 比 ~operator[]~ 返回的信息更多，而且不要求 ~mapped_type~ 可默认构造。
+
+假设:
+
+#+begin_src cpp
+  struce User {
+    User(int id, std::string name);
+  };
+
+  std::map<int, User> users;
+
+  user[1] = User{1, "Alice"};
+#+end_src
+如果 ~User~ 没有默认构造函数，则上述赋值可能不行，因为 ~operator[]~ 需要先默认构造。
+
+应该写成:
+#+begin_src cpp
+  user.insert_or_assign(1, User{1, "Alice"});
+#+end_src
+** ~try_empalce~: 只在 key 不存在时构造 value
+C++17 提供:
+#+begin_src cpp
+  users.try_emplace(1, 1, "Alice");
+#+end_src
+它的语义是:
+- 如果 key 已存在，什么都不做
+- 如果 key 不存在，才用后面的参数原地构造 ~mapped_type~
+
+
+它在 key 已存在时不会构造 mapped value; 否则用传入参数构造 value.
+* 删除: ~erase~ 与 ~std::erase_if~
+传统成员函数是 ~erase~, 支持按照 key, iterator, iterator pair 删除。
+
+#+begin_src cpp
+  auto n = m.erase("Alice");
+#+end_src
+返回删除了多少个元素。对 ~map~ / ~set~, 结果只能是 0 或 1. 对 ~multimap~ / ~multiset~ 结果可能大于1.
+
+C++20 提供非成员函数:
+#+begin_src cpp
+  std::erase_if(m, [](const auto &elem) {
+    const auto &[key, value] = elem;
+    return value < 60;
+  });
+#+end_src
+对 ~map~ 的等价实现就是遍历容器，满足谓词就调用成员 ~erase~, 最后返回删除数量。
+* 修改key
+~map~ 的 key 是 ~const~, 所以不能直接修改 key. C++17 提供 *node handle*:
+#+begin_src cpp
+  auto nh = m.extract("alice");
+
+  if (!nh.empty()) {
+    nh.key() = "Alice";
+    m.insert(std::move(nh));
+  }
+#+end_src
+~extract~ 会把节点从容器中解除链接，返回拥有该节点的 node handle.
+* ~unordered_map~ 的性能控制: bucket, load factor, reserve
+~unordered_map~ 的内部可以理解为很多 *bucket*, 元素根据 hash 值分配到桶中。
+#+begin_src cpp
+  m.bucket_count();      // 桶数量
+  m.load_factor();       // 当前负载因子 size / bucket_count
+  m.max_load_factor();   // 最大负载因子
+  m.reserve(n);          // 预留至少容纳 n 个元素的桶
+  m.rehash(n);           // 设置桶数量并重新哈希
+#+end_src
+如果知道大概要插入很多元素，应该提前:
+#+begin_src cpp
+  std::unordered_map<std::string, int> freq;
+  freq.reserve(10000);
+#+end_src
+~reserve(count)~ 会设置桶数量，使其足以容纳至少 ~count~ 个元素而不超过最大负载因子，并会触发 rehash.
+* 关联容器和算法、ragnes 的关系
+不要这样查 ~map~:
+#+begin_src cpp
+  auto it = std::ranges::find(m, key); // 通常不对
+#+end_src
+~map~ 的元素是:
+#+begin_src cpp
+  std::pair<const key, Value>
+#+end_src
+不是单独的 ~Key~.
+
+而且泛型算法的 ~find~ 是线性查找。关联容器已经提供了按 key 优化过的成员函数:
+#+begin_src cpp
+  m.find(key);
+  m.contains(key);
+#+end_src
+所以:
+#+begin_src cpp
+  if (m.contains("apple")){}
+#+end_src
+比 ~std::ranges::find(...)~ 更好。但是 ranges 可以很好地用于遍历、投影、过滤结果。
+
+例如 C++20 中遍历 key:
+#+begin_src cpp
+  for (const auto &key : m | std::views::keys) {
+    std::cout << key << '\n';
+  }
+#+end_src
+遍历 value:
+#+begin_src cpp
+  for (const auto &value : m | std::views::values) {
+    std::cout << value << '\n';
+  }
+#+end_src
+* 常见误区
+** 误区一: 用 ~operator[]~ 判断 key 是否存在
+错误:
+#+begin_src cpp
+  if (m[key]) {
+    
+  }
+#+end_src
+问题: key 不存在时会插入
+
+正确:
+#+begin_src cpp
+  if (m.contains(key)){}
+#+end_src
+** 误区二：以为 ~insert~ 会覆盖旧值
+#+begin_src cpp
+  m.insert({"Alice", 100});
+#+end_src
+如果 ~"Alice"~ 已存在，不覆盖。
+
+要覆盖的话用:
+
+#+begin_src cpp
+  m.insert_or_assign("Alice", 100);
+#+end_src
+** 误区三: 直接修改 map 的 key
+#+begin_src cpp
+  it->first = new_key; // error
+#+end_src
+用:
+#+begin_src cpp
+  auto nh = m.extract(old_key);
+  nh.key() = new_key;
+  m.insert(std::move(nh));
+#+end_src
+** 误区四: 自定义 comparator 写错
+错误:
+#+begin_src cpp
+  return lhs.x <= rhs.x;
+#+end_src
+正确:
+#+begin_src cpp
+  return lhs.x < rhs.x;
+#+end_src
+** 误区五: 认为 ~unordered_map~ 永远更快
+~unordered_map~ 平均复杂度更好，但有 hash 计算、冲突、 rehash, 内存局部性等成本。小规模数据、有序输出、范围查询时， ~map~ 可能更合适。
+* Associative Container 总结
+1. 关联容器按key而不是位置访问元素
+2. ~map~ 是 ~Key->Value~, ~set~ 是 ~Key exists~
+3. ~multi~ 表示key可重复， ~unordered~ 表示用hash
+4. 有序容器依赖 strict weak ordering, 无序容器依赖 hash 和 equality
+5. ~map~ 元素类型是 ~pair<const Key, T>~, 所以 key 不能直接改。
+6. ~operator[]~ 会在 key 不存在时插入默认 value, 只查询存在性用 ~containers~ /  ~find~
+7. 查找元素优先用容器成员函数，不要用泛型 ~find~ 做线性查找
+8. C++17/20 之后，重点补充 ~structred bindings~, ~try_emplace~, ~insert_or_assign~, ~extract~, ~merge~, ~contains~, ~erase_if~

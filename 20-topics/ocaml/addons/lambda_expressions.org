@@ -298,7 +298,7 @@ List.of(1, 2, 3).stream()
 C++ 中也有 lambda:
 
 #+begin_src cpp
-auto square = [](int x) {return x * x; };
+  auto square = [](int x) {return x * x; };
 #+end_src
 
 Haskell 中更接近 \(\lambda\) 演算本身:
