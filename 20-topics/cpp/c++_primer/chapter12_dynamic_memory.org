@@ -1,0 +1,367 @@
+#+title: Dynamic Memory
+#+author: yurikon
+#+language: zh-cn
+* Dynamic Memory 总述
+本章并非鼓励到处写 ~new~ / ~delete~, 而是立即: *对象到底被谁拥有(ownership), 什么时候销毁(lifetime), 如何避免资源泄露(resource leak) 和指针悬垂(dangling pointer)* .这一章分为三部分：动态内存与智能指针、动态数组、一个文本查询程序。
+
+动态对象的生命期不依赖创建它的位置，而是会一直存在，直到被显式是释放。而释放时机正是大量bug的来源，所以库提供了智能指针来自动管理动态对象。
+
+这章应该形成的现代C++习惯是:
+#+begin_src cpp
+  // 默认: 不用动态内存
+  std::vector<Food> foods;
+
+  // 需要独占所有权: unique_ptr
+  std::unique_ptr<Entity> e = std::make_unique<Enmey>();
+
+  // 需要共享所有权: shared_ptr
+  std::shared_ptr<Resources> r = std::make_shared<Resources>();
+
+  // 只观察 shared_ptr 管理的对象，不延长其寿命: weak_ptr
+  std::weak_ptr<Resources> observer = r;
+
+  // 尽量不要这样写:
+  auto p = new Resources;
+  delete p;
+#+end_src
+* 动态内存的真正问题
+动态内存的真正问题不是“分配”，而是“谁负责释放”。
+| 名称           | 英文                    | 典型对象                                  | 生命周期                         |
+|----------------+-------------------------+--------------------------------------------+-----------------------------------|
+| 静态存储      | static storage          | 全局变量, ~static~ 局部变量, 类静态成员 | 程序开始/首次使用到程序结束    |
+| 栈/自动存储   | stack/automatic/storage | 函数内普通局部变量                       | 进入作用域创建，离开作用域销毁 |
+| 自由存储区/堆 | free store/heap         | ~new~, 智能指针管理的对象                | 程序员或智能指针决定            |
+
+~new~ 可分配并初始化一个动态对象，返回指向它的指针； ~delete~ 销毁对象并释放对应内存。问题在于: 忘记释放会导致 *memory leak*, 过早释放会留下指向失效内存的指针。
+
+所以现代C++的核心思想是 *RAII(Resources Acquisition Is Initialization, 资源获取即初始化)* : 把资源放进对象里，由对象的构造函数获取资源、析构函数释放资源。
+* 智能指针总览
+| 类型                 | 英文                                 | 所有权语义                               |
+|----------------------+--------------------------------------+-------------------------------------------|
+| ~std::unique_ptr<T>~ | exclusive ownership                  | 独占拥有对象                             |
+| ~std::shared_ptr<T>~ | shared ownership                     | 多个指针共享拥有对象                    |
+| ~std::weak_ptr<T>~   | weak reference / non-owning observer | 观察 ~shared_ptr~ 管理的对象，但不拥有 |
+
+- ~shared_ptr~ 是 shared ownership: 最后一个所有者负责销毁对象或释放资源
+- ~weak_ptr~ 保存的是 ~shared_ptr~ 已管理对象的弱引用，访问前需要通过 ~lock~ 转换成 ~shared_ptr~
+* ~shared_ptr~: 共享所有权
+** 基本用法
+#+begin_src cpp
+  #include <memory>
+  #include <string>
+  #include <vector>
+
+  auto p = std::make_shared<std::string>("hello");
+
+  if (p && !p->empty()) {
+    (*p)[0] = 'H';
+  }
+#+end_src
+~shared_ptr~ 可以像普通和指针一样使用。 ~make_shared<T>(args...)~ 会在动态内存中构造对象并返回指向它的 ~shared_ptr~, 普通情况下它是最安全的创建方式。复制或赋值 ~shared_ptr~ 会改变引用计数，最后一个 ~shared_ptr~ 销毁时，对象才会被销毁。
+** 引用计数的模型
+#+begin_src cpp
+  auto p = std::make_shared<int>(42); // count = 1;
+  auto q = p; // count = 2;
+
+  p.reset(); // count = 1;
+  q.reset(); // count = 0, 对象被销毁
+#+end_src
+实现上， ~shared_ptr~ 通常有一个 *control block(控制块)*, 里面保存共享计数、弱引用计数、删除器等信息；当 shared owner 计数归零时销毁被管理对象，控制块本身通常要等 weak count 也归零后才释放。
+** ~shared_ptr~ 容易犯的错误
+*** 错误1: 用同一个裸指针创建两个独立的 ~shared_ptr~
+#+begin_src cpp
+  int *raw = new int(42);
+
+  std::shared_ptr<int> p1(raw);
+  std::shared_ptr<int> p2(raw); // 严重错误: 两个控制块, 各自认为自己拥有 raw
+#+end_src
+结果通常是 *double delete(重复释放)*
+
+正确写法:
+#+begin_src cpp
+  auto p1 = std::make_shared<int>(42);
+  auto p2 = p1; // 共享同一个控制块
+#+end_src
+*** 错误2: 用 ~get()~ 初始化另一个智能指针
+#+begin_src cpp
+  auto p = std::make_shared<int>(42);
+  int *raw = p.get();
+
+  std::shared_ptr<int> q(raw); // 错误, 不要这样做
+#+end_src
+~get()~ 只能用于将指针临时传递给不能接收智能指针的旧接口，使用方不能 ~delete~ 它，也不能用它初始化或赋值给另一个智能指针。
+*** 错误3: 共享所有权之后忘记清理容器里的 ~shared_ptr~
+#+begin_src cpp
+  std::vector<std::shared_prtr<BigObject>> cache;
+  // 不再需要某些元素时
+  std::erase_if(cache, [](const auto &p) {
+    return p->expired();
+  });
+#+end_src
+只要容器里还有 ~shared_ptr~, 对象就不会释放。如果把 ~shared_ptr~ 放进容器，后来只需要其中一部分，一定要 erase 不需要的元素。
+* ~unique_ptr~: 现代C++的默认优先选择
+~unique_ptr~ 表示 *独占所有权(exclusive ownership)*. 同一时间只能有一个  ~unique_ptr~ 拥有某个对象，它不能复制，只能移动。书中说， ~unique_ptr~ 指向的对象会在 ~unique_ptr~ 销毁时销毁；它不支持普通拷贝或赋值。
+
+#+begin_src cpp
+  #include <memory>
+
+  auto p = std::make_unique<int>(42); // C++14
+  auto q = std::move(p); // 所有权转移
+  // p 现在为空
+#+end_src
+*C++14引入了* ~std::make_unique~ ，现在应该优先写:
+#+begin_src cpp
+  auto p = std::make_unique(std::string)("hello");
+#+end_src
+而不是:
+#+begin_src cpp
+  std::unique_str<std::string> p(new std::string("hello"));
+#+end_src
+~std::make_unique~ 的样式会构造对象并包装到 ~unique_ptr~ 中；它支持未知边界动态数组形式，例如 ~std::make_unique<int[]>(10)~ .
+** ~release()~ 和 ~reset()~
+#+begin_src cpp
+  auto p =std::make_unique<int>(42);
+
+  int *raw = p.release(); //放弃所有权，不 delete
+  delete raw; // 由程序员负责释放
+#+end_src
+~release()~ 不会释放对象，只是把裸指针交出来，并让 ~unique_ptr~ 变空。调用者负责清理。
+
+真正提前释放对象应该用:
+#+begin_src cpp
+  p.reset(); // 删除当前对象，p 为空
+#+end_src
+或者让 ~p~ 离开作用域自动析构。
+** 什么时候用 ~unique_ptr~
+默认判断可以是:
+#+begin_src cpp
+  // 需要动态分配 + 单一所有者
+  std::unique_ptr<T>;
+
+  // 需要多态对象
+  std::vector<std::unique_ptr<Entity>>;
+
+  // 工厂函数返回堆对象
+  std::unique_ptr<Entity> make_entity();
+#+end_src
+需要智能指针时，通常先考虑 ~std::unique_str~, 它表达独占所有权，移动转移所有权，销毁时释放资源。
+* ~weak_ptr~: 观察对象，但不延长对象寿命
+~weak_ptr~ 不拥有对象，它只能检查由 ~shared_ptr~ 管理的对象，并且不会增加引用计数。对象是否还活着，需要通过 ~lock()~ 检查。绑定 ~weak_ptr~ 到 ~shared_ptr~ 不改变引用计数；最后 ~shared_ptr~ 消失后，对象仍被删除，即便仍然有 ~weak_ptr~ 指向它。
+#+begin_src cpp
+  auto sp = std::make_shared<int>(42);
+  std::weak_ptr<int> wp = sp;
+
+  if (auto locked = wp.lock()) {
+    std::cout << *locked << '\n';
+  } else {
+    // 对象已经不存在
+  }
+#+end_src
+典型用途:
+#+begin_src cpp
+  struct Node {
+    std::string name;
+    std::shared_ptr<Node> next;
+    std::weak_ptr<Node> prev; // 避免 shared_ptr 循环引用
+  };
+#+end_src
+如果 ~prev~ 也用 ~shared_ptr~, 两个节点可能互相持有，导致引用计数永不归零，形成逻辑上的内存泄露。 ~weak_ptr~ 的核心价值正是打破这种 ownership cycle.
+* ~StrBlob~: 类设计例子
+书中 ~StrBlob~ 的目标是: 多个 ~StrBlob~ 对象共享底层同一份 ~vector<string>~. 普通 ~vector~ 的复制是值语义:
+#+begin_src cpp
+  std::vector<std::string> v1 = {"a", "an", "the"};
+  auto v2 = v1; // v2 拥有一份自己的元数据
+#+end_src
+而 ~StrBlob~ 想要的是共享语义:
+#+begin_src cpp
+  StrBlob b1;
+
+  {
+    StrBlob b2 = {"a", "an", "the"};
+    b1 = b2; // b1 和 b2 共享底层 vector
+    p2.push_back("about");
+  }
+  // b2 销毁，但底层 vector 仍由b1使用
+#+end_src
+所以它内部不能直接放 ~vector<string>~, 而是:
+#+begin_src cpp
+  class StrBlob {
+  public:
+    using size_type = std::vector<std::string>::size_type;
+
+    StrBlob() : data(std::make_shared<std::vector<std::string>>()) {}
+
+    StrBlob(std::initializer_list<std::string> il) : data(std::make_shared<vector<std::string>>(il)) {}
+
+    size_type size() const { return data->size(); }
+    bool empty() const { return data->empty();}
+
+    void push_back(const std::string &s) {
+      data->push_back(s);
+    }
+
+    void pop_back() {
+      check(0, "pop_back on empty StrBlob");
+      data->pop_back();
+    }
+
+    std::string &front() {
+      check(0, "front on empty StrBlob");
+      return data->front();
+    }
+
+    const std::string &front() const {
+      check(0, "front on empty StrBlob");
+      return data->front();
+    }
+    
+  private:
+    std::shared_ptr<std::vector<std::string>> data;
+    void check(size_type i, const std::string &msg) const {
+      if (i >= data->size()) {
+        throw std::out_of_range(msg);
+      }
+    }
+  }
+#+end_src
+
+这里的重点不只是 ~shared_ptr~, 还有: *当成员本身已经正确管理资源时，类可以使用默认拷贝、默认赋值、默认析构，也就是 Rule of Zero* . ~StrBlob~ 类只有一个 ~shared_ptr~ 成员，因此默认复制会复制 ~shared_ptr~, 默认析构会递减引用计数，最后一个 ~StrBlob~ 消失时底层 ~vector~ 自动释放。
+
+不过要注意: ~StrBlob~ 是“共享底层数据”的设计，和普通容器的值语义不同。现代C++中不要随便让类共享状态，除非这就是我们想表达的语义。
+* 原始 ~new~ / ~delete~: 尽量少写
+** 初始化差异
+#+begin_src cpp
+  int *p1 = new int; // 默认初始化，内置类型值未定义
+  int *p2 = new int(); // 值初始化，结果是0
+  int *p3  = new int{}; // 值初始化，结果是0
+
+  std::string *s1 = new std::string; // 空字符串
+  std::string *s2 = new std::string(); //空字符串
+#+end_src
+** ~delete~ 的规则
+#+begin_src cpp
+  int *p = new int(42);
+  delete p;
+
+  int *arr = new int[10]{};
+  delete[] arr;
+#+end_src
+只能 ~delete~ 三类指针:
+#+begin_src cpp
+  delete nullptr; // ok
+  delete pointer_from_new;
+  delete[] pointer_from_new_array;
+#+end_src
+
+下面都是严重错误:
+#+begin_src cpp
+  int x = 42;
+  int *p = &x;
+  delete p; // UB: p 指向栈对象
+
+  int *q = new int(1);
+  delete q;
+  delete q; // UB: double delete
+
+  int *a = new int[10];
+  delete a; // UB: 应使用 delete[]
+#+end_src
+~delete[]~ 的方括号非常重要，它告诉编译器这是数组；数组元素会按照逆序销毁。遗漏 ~[]~ 或误用 ~[]~ 都是UB, 编译器通常不会可靠地提醒。
+* 动态数组: 现代代码优先使用 ~vector~
+两种方法定义动态数组:
+#+begin_src cpp
+  int *p = new int[10];
+  delete[] p;
+#+end_src
+以及:
+#+begin_src cpp
+  std::allocator<T>
+#+end_src
+但书中非常明确: 多数程序都不需要动态数组；当需要数量可变的对象时，几乎总是应该使用 ~vector~ 或其他标准库容器，因为它们更安全、更简单、性能通常更好。
+** ~unique_ptr<T[]>~
+#+begin_src cpp
+  auto p = std::make_unique<int[]>(10);
+
+  for (std::size_t i = 0; i != 10; ++i) {
+    p[i] = static_cast<int>(i);
+  }
+#+end_src
+~unique_ptr<T[]>~ 专门管理动态数组、析构或 ~reset()~ 时会使用 ~delete[]~. 但是它没有 ~push_back~, ~size()~ 、迭代器等容器能力，所以普通业务代码仍然优先使用 ~std::vector<T>~ .
+** ~shared_ptr~ 管理数组的现代补充
+~shared_ptr~ 在 C++17时已经支持了动态数组，在 C++20 支持 ~make_shared~ 定义动态数组类型。而在 C++11 中，必须提供自定义 deleter:
+#+begin_src cpp
+  std::shared_ptr<int> sp(new int[10], [](int *p)) {
+    delete[] p;
+  }
+#+end_src
+即便现代C++已经提供了 ~shared_ptr~ 的动态数组，但是日常开发仍然优先使用 ~vector~, 除非在写底层库、对象池、特殊内存布局。
+* ~allocator~: 区分“分配内存”与“构造对象”
+普通的 ~new~ 会同时做两件事情:
+#+begin_src cpp
+  std::string *p = new std::string[n];
+  // 1. 分配能放 n 个 string 的内存
+  // 2. 构造 n 个空 string
+#+end_src
+但有时我们只想先拿一块原始内存，之后按需构造对象。例如容器内部扩容时，不一定要立刻构造所有元素。 ~allocator~ 的价值就是把 *allocation(分配)* 和 *construction(构造)* 分离，提高灵活性。
+
+在C++11的风格大概是:
+#+begin_src cpp
+  std::allocator<std::string> alloc;
+  auto p = alloc.allocate(n);
+
+  auto q = p;
+  alloc.construct(q++, "hello");
+  alloc.construct(q++, 10, 'c');
+
+  // 使用 [p, q) 中已经构造的对象
+
+  while (q != p) {
+    alloc.destory(--q);
+  }
+
+  alloc.deallocate(p, n);
+#+end_src
+现代C++中更推荐使用 ~std::allocator_traits~ 调用 ~construct~ / ~destory~. ~allocator_traits::construct~ 用于在已分配的未初始化存储中构造对象； ~allocator_traits::destory~ 用于销毁对象。而 ~std:allocator~ 自身的 ~construct~ 自身的 ~construct~ / ~destory~ 成员在C++17被弃用，在C++20被移除。所以新代码应该写 ~allocator_traits~:
+
+#+begin_src cpp
+  std::allocator<std::string> alloc;
+  using Traits = std::allocator_traits<deltype(alloc)>;
+
+  auto p = alloc.allocate(10);
+  auto q = p;
+
+  try {
+    Traits::construct(alloc, q++, "hello");
+    Traits::construct(alloc, q++, 5, 'x');
+
+    // use [p, q)
+  } catch (...) {
+    while (q != p) {
+      Traits::destory(alloc, --q);
+    }
+    alloc.deallocate(p, 10);
+    throw;
+  }
+  while (q != p) {
+    Traits::destory(alloc, --q);
+  }
+
+  alloc.deallocate(p, 10);
+#+end_src
+* Dynamic Memory 现代 C++ 决策表
+| 场景                           | 推荐                                           |
+|--------------------------------+------------------------------------------------|
+| 普通对象                      | 直接作为值成员或局部变量                    |
+| 数量可变的一组对象           | ~std::vector<T>~                               |
+| 固定长度数组                  | ~std::array<T, N>~                             |
+| 非拥有视图                    | ~T&~, ~T*~, ~std::span<T>~, ~std::string_view~ |
+| 独占拥有堆对象               | ~std::unique_ptr<T>~                           |
+| 共享拥有堆对象               | ~std::shared_ptr<T>~                           |
+| 观察 shared 对象，不延长寿命 | ~std::weak_ptr<T>~                             |
+| 多态对象容器                  | ~std::vector<std::unique_ptr<Base>>~           |
+| C API 资源                     | ~unique_ptr~ + custom deleter                  |
+| 手写动态数组                  | 尽量避免；优先 ~vector~                      |
+| 手写 ~new~ / ~delete~          | 尽量避免，用于理解和少数底层场景           |
+| 容器底层内存管理             | ~allocator~ / ~allocator_traits~               |
+
+
