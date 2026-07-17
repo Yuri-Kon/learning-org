@@ -145,4 +145,10 @@ or-pattern:
 #+end_src
 ~p~ 和 ~q~ 都能传递进函数，因为 ~point~ 不是一个真正独立的新类型。
 
-
+**什么时候不用 type synonym**
+如果真的想防止把不同概念混在一起，不要用 synonym, 而要用 record 和 variant 包装一层:
+#+begin_src cpp
+  type point = { x : float; y : float}
+  type velocity = { dx : float; dy : float}
+#+end_src
+这样 ~point~ 和 ~velocity~ 就不会被误用。
