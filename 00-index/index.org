@@ -28,3 +28,5 @@
 * 项目
 - [[file:~/Learning/projects/cpp-primer/][c++ primer]]
 - [[file:~/Learning/projects/cs3110-ocaml-nix/][cs3110 ocaml]]
+- [[file:~/Learning/projects/snake-tui/][snake-tui]]
+- [[file:~/Learning/projects/text-query/][text-query]]
