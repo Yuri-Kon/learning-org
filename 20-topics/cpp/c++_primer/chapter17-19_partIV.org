@@ -1,0 +1,1585 @@
+#+title: Part IV: 高级主题
+#+author: yurikon
+#+language: zh-cn
+* 第四部分: 高级主题综合讲授
+第四部分包括三章:
+- 第17章: 特殊用途的标准库设施 (Specialized Library Facilities)
+- 第18章: 大型程序工具 (Tools for Large Programs)
+- 第19章: 特殊工具与技术 (Specialized Tools and Tehniques)
+
+
+本部分回答三个更深入的部分:
+1. 怎样表达普通容器和普通类不容易表达是数据与操作
+2. 怎样让代码跨越函数、模块、库和团队边界仍保持正确
+3. 怎样在必要时直接控制对象表示、生命周期、内存和硬件接口
+
+C++ Primer 以 C++11 为基准，目前正式发布的标准是C++23, 因此下面以C++23 为现代稳定基线。
+* 特殊用途标准库设施
+第17章讨论 ~tuple~, ~bitset~, 正则表达式、随机数和较低层的IO操作。它们分别对应异构数据、位集合、文本模式、概率过程和字节流。
+* ~std::tuple~: 匿名的固定大小异构积类型
+** 它是什么
+~std::tuple<Ts...>~ 是一个:
+- 长度在编译期确定
+- 每个位置可以有不同类型
+- 按索引访问
+- 不为各个位置提供业务名称
+
+的异构值集合 (heterogeneous fixed-size collection).
+
+标准将 tuple 描述为由模板参数确定元素类型的固定大小异构集合。
+
+#+begin_src cpp
+  #include <string>
+  #include <tuple>
+  #include <vector>
+
+  using Result = std::tuple<std::string, std::size_t, std::vector<std::size_t>>;
+
+  Result query(std::string word);
+#+end_src
+现代代码常常使用结构化绑定 (structed binding) 解包:
+#+begin_src cpp
+  auto [word, count, lines] = query("allocator");
+#+end_src
+这里我们可以参照 ~OCaml~ 中的 [[id:e6c5fae3-20c0-406b-84bb-25bae46be854][Records and Tuples]] 的分解过程。
+** ~tuple~ 与自定义结构体
+下面两种接口都能返回多个值:
+#+begin_src cpp
+  std::tuple<bool, std::size_t, std::string> parse_record(std::string_view text);
+#+end_src
+和:
+#+begin_src cpp
+  struct ParseResult {
+    bool success;
+    std::size_t consumed;
+    std::string message;
+  };
+
+  ParseResult parse_record(std::string_view text);
+#+end_src
+它们的区别不在于性能，而是语义。
+
+~tuple~ 适合:
+- 返回值只在很小范围内使用
+- 每个位置的含义一眼便知
+- 泛型元编程
+- 与 ~std::apply~, 参数包，结构化绑定结合
+- 暂时组合若干值
+
+
+命名结构体适合:
+- 结果会跨越多个函数或模块
+- 字段具有业务含义
+- 将来可能增加不变量和成员函数
+- 字段顺序不应该成为接口的一部分
+
+
+~tuple~ 可以被视为 “快速且粗糙的数据结构”，这正说明它不应替代具有稳定语义的领域类型。
+** ~std::apply~
+可以将 tuple 的各个元素展开为函数实参:
+#+begin_src cpp
+  #include <functional>
+  #include <tuple>
+
+  void log_event(int level, std::string_view catagory, std::string_view message);
+
+  auto args = std::tuple{2, std::string_view{"memory"}, std::string_view{"allocation failed"}};
+
+  std::apply(log_event, args);
+#+end_src
+它本质上连接了:
+- tuple
+- 参数包(parameter pack)
+- ~std::invoke~
+- 泛型调用
+
+
+所以 tuple 的更深层含义不是 “保存三个不同类型的值”，而是:
+
+#+begin_quote
+把一组编译期已知的异构值，当作一个整体进行传递和展开。
+#+end_quote
+* ~std::bitset<N>~: 编译期固定大小的位集合
+** 与整数位运算的区别
+可以用整数保存标志:
+#+begin_src cpp
+  std::uint32_t flags;
+#+end_src
+也可以使用:
+#+begin_src cpp
+  std::bitset<32> flags;
+#+end_src
+~bitset~ 的优势是:
+- 位数可以不对应任何内置整数宽度
+- 可以超过64位
+- 提供 ~set~, ~reset~, ~flip~, ~test~, ~count~
+- 更直接表达 “这是一个位集合”
+
+
+#+begin_src cpp
+  #include <bitset>
+
+  std::bitset<8> state;
+
+  state.set(0); // 设置第0位
+  state.set(3);
+  state.flip(3);
+  bool active = state.test(0);
+  auto count = state.count();
+#+end_src
+~std::bitset<N>~ 的 ~N~ 是非类型模板参数，因此大小是类型的一部分。 ~N~ 不同的 bitset 是不同类型。
+** 适用场景
+比如贪吃蛇中可以表示一组状态:
+#+begin_src cpp
+  enum class SnakeFlag : std::size_t {
+    alive,
+    invulnerable,
+    blinking,
+    paused,
+    count
+  };
+
+  using SnakeFlags = std::bitset<static_cast<std::size_t>(SnakeFlag::count)>;
+
+  void set_flag(SnakeFlags& flags, Snake flag) {
+    flags.set(static_cast<std::size_t>(flag));
+  }
+#+end_src
+但如果每个业务都有名称和不变量，直接用成员变量往往更清晰。
+* 正则表达式
+** 四个核心组件
+标准正则库主要由四类设施构成：
+1. ~std::regex~: 编译后的模式
+2. ~std::regex_match~: 要求整个字符串匹配
+3. ~std::regex_search~: 查找某个匹配子串
+4. ~std::regex_iterator~ / ~std::regex_replace~: 遍历和替换
+
+
+原书通过 ~sregex_iterator~ 说明其迭代方式: 迭代器构造时寻找第一个匹配，递增时继续执行下一次搜索。
+
+注意 ~match~ 与 ~search~:
+#+begin_src cpp
+  std::regex_match("abc123", identifier);   // 整体必须符合
+  std::regex_search("x = abc123;", identifier); // 只需找到子串
+#+end_src
+** 捕获组
+在正则表达式中，用圆括号 ~(...)~ 包围的子表达式称为 *捕获组* (capturing group).
+
+它同时完成两件事情:
+1. 把若干正则规则组合为一个整体
+2. 保存这个子表达式实际匹配到的文本，供程序之后读取
+
+例如:
+#+begin_src cpp
+  (\d{4})-(\d{2})-(\d{2})
+#+end_src
+匹配: ~2026-07-13~ . 其中:
+- 整个表达式: 2026-07-13
+- 第一个捕获组: 2026
+- 第二个捕获组: 07
+- 第三个捕获组: 13
+
+
+C++标准库用 ~std::match_results~ 保存匹配结果，其中每个匹配结果是一个 ~std::sub_match~ 对象。标准明确规定， ~sub_match~ 表示某个捕获子表达式所匹配到的字符序列。
+*** 在C++中读取捕获组
+#+begin_src cpp
+  #include <iostream>
+  #include <regex>
+  #include <string>
+
+  int main() {
+    const std::string text{"2026-07-13"};
+    const std::regex pattren {
+      R"((\d{4})-(\d{2})-(\d{2}))"
+    };
+
+    std::smatch match;
+    if (std::regex_match(text, match, pattern)) {
+      std::cout << "完整匹配" << match[0].str() << '\n';
+      std::cout << "年份: " << match[1].str() << '\n';
+      std::cout << "月份: " << match[2].str() << '\n';
+      std::cout << "日期: " << match[3].str() << '\n';
+    }
+  }
+#+end_src
+编号规则中 ~match[0]~ 表示整个正则表达式的匹配结果。之后的捕获组从1开始递增。
+*** 捕获组按照左括号出现的顺序编号
+并不是按照嵌套深度，或匹配完成的顺序，而是按照 *捕获左括号 ~(~ 从左到右出现的顺序* 。
+
+例如:
+#+begin_example
+((ab)c)-(de)
+#+end_example
+对应:
+- 第一组: ((ab)c)
+- 第二组: (ab)
+- 第三组: (de)
+* 随机数: 引擎与分布的分离
+C++的现代随机数设施位于 ~#include <random>~ ，理解它最关键的模型是:
+#+begin_example
+  种子 seed
+     ↓
+  随机数引擎 engine
+     ↓  产生均匀的原始无符号整数/随机位
+  概率分布 distribution
+     ↓  将原始随机位映射为业务需要的随机变量
+  最终结果
+#+end_example
+
+例如投掷一个六面骰子:
+#+begin_src cpp
+  std::mt19937 engine{42};
+  std::uniform_int_distribution<int> die{1, 6};
+
+  int result = die(engine);
+#+end_src
+
+这里，
+- ~engine~ 决定底层伪随机序列
+- ~die~ 决定结果属于 ~[1, 6]~, 且每个整数等概率
+- 真正生成骰子结果的调用是 ~die(engine)~, 而不是直接调用 ~engine()~
+
+标准实际上区分了四类实体：均匀随机生成器，随机数引擎，引擎适配器和概率分布。我们通常把它简化为“引擎+分布”两层模型；任何URBG要求的生成器都可以交给分布使用。
+
+** 两层模型
+C++随机数库随机过程拆成:
+- 随机数引擎 (random-number engine): 生成伪随机位序列
+- 概率分布 (probabilty distribution) : 把引擎输出映射为所需统计分布
+
+
+*** 为什么需要两层模型
+设想我们直接调用:
+#+begin_src cpp
+  std::mt19937 engine{42};
+  std::cout << engine() << '\n';
+#+end_src
+
+可能得到: ~1608637542~
+
+~std::mt19937~ 的任务只是不断产生范围很大的原始整数。它并不知道我们想要的是:
+- ~[1, 6]~ 的骰子
+- ~[0.0, 1,0)~ 的实数
+- 30% 概率为真的布尔值
+- 权重100、标准差15的正态分布
+- 按权重随机选择某个物品
+
+
+这些都是概率分布负责的问题。
+
+所以二者的职责可以归纳为:
+- 引擎：随机性从哪里来，序列如何推进
+- 分布：随机结果长什么样、负责哪种规律
+
+#+begin_src cpp
+  std::mt19937 engine{42};
+
+  std::uniform_int_distribution<int> die{1, 6};
+  std::bernoulli_distribution critical_hit{0.2};
+  std::normat_distribution<double> height{170.0, 6.0};
+
+  auto dice_result = die(engine);
+  auto is_critical = critical_hit(engine);
+  auto sample_height = height(engine);
+#+end_src
+
+分布在标准中被定义为函数对象：它接受一个均匀随机生成器，并按照对应概率函数返回结果。一次分布调用可能消耗引擎的一次、两次甚至多次输出。
+
+** 随机数引擎
+
+*** 引擎是什么
+随机数引擎是一个有内部状态的函数对象。
+
+理念上可以写成:
+#+begin_example
+当前状态 state_i
+    │
+    ├── generation algorithm ──> 本次输出
+    │
+    └── transition algorithm ──> 下一个状态 state_i+1
+#+end_example
+
+每次调用:
+#+begin_src cpp
+  engine();
+#+end_src
+
+会:
+1. 根据当前状态生成一个无符号整数
+2. 推进内部状态
+3. 下一次调用产生序列中的下一个数
+
+标准明确规定，引擎拥有状态、状态转移算法和生成算法；调用 ~e()~ 会推进状态并返回生成结果。
+
+因此引擎通常是为随机数生成器:
+#+begin_src cpp
+  std::mt19937 engine{42};
+#+end_src
+
+给定相同的:
+- 引擎类型
+- 初始种子
+- 调用顺序
+
+引擎会产生相同的确定性序列。
+
+这对于测试、模拟和调试反而非常重要。
+
+*** 引擎是有状态对象
+
+#+begin_src cpp
+  std::mt19937 engine{42};
+
+  auto a = engine();
+  auto b = engine();
+  auto c = engine();
+#+end_src
+
+~a~, ~b~, ~c~ 来自同一随机序列的连续位置。
+
+不要把引擎理解为: ~random()~ 这样的无状态数学函数。而更接近:
+#+begin_src cpp
+  class SimplifiedEngine {
+    State state_;
+  public:
+    unsigned operator()() {
+      const auto result = generate_from(state_);
+      state_ = advanced(state_);
+      return result;
+    }
+  };
+#+end_src
+
+这也是为什么分布要求接受非常量左值引用：
+#+begin_src cpp
+  distribution(engine);
+#+end_src
+而不是:
+#+begin_src cpp
+  distribution(const_engine); // error
+#+end_src
+因为生成数字会修改引擎住状态。
+
+*** 复制引擎会复制其状态
+#+begin_src cpp
+  std::mt19937 first{42};
+  first();
+  first();
+  auto second = first;
+  std::cout << first() << '\n';
+  std::cout << second() << '\n';
+#+end_src
+
+最后两个输出结果相同。因为 ~second~ 从 ~first~ 当前所在的位置复制了整个状态。
+
+也就是说:
+
+#+begin_quote
+复制引擎 约等于 复制随机序列的当前位置.
+#+end_quote
+
+函数内部推进的是副本，外部引擎不会改变。通常应该按引用传递:
+#+begin_src cpp
+  void generate_value(std::mt19937& engine);
+#+end_src
+
+标准对引擎相等性的定义，也建立在 “未来会生成相同序列” 这一点上。
+
+** 常见随机数引擎
+*** ~std::mt19937~
+最常见的通用选择就是: ~std::mt19937 engine{seed}~ .
+
+它是预定义32位 Mrsenne Twister 引擎。算法、参数和预期输出由标准指定，因此固定种子下的 *原始引擎序列* 具有标准规定的行为。标准甚至规定默认构造的 ~mt19937~ 第10000次输出必须是 ~4123659995~.
+
+它的特点是:
+- 速度较快
+- 状态较大
+- 统计性质适合一般模拟、游戏和测试
+- 确定性强、便于复现
+- 不应当作为密码学安全随机源
+
+
+*** ~std::mt19937_64~
+产生64位原始结果，内部参数和 ~mt19937~ 不同，不是简单地把两个32位的结果拼起来。
+
+*** ~std::minstd_rand~
+#+begin_src cpp
+  std::minstd_rand engine{seed};
+#+end_src
+
+这是同余线性引擎的预定义版本:
+- 状态小
+- 实现简单
+- 某些场景速度和空间占用较低
+- 随机质量通常不如 ~mt19937~
+***  ~std::default_random_engine~
+这个名字其实是:
+#+begin_src cpp
+  using default_random_engine = implementation_defined;
+#+end_src
+
+不同标准库可以选择不同引擎。因此需要跨平台复现时，不应依赖它。
+#+begin_src cpp
+  #include <random>
+
+  std::mt19937 engine{12345};
+  std::uniform_int_distribution<int> dist{1, 6};
+
+  int dice = dist(engine);
+#+end_src
+不能简单理解为“引擎生成1到6的数字”，实际过程是:
+
+engine -> 大范围均匀整数 -> distribution -> [1, 6]
+
+这种分离允许:
+- 同一个引擎配不同分布
+- 同一个分布配不同引擎
+- 独立测试随机序列和概率映射
+
+** 种子: 引擎的初始状态
+
+*** 固定种子
+固定种子的特点是每次运行产生同一序列。
+
+适合:
+- 单元测试
+- 调试
+- 可重复模拟
+- 重现线上问题
+- 比较不同算法
+
+*** ~std::random_device~
+如果每次想让程序运行的序列都不同，常见写法是:
+#+begin_src cpp
+  std::random_device rd;
+  std::mt19973 engine{rd};
+#+end_src
+~std::random_device~ 的主要角色通常是取得外部随机值，用它给伪随机引擎播种。而不是在大量生成过程中取代引擎。因为:
+- 它可能比不同引擎更慢
+- 获取随机值可能失败并抛出异常
+- 不可复现
+- 具体随机来源由实现决定
+
+
+标准把 ~random_device~ 的生成机制规定为实现定义; 如果实现内部实际使用一个随机数引擎， ~entropy()~ 返回 ~0.0~, 因此不能仅凭这个类型名就假设所有平台都提供相同等级的硬件随机性或密码学安全性。
+
+** 概率分布
+概率分布也是函数对象:
+#+begin_src cpp
+  std::uniform_int_distribution<int> distribution{1, 6};
+
+  int value = distribution(engine);
+#+end_src
+
+它通常保存两类信息:
+- 参数 parameters
+- 可能的内部缓存状态 state
+
+
+例如:
+#+begin_src cpp
+  std::normal_distribution<double> normal{100.0, 15.0}
+#+end_src
+
+参数为:
+- 均值 ~100.0~
+- 标准差 ~15.0~
+
+
+*** 常见概率分布概览
+| 分布                        | 结果               | 常见用途       |
+|-----------------------------+--------------------+----------------|
+| ~uniform_int_distribution~  | 均匀整数           | 骰子、随机下标 |
+| ~uniform_real_distribution~ | 均匀实数           | 连续区间采样   |
+| ~bernoulli_distribution~    | ~bool~             | 按概率发生事件 |
+| ~binomial_distribution~     | 成功次数           | 多次独立实验   |
+| ~geometric_distribution~    | 首次成功前失败次数 | 等待次数       |
+| ~normal_distribution~       | 正态实数           | 测量误差、扰动 |
+| ~exponential_distribution~  | 非负实数           | 等待时间       |
+| ~poisson_distribution~      | 非负整数           | 单位时间事件数 |
+| ~discrete_distribution~     | 带权整数下标       | 加权抽取       |
+
+
+** 不要使用 ~%~
+
+下面的写法可能产生模偏差 (modulo bias):
+#+begin_src cpp
+  int value = engine() % 6 + 1;
+#+end_src
+应使用分布:
+#+begin_src cpp
+  std::unniform_int_distribution<int> dist{1, 6};
+  int value = dist(engine);
+#+end_src
+** 测试中的可复现性
+测试中应该使用固定 seed:
+#+begin_src cpp
+  std::mt19937 engine{0xC0FFEE};
+#+end_src
+这样失败可以重现。
+
+实际运行中可以从外部生成seed:
+#+begin_src cpp
+  std::random_device rd;
+  std::seed_seq seed {
+    rd(), rd(), rd(), rd();
+  };
+
+  std::mt19937 engine{seed};
+#+end_src
+但更好的程序接口是直接把引擎作为依赖传入:
+#+begin_src cpp
+  template <std::uniform_random_bit_generator Engine>
+  Point random_empty_point(const Board& board, Engine& engine);
+#+end_src
+这样:
+- 游戏逻辑不负责种子策略
+- 测试可以注入固定引擎
+- 重放系统可以保存 seed
+- 不会到处出现隐藏的全局随机状态
+* IO库: 格式化状态、原始字节与定位
+- 格式控制器 (manipulator)
+- 非格式化IO (unformatted IO)
+- 多字节 ~read~ / ~write~
+** 流是有状态的
+
+具体可以参见 [[id:21e2ee7c-1c60-4ebc-858d-a14f4cc8229d][condition state: 流状态是 IO 的核心]]
+
+#+begin_src cpp
+  std::cout << std::hex << 255; // ff
+  std::cout << 255; // 仍然是 ff
+#+end_src
+格式控制会保存在流对象中。因此库函数修改外部流状态时需要谨慎。可以保存并恢复:
+
+#+begin_src cpp
+  auto flags = os.flags();
+  auto precision = os.precision();
+
+  os << std::hex << value;
+
+  os.flags(flags);
+  os.precision(precision);
+#+end_src
+** 现代标准补充
+C++20 引入了 ~<format>~, C++23 引入了 ~<print>~ 和 ~<spanstream>~ 。 这些设施使格式化和固定缓冲区 IO  更直接:
+
+#+begin_src cpp
+  #include <print>
+
+  std::println("socre: {}, position: ({}, {})", score, point.x, point.y);
+#+end_src
+对于普通输出，现代代码通常优先考虑:
+- ~std::format~: 产生字符串
+- ~std::print~ / ~std::println~: 直接输出
+- iostream: 需要流抽象、用户自定义 ~operator<<~ 、流状态或旧接口时。
+* 大型程序工具
+第18章讲述三个主题：异常、命名空间、多重继承。
+- 异常：控制流跨越调用边界
+- 命名空间：名称跨越源码和库边界
+- 多重继承：类型能力跨越多个接口边界
+* 异常不是错误码的特殊写法
+** 异常的真正模型
+执行:
+#+begin_src cpp
+  throw MyError{"invalid record"};
+#+end_src
+不是简单跳转到 ~catch~, 而是:
+1. 根据抛出表达式构造异常对象(exception object)
+2. 沿调用链搜索匹配的 handler
+3. 退出沿途作用域
+4. 销毁已经构造完成的自动对象
+5. 进入最近的匹配 ~catch~
+
+
+这个过程称为栈展开(stack unwinding). 栈展开期间局部类对象会被自动销毁，这正是 RAII 能保证异常安全的基础。
+
+#+begin_src cpp
+  void load() {
+    std::ifstream input{"config.txt"};
+    std::vector<Record> records;
+
+    parse(input, record);
+  }
+#+end_src
+~input~ 和 ~records~ 都由析构函数清理。
+
+相反：
+#+begin_src cpp
+  void bad() {
+    int *data = new int[100];
+    parse(); // 如果抛异常，下面的 delete[] 不执行
+    delete[] data;
+  }
+#+end_src
+这正说明:
+#+begin_quote
+异常安全首先是资源所有权问题，其次才是 ~try~ / ~catch~ 语法问题
+#+end_quote
+** 什么是栈展开
+假设函数中抛出了异常:
+#+begin_src cpp
+  void process() {
+    File file{"data.txt"};
+    Buffer buffer;
+
+    do_something(); // 这里抛出异常
+  }
+#+end_src
+
+当 ~do_someting()~ 抛出异常后，程序不能直接跳到外层 ~catch~, 它必须先销毁 _当前作用域中已经构造完成的局部对象_ :
+#+begin_example
+do_something() 抛出异常
+        ↓
+销毁 buffer
+        ↓
+销毁 file
+        ↓
+离开 process()
+        ↓
+寻找匹配的 catch
+#+end_example
+
+这个“沿调用栈向外退出，并依次销毁局部对象”的过程，就是 *栈展开* 。
+
+C++标准规定，从异常抛出点转移到处理器的过程中，具有自动存储期且已经构造、尚未销毁的对象会按照构造完成顺序的逆序销毁。
+
+** 捕获异常应使用引用
+#+begin_src cpp
+  try{
+    work()
+  } catch (const ParseError &error) {
+    std::cerr << error.what();
+  } catch (const std::exception &error) {
+    std::cerr << error.what();
+  }
+#+end_src
+因为:
+- 避免额外复制
+- 避免对象切片
+- 保留动态类型
+- 派生异常必须放在基类异常前面
+** 重新抛出
+#+begin_src cpp
+  catch (const std::exception &e) {
+    log(e);
+    throw; // 重新抛出原异常对象
+  }
+#+end_src
+不要写 ~throw e;~, 这是抛出 ~e~ 的新副本，其静态类型可能导致切片。
+** 析构函数不能让异常逃逸
+
+考虑这个析构函数:
+#+begin_src cpp
+  struct BadResource {
+    ~BadResource() noexcept(false) {
+      throw std::runtime_error{"clean failed"};
+    }
+  };
+#+end_src
+然后:
+#+begin_src cpp
+  void word()
+  {
+    BadResource resource;
+    throw std::runtime_error{"operation failed"};
+  }
+#+end_src
+执行过程是:
+#+begin_example
+抛出异常 A："operation failed"
+        ↓
+开始栈展开
+        ↓
+调用 resource.~BadResource()
+        ↓
+析构函数抛出异常 B："cleanup failed"
+        ↓
+两个异常同时试图向外传播
+        ↓
+std::terminate()
+#+end_example
+为了做上面的试验，我们必须特意写成 ~~BadResource() noexcept(false)~, 否则析构函数本身就是非抛出的。异常一旦逃逸，已经会违反 ~noexcept~ 而终止程序。
+
+标准明确规定: 如果异常处理机制正在处理一个未捕获异常，而它直接调用的函数又通过异常退出，则调用 ~std::terminate~; 其中明确包括“栈展开直接调用的析构函数通过异常退出”的情况。
+** 析构函数通常隐式 ~noexcept~
+即便没有其他异常，下面的代码通常也会终止:
+#+begin_src cpp
+  struct Resource {
+      ~Resource()
+      {
+          throw std::runtime_error{"failed"};
+      }
+  };
+
+  int main()
+  {
+      Resource resource;
+  }
+#+end_src
+因为一个没有显式写 ~noexcept~ 的析构函数，其异常通常按照隐式声明的析构函数计算。只要所有基类和成员的析构函数都不抛出，它通常等价于:
+#+begin_src cpp
+  ~Resources() noexcept(true);
+#+end_src
+析构函数没有显式 ~noexcept~ 是，使用与隐式声明析构函数相同的异常说明；只有某个可能构造的子对象析构函数是 potentially-throwing 时，它才会成为 potentially-throwing.
+
+所以要区分两个规则:
+*** 普通 ~nexcept~ 析构函数抛出
+#+begin_src cpp
+  ~Resource() noexcept {
+    throw Error{};
+  }
+#+end_src
+无论是否正在栈展开，异常逃出 ~noexcept~ 函数都会调用 ~std::terminate()~. 
+*** ~noexcept(flase)~ 析构函数在栈展开中抛出
+#+begin_src cpp
+  ~Resource() noexcept(false) {
+    throw Error{};
+  }
+#+end_src
+如果它在正常控制流中被调用，异常在技术上可以被捕获:
+#+begin_src cpp
+  try {
+      Resource resource;
+  } catch (...) {
+      // 析构异常可能到这里
+  }
+#+end_src
+但是如果析构函数是由另一个异常的栈展开调用的，它再次抛出依然会 ~std::terminate~
+* 异常安全保证
+一个操作不仅要考虑 “会不会抛出异常”，还要声明抛出后对象处于什么状态。
+** 四种常见级别
+| 保证     | 含义                                   |
+|----------+----------------------------------------|
+| 无保证   | 异常后对象可能损坏                     |
+| 基本保证 | 不泄露资源、不变量仍成立，但值可能变化 |
+| 强保证   | 失败后状态保持调用前不变               |
+| 不抛保证 | 操作不会让异常逃逸                     |
+*** 基本保证
+基本保证要求:
+1. 不泄露资源
+2. 对象的不变量仍然成立
+3. 对象仍然是有效对象
+4. 但对象的值可能变化
+
+例如:
+#+begin_src cpp
+  try {
+    vec.push_back(value);
+  } catch(...) {
+    // vec 仍然可以被析构、clear、重新赋值等
+    // 但原有对象值不一定完全保持不变
+  }
+#+end_src
+*** 强保证
+强保证通常描述为: 操作要么完全成功，要么没有效果。
+
+也被称为:
+- commit-or-rollback
+- transactional behavior
+- 事务式语义
+
+
+形式上可以理解为:
+- 成功: 提交新状态
+- 失败: 恢复调用前状态
+*** 不抛保证
+不抛保证表示:
+#+begin_quote
+操作不会让异常逃出函数边界。
+#+end_quote
+典型例子是:
+#+begin_src cpp
+  void swap(Vector &other) noexcept;
+  ~Vector() noexcept;
+#+end_src
+注意， ~noexcept~ 是函数接口中的异常说明。它表示异常不能传播出这个函数，如果异常真的逃出了，程序会调用 ~std::terminate~ .
+
+而函数内部仍然可以捕获并处理异常:
+#+begin_src cpp
+  void cleanup() noexcept {
+    try {
+      potentially_throwing_operation();
+    } catch (...) {
+      // 在内部处理
+    }
+  }
+#+end_src
+** 重新分配代码的基本结构
+考虑一个 ~vector~ 风格的重新分配函数：
+#+begin_src cpp
+  pointer new_data = allocate(new_capacity);
+  pointer current = new_data;
+
+  try {
+    for (pointer src = data_; src != data_ + size_; ++src) {
+      traits::construct(alloc_, current, std::move_if_noexcept(*src));
+      ++current;
+    }
+  } catch (...) {
+    std::destroy(new_data, current);
+    deallocate(new_data, new_capacity);
+    throw;
+  }
+
+  destroy_old_elements();
+  deallocate_old_storage();
+
+  data_ = new_data;
+  capacity_ = new_capacity;
+#+end_src
+
+它可以分为三个阶段:
+1. 分配新存储
+2. 在新存储中构造元素
+3. 销毁旧存储并提交新状态
+
+如果第一阶段失败，就容器还没有被修改，因此天然符合强保证。
+
+最困难的是第二阶段:
+#+begin_src cpp
+  traits::construct(alloc_, current, std::move_if_noexcept(*src));
+#+end_src
+
+因为复制可能抛异常，而移动又可能改变旧元素。解决这个矛盾的核心就是 ~std::move_if_noexcept~.
+** ~std::move_if_noexcept~ 做了什么
+它的标准声明近似如下:
+#+begin_src cpp
+  template <class T>
+    constexpr std::conditional_t<!std::is_nothrow_move_constructible_v<T> &&
+    std::is_copy_constructible_v<T>, const T&, T&&>
+    move_if_noexcept(T& value) noexcept;
+#+end_src
+
+也就是说，它根据类型性质会返回: ~const T&~ 或 ~T&&~
+
+当移动构造可能抛异常且复制构造可用时，返回类型为 ~const T&~, 否则返回 ~T&&~
+
+写成便于理解的伪实现是:
+#+begin_src cpp
+  template <class T>
+  constexpr decltype(auto) my_move_if_noexcept(T& value) noexcept {
+    if constexpr (std::is_nothrow_move_constructible_v<T> ||
+      !std::is_copy_constructible_V<T>) {
+      return std::move(value); // T&&
+    } else {
+      return std::as_const(value); // const T&
+    }
+  }
+#+end_src
+
+函数体最终只会返回 ~std::move(x)~ ; 真正决定复制还是移动的是返回类型和之后的构造函数重载决议。
+
+因此:
+#+begin_quote
+~std::move_if_noexcept~ 自己既不会复制，也不移动；它只是选择应当把源对象作为 ~const T&~ 还是 ~T&&~ 传递下去。
+#+end_quote
+*** 并非“先尝试移动，失败后改为复制”
+根据我们上面的实现，很容易看出其并不是:
+
+#+begin_quote
+尝试移动 -> 如果抛出异常 -> 改为复制
+#+end_quote
+
+这种做法不能保证安全。因为移动构造抛出时，源对象可能已经是 moved-from 状态了。
+
+而实际的逻辑发生在编译期 (用 ~constexpr~ 修饰):
+#+begin_quote
+检查 T 的类型性质
+    ↓
+移动保证不抛？
+    ├── 是：选择移动
+    └── 否：
+         ├── 可以复制：选择复制
+         └── 不能复制：只能冒险移动
+#+end_quote
+
+也就是说，它在操作前就决定策略。
+
+* ~noexcept~ 是接口契约
+它不表示函数体内绝不可能执行 ~throw~, 而是表示:
+
+#+begin_quote
+异常不得从该函数传播给调用方。
+#+end_quote
+如果异常逃出 ~noexcept~ 函数，调用 ~std::terminate~
+
+** ~noexcept~ 同时影响异常安全与性能
+假设一个类型的移动构造实际上不会抛异常，但没有声明 ~noexcept~:
+#+begin_src cpp
+  class Buffer {
+  public:
+    Buffer(Buffer&& other); // 没写 noexcept
+  }
+#+end_src
+对于类型系统而言:
+#+begin_src cpp
+  std::is_nothrow_move_constructible_v<Buffer>
+#+end_src
+通常就是 ~false~. 如果 ~Buffer~ 同时可以复制， ~std::move_if_noexcept~ 会选择复制:
+#+begin_example
+vector 扩容
+    ↓
+发现移动未声明 noexcept
+    ↓
+为了强异常保证而选择复制
+#+end_example
+结果可能是:
+- 更多内存分配
+- 更高复制成本
+- 本可以移动的资源被完整复制
+
+如果移动操作确实保证不抛出异常，那么应当准确声明 ~noexcept~ . 但又不能为了让容器选择移动而随意添加 ~noexcept~, 如果函数实际抛出异常却声明为 ~noexcept~, 程序就会终止。
+** 适合标记 ~noexcept~ 的函数
+通常包括:
+- 析构函数
+- 仅交换或转移句柄的移动构造
+- 仅交换成员的 ~swap~
+- 不分配、不复制复杂对象的观察函数
+- 明确不能失败的底层操作
+** 条件 ~noexcept~
+泛型代码不能假定成员操作不抛异常:
+#+begin_src cpp
+  template <typename T>
+  void exchange(T& a, T& b) noexcept(noexcept(std::swap(a, b))) {
+    std::swap(a, b);
+  }
+#+end_src
+外层函数的异常规格依赖内层表达式。
+** 不要滥用 ~noexcept~
+比如:
+#+begin_src cpp
+  void save_to_file() noexcept;
+#+end_src
+如果内部文件写入、分配或格式化可能失败，把它标为 ~noexcept~ 往往是把可恢复错误转成进程终止。
+* 异常与 ~std::expected~
+C++23提供 ~std::expected<T, E>~ 表示:
+#+begin_quote
+成功值 T 或失败值 E
+#+end_quote
+它适合调用者经常需要检查的预期失败:
+#+begin_src cpp
+  #include <expected>
+  enum class ParseError {
+    empty,
+    invalid_character,
+    out_of_range
+  };
+
+  std::expected<int, ParseError> parse_int(std::string_view text);
+#+end_src
+可以这样调用:
+#+begin_src cpp
+  auto result = parse_int(text);
+  if (!result) {
+    handle(result.error());
+    return;
+  }
+
+  int value = *result;
+#+end_src
+* 命名空间: 逻辑所有权与名称查找
+** 命名空间不是文件夹
+#+begin_src cpp
+  namespace snake {
+    class Game;
+    class Board;
+    void run(Game&);
+  }
+#+end_src
+命名空间表达这些名称属于同一个逻辑组件。它可以分布在多个文件中。
+#+begin_src cpp
+  // game.hpp
+  namespace snake {
+    class Game { /* ... */ };
+  }
+
+  // game.cpp
+  namespace snake {
+    void Game::tick() { /* .... */ }
+  }
+#+end_src
+书中建议把 namespace 的接口和实现继续拆到不同头文件和源文件，而不是把所有相关类型都塞进一个文件。
+** 头文件中禁止 ~using namespace~
+错误:
+#+begin_src cpp
+  // vector_util.hpp
+  using namespace std;
+#+end_src
+这会令所有包含者都被迫把 ~std~ 中的名字引入其作用域。可能导致:
+- 名称冲突
+- 重载集合改变
+- 模板实例化后结果变化
+- 后续标准库增加名字后代码突然失败
+
+
+在 ~.cpp~ 的小作用域内使用:
+#+begin_src cpp
+  void f() {
+    using std::string;
+    using std::vector;
+  }
+#+end_src
+风险小很多。
+** 嵌套命名空间
+现代写法:
+#+begin_src cpp
+  namespace project::storage::detail {
+    class Buffer;
+  }
+#+end_src
+相当于:
+#+begin_src cpp
+  namespace project {
+    namespace storage {
+      namespace detail {
+        class Buffer;
+      }
+    }
+  }
+#+end_src
+** 未命名命名空间
+#+begin_src cpp
+  namespace {
+    constexpr int buffer_size = 4096;
+    void helper() {}
+  }
+#+end_src
+这些名字具有当前翻译单元的内部链接属性。未命名命名空间只在单个文件中连续，不会跨文件。
+
+不要在头文件中随意使用未命名命名空间，否则每个包含该头文件的翻译单元都会得到独立实体。
+** ADL: 实参依赖查找
+#+begin_src cpp
+  namespace geometry {
+    struct Point {
+      int x;
+      int y;
+    };
+    bool operator==(const Point&, const Point&);
+  }
+
+  geometry::Point a, b;
+  bool same = (a == b);
+#+end_src
+这里对于运算符 ~==~, 即便没有写 ~geometry::operator==(a, b)~ 编译器也能根据实参类型 ~geometry::Point~ 搜索 ~geometry~ 命名空间。这就是 *Argument-Dependent Lookup* .
+* 多重继承: 组合多个类型身份
+** 多个纯接口
+#+begin_src cpp
+  struct Drawable {
+    virtual void draw() const = 0;
+    virtual ~Drawable() = default;
+  };
+
+  struct Serializable {
+    virtual void save(std::ostream&) const = 0;
+    virtual ~Serializable() = default;
+  };
+
+  class Sprite final : public Drawable, public Serializable {
+  public:
+    void draw() const override;
+    void save(std::ostream&) const override;
+  };
+#+end_src
+这里 ~Sprite~ 同时满足两个独立接口。这种多重继承相对容易理解，因为两个基类:
+- 不保存共享业务状态
+- 不争夺同名成员
+- 主要表达能力集合
+** 状态型多重继承的问题
+#+begin_src cpp
+  struct Named {
+    std::string name;
+  };
+
+  struct Employee : Named {};
+  struct Cutomer : Named {};
+
+  struct AccountManager : Employee, Customer {};
+#+end_src
+~AccountManager~ 中有两个 ~Named~ 子对象:
+
+#+begin_example
+  AccountManager
+  ├── Employee
+  │   └── Named
+  └── Customer
+      └── Named
+#+end_example
+
+因此: ~manager.name~ 会造成歧义。
+
+更深的问题是：它究竟应该有一个名字还是两个名字？
+** 虚继承
+#+begin_src cpp
+  struct Employee : virtual Named {};
+  struct Customer : virtual Named {};
+#+end_src
+此时最终对象共享一个 ~Named~ 虚基类子对象。
+
+但虚继承带来特殊构造规则:
+- 虚基类最先构造
+- 由最派生类(most-derived class) 负责初始化
+- 中间基类对虚基类的初始化，在构造更派生对象时不生效
+
+
+现代设计建议:
+#+begin_quote
+多重继承优先用接口组合；遇到可变共享状态时，先考虑组合而不是虚继承。
+#+end_quote
+
+-----
+
+* 特殊工具和底层机制
+第19章涉及内存控制、RTTI、枚举、成员指针、嵌套类、联合体和不可移植设施。它们共同指向C++的底层特性：类型不仅有值，还有布局、生命周期、动态类型和ABI.
+
+* 存储、对象、生命周期、所有权
+
+** ~new~ 表达式不是 ~operator new~
+#+begin_src cpp
+  Widget *p = new Widget{42};
+#+end_src
+概念上包括:
+- 调用分配函数 ~operator new~ 获得原始存储
+- 在该存储中构造 ~Widget~
+- 返回指向已构造对象的指针
+
+
+而:
+#+begin_src cpp
+  void *raw = ::operator new(sizeof(Widget));
+#+end_src
+只获得未类型化存储，没有 ~Widget~ 对象存在。
+
+所以需要区分:
+- new-expresson: 包含分配和构造
+- ~operator new~ allocation function: 只负责字节存储
+
+
+同理， ~delete p~ 概念上是:
+- 调用析构函数
+- 调用 ~operator delete~ 释放存储
+
+
+** 在已有存储中构造对象
+
+#+begin_src cpp
+  #include <memory>
+  #include <new>
+
+  void *raw = ::operator new(sizeof(Widget));
+  Widget *storage = static_cast<Widget*>(raw);
+
+  Widget *p = std::construct_at(storage, 42);
+
+  std::destroy_at(p);
+  ::operator delete(raw);
+#+end_src
+
+** 一般不重载全局 ~operator new~
+全局重载会影响整个程序以及可能依赖全局分配器的库。错误会污染所有动态分配。
+
+更可组合、更现代的方法包括:
+- allocator-aware container
+- ~std::allocator_traits~
+- 自定义 allocator
+- ~std::pmr::memory_resource~
+- 局部 arena 或 object pool
+
+* RTTI: 运行时询问对象的动态类型
+RTTI (Run-Time Type Identification) 主要包括:
+- ~dynamic_cast~
+- ~typeid~
+- ~std::type_info~
+
+
+** ~dynamic_cast~
+假设:
+#+begin_src cpp
+  struct Shape {
+    virtual ~Shape() = default;
+  };
+
+  struct Circle : Shape {
+    double radius;
+  };
+#+end_src
+指针形式:
+#+begin_src cpp
+  Shape *shape = get_shape();
+
+  if (auto* circle = dynamic_cast<Circle*>(shape)) {
+    use(circle->radius);
+  }
+#+end_src
+失败返回空指针。
+
+引用形式:
+#+begin_src cpp
+  try {
+      Circle& circle = dynamic_cast<Circle&>(*shape);
+  }
+  catch (const std::bad_cast&) {
+  }
+#+end_src
+失败抛出 ~std::bad_cast~
+
+用于运行时向下转换的源基类必须是多态类，即至少具有一个虚函数。
+
+** ~typeid~
+#+begin_src cpp
+  Shape &shape = get_shape_ref();
+
+  if (typeid(shape) == typeid(Circle)) {
+    
+  }
+#+end_src
+对多态对象的 glvalue, ~typeid~ 可以得到动态类型；对非多态表达式，通常反映静态类型。
+
+不要依赖:
+#+begin_src cpp
+  typeid(x).name()
+#+end_src
+能返回稳定、可移植或可读的类型名。文本表示由实现决定。
+
+
+** RTTI 什么时候合理
+合理用途:
+- 插件或判断框架
+- 调试和诊断
+- 序列化注册
+- 对现有继承层次执行少量横切操作
+- 必须在运行期安全检查类型关系
+
+经常出现 RTTI 链时:
+#+begin_src cpp
+  if (auto *a = dynamic_cast<A*>(p)) {...}
+  else if (auto *b = dynamic_cast<B*>(p)) {...}
+  else if (auto *c = dynamic_cast<C*>(p)) {...}
+#+end_src
+说明操作本身应该是虚函数，或者类型集合封闭，适合 ~std::variant~:
+#+begin_src cpp
+  using Shape = std::variant<Cricle, Rectangle, Triangle>;
+
+  std::visit([](const auto &shape){
+    draw(shape);
+  }, value);
+#+end_src
+
+* 枚举: ~enum class~
+传统枚举:
+#+begin_src cpp
+  enum Direction {
+    up,
+    down.
+    left,
+    right
+  };
+#+end_src
+存在两个问题:
+- 枚举名泄露到外围作用域
+- 可隐式转换为整数
+
+
+现代代码默认使用:
+#+begin_src cpp
+  enum class Direction {
+    up,
+    down,
+    left,
+    right
+  };
+#+end_src
+使用时:
+#+begin_src cpp
+  Direction direction = Direction::left;
+#+end_src
+作用域枚举通过显式作用域和禁止隐式整数转换，提供了真正的独立类型。
+** 指定底层类型
+#+begin_src cpp
+  #include <cstdint>
+
+  enum class PacketType : std::unit8_t {
+    ping = 1,
+    data = 2,
+    close = 3
+  };
+#+end_src
+但只指定枚举底层类型并不能自动解决字节序、结构体填充、协议版本、ABI差异等问题。
+* 成员指针: 成员位置与调用方式的抽象
+** 数据成员指针
+#+begin_src cpp
+  struct Food {
+      Point pos;
+      int score;
+  };
+
+  Point Food::* member = &Food::pos;
+
+  Food food;
+  Point p = food.*member;
+
+  Food* ptr = &food;
+  Point q = ptr->*member;
+#+end_src
+
+~Point Food::*~ 表达:
+#+begin_quote
+某个 ~Food~ 对象中，一个类型为 ~Point~ 的成员的位置描述。
+#+end_quote
+成员指针不绑定具体对象；使用时必须提供对象。
+
+** 成员函数指针
+#+begin_src cpp
+  struct Game {
+    void pause();
+  };
+
+  void (Game::*action)() = &Game::pause;
+
+  Game game;
+  (game.*action)();
+#+end_src
+语法较复杂，因此现代代码通过: ~std::invoke~:
+#+begin_src cpp
+  #include <functional>
+  std::invoke(action, game);
+  std::invoke(action, &game);
+#+end_src
+~std::invoke~ 能统一调用:
+- 普通函数
+- 函数对象
+- lambda
+- 成员函数指针
+- 数据成员指针
+
+
+** 在 ranges 中作为projection
+成员指针在现代 ranges 中非常重要:
+#+begin_src cpp
+  std::ranges::sort(foods, {}, &Food::score);
+#+end_src
+等价于按:
+#+begin_src cpp
+  [](const Food& food) {
+    return food.score;
+  }
+#+end_src
+排序。
+
+* 嵌套类和局部类
+
+** 嵌套类
+#+begin_src cpp
+  class SimpleVector {
+  public:
+    class iterator;
+  private:
+    struct Storage;
+  };
+#+end_src
+嵌套类通常用于:
+- iterator
+- node
+- implementation detail
+- builder
+- 与外层类型紧密相关的辅助类型
+
+
+嵌套类名属于外层类作用域，但是嵌套类对象不自动拥有外层对象。如果想要访问具体的外层对象，仍然需要获取指针或对象。
+
+** 局部类
+#+begin_src cpp
+  void process() {
+    class Comparator {
+    public:
+      bool operator()(int lhs, int rhs) const {
+        return lhs < rhs;
+      }
+    };
+  }
+#+end_src
+现代代码多使用lambda:
+#+begin_src cpp
+  auto comparator = [](int lhs, int rhs) {
+    return lhs < rhs;
+  };
+#+end_src
+
+* union 与 std::variant
+
+** 原始 union 的语义
+#+begin_src cpp
+  union Value {
+    int integer;
+    double real;
+  };
+#+end_src
+
+它的多个成员共享同一块存储，同一时刻只有一个成员处于活动状态（active member）。
+
+#+begin_src cpp
+  Value value;
+  value.integer = 42;
+
+  // 此时读取 value.real 不代表数值转换
+#+end_src
+
+存储：
+
++----------------------+
+| integer / real 共用   |
++----------------------+
+
+如果成员有非平凡构造和析构，必须自己管理生命周期和当前活动成员。这容易出错。
+
+** 判别联合
+
+必须另存一个 discriminant：
+
+#+begin_src cpp
+  enum class Kind {
+    integer,
+    real,
+    text
+  };
+
+  class Value {
+    Kind kind_;
+
+    union {
+      int integer_;
+      double real_;
+      std::string text_;
+    };
+  };
+#+end_src
+
+然后手动实现：
+- 构造；
+- 析构；
+- 复制；
+- 移动；
+- 赋值；
+- 切换活动成员。
+  
+** 现代替代：std::variant
+
+#+begin_src cpp
+  #include <string>
+  #include <variant>
+
+  using Value = std::variant<int, double, std::string>;
+#+end_src
+
+访问：
+
+#+begin_src cpp
+Value value = std::string{"hello"};
+
+std::visit([](const auto& current) {
+    std::cout << current;
+}, value);
+#+end_src
+
+~std::variant~ 于 C++17 加入标准库，与 ~std::optional~ 、 ~std::any~  一同补全了常见的代数数据类型表达。
+
+选择：
+
+| 需求                       | 类型                   |
+|----------------------------+------------------------|
+| 有或没有一个 T             | ~std::optional<T>~     |
+| ~T~ 或错误 ~E~             | ~std::expected<T, E>~  |
+| 几种已知类型之一           | ~std::variants<Ts...>~ |
+| 任意和复制类型，运行时取回 | ~std::any~             |
+| 极端低层布局控制           | ~union~                |
+
+* 位域、 ~volatile~, ~extern "C"~
+这些设施的共同设施是：它们靠近实现、硬件或ABI,不能只看语言语法。
+
+** 位域 (bit-field)
+#+begin_src cpp
+  struct Register {
+    unsigned read : 1;
+    unsigned error : 1;
+    unsigned mode : 3;
+  };
+#+end_src
+问题在于:
+- 位的分配顺序由实现决定
+- 是否跨越存储单元由实现决定
+- 对其或填充由实现决定
+- 不能取得位域地址
+
+
+** ~volatile~ 不是线程同步
+~volatile~ 的主要语义是提示编译器：对这个对象的访问具有外部可观察语义，不能把相关访问当作普通内存随意消除。
+
+它可能用于:
+- memory-mapped IO;
+- 某些设备寄存器;
+- 与某些实现相关的特殊内存
+
+
+它不保证:
+- 原子性
+- 线程可见性
+- happens-before
+- 内存顺序
+- 免除数据竞争
+
+
+并发应该使用:
+#+begin_src cpp
+  std::atom<T>
+    std::mutex
+    std::condition_variable
+#+end_src
+~std::atomic~ 服务于并发， ~volatile~ 服务于特殊内存，两者解决的问题不同。
+
+** ~extern "C"~
+#+begin_src cpp
+  extern "C" {
+    int C_library_init();
+    void c_library_shutdown();
+  }
+#+end_src
+它声明C语言链接 (language linkage), 通常使函数使用C风格的名称链接规则，便于与C对接。
+
+* Part IV 小结
+
+** 类型表达
+- tuple: 匿名异构积类型
+- enum class: 有限命名值集合
+- variant: 若干类型之一
+- bitset: 固定大小布尔集合
+
+
+这些都在回答：
+
+#+begin_quote
+一个值可能由哪些部分组成，或者可能处于哪些状态？
+#+end_quote
+
+** 错误与控制流
+- exception: 非局部失败传播
+- expected: 显式成功/失败结果
+- noexcept: 不抛出的接口承诺
+- RAII: 失败时自动清理
+
+
+共同构成异常安全设计。
+
+** 名称与调用
+- namespace: 名称所有权
+- ADL: 根据实参类型扩展查找
+- pointer-to-pointer: 成员操作的值化
+- std::invoke:  统一调用模型
+
+
+** 对象与存储
+- operator new: 分配原始存储
+- construct_at: 开始对象生命周期
+- destroy_at: 结束对象生命周期
+- allocator / pmr: 存储策略
+- union / variant: 共享存储中的活动对象
+
+
+
