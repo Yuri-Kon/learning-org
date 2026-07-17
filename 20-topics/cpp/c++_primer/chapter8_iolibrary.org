@@ -119,6 +119,9 @@ C++本身不处理输入输出，标准库用一组 stream 类型处理终端、
 #+end_src
 IO 对象管理外部状态：终端、文件描述符、缓冲区、状态位等。函数一般不要按值接收会返回 stream 对象，而应该通过 *non-const reference* 传递。读写会改变流状态，因此不能用 ~const std::istream&~ .
 * condition state: 流状态是 IO 的核心
+:PROPERTIES:
+:ID:       21e2ee7c-1c60-4ebc-858d-a14f4cc8229d
+:END:
 ** 为什么需要状态
 IO 天然可能失败。进入错误状态后，后续读取会继续失败，直到程序员修复状态。只有当流处于 non-error state 时，才能继续读写；所以写代码要经常检查流状态。
 
