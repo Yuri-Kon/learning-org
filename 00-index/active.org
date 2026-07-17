@@ -1,13 +1,38 @@
 #+title: Active Learning
 
-* 当前学习中
-| 类型 | 主题       | 状态     | 下一步                     |
-|------+------------+----------+----------------------------|
-| 主题 | C++ Primer | ACTIVATE | 继续深入学习所有权与类设计 |
-| 主题 | OCaml      | FROZEN   | 等待重启                   |
-| 主题 | Haskell    | PLANNED  | 计划学习                       |
+* 学习计划
+| 优先级 | 类型 | 主题    | 状态    | 下一步                                      |
+|--------+------+---------+---------+---------------------------------------------|
+|      1 | 语言 | C++     | ACTIVE  | 深入所有权、资源管理与类设计，之后学习模板类 |
+|      2 | 语言 | OCaml   | PAUSED  | 适时重启；先复盘 CS3110 第 3 章              |
+|      3 | 工具 | Regex   | PLANNED | 学习通用语法、分组捕获、量词与实际文本处理   |
+|      4 | 语言 | Haskell | PLANNED | 在 OCaml 或 C++ 主线告一段落后开始系统学习   |
+
+* 当前主线
+
+** C++
+- 当前重点：所有权、对象生命周期、RAII、拷贝/移动语义和类设计。
+- 现有基础：C++ Primer 已学习至 Part III，并在项目中练习资源管理类。
+- 后续方向：在类设计与资源管理形成稳定理解后，继续学习模板类与泛型设计。
+
+* 暂停与未来计划
+
+** OCaml
+- 已完成：基础语法，以及 CS3110 第 3 章中的列表、模式匹配、变体、单元测试、record 与 tuple 等内容。
+- 恢复锚点：先复盘第 3 章笔记和现有练习，再从高阶函数与递归模式继续。
+- 当前状态：暂停，不与 C++ 主线争夺优先级。
+
+** Regex
+- 先建立与具体语言无关的正则表达式基础，再补充命令行及编程语言中的实际用法。
+- 建议首批练习：日志字段提取、文本替换、输入格式校验。
+
+** Haskell
+- [[file:../../projects/haskell/][Haskell 项目]]已有最小 Cabal/Nix 项目骨架，但暂不视为正式开学。
+- 正式开始时再建立主题笔记，并结合已有 OCaml 经验对比类型、惰性求值与函数式抽象。
 
 * 入口页
-- [[file:~/Learning/org-learning/20-topics/cpp/c++_primer/][C++ Primer]]
-- [[file:~/Learning/org-learning/20-topics/ocaml/][OCaml]]
-
+- [[file:../20-topics/cpp/index.org][C++ 学习计划]]
+- [[file:../20-topics/cpp/c++_primer/index.org][C++ Primer 笔记]]
+- [[file:../20-topics/ocaml/index.org][OCaml 学习总览]]
+- [[file:../20-topics/rust-regex/index.org][Regex 学习入口]]
+- [[file:../../projects/haskell/][Haskell 项目骨架]]

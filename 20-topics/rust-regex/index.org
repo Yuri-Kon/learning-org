@@ -1,4 +1,8 @@
-#+title: Rust Regex
+#+title: Regex 学习入口
+
+* 学习定位
+- 先学习与具体语言无关的正则表达式基础，再进入 Rust、Shell 或其他工具中的实现差异。
+- 首批练习围绕日志字段提取、文本替换和输入格式校验展开。
 
 * 原始目录
 - [[file:/home/yurikon/Learning/software/tools/Rust%20Regex][software/tools/Rust Regex]]
@@ -10,5 +14,7 @@
 * 推荐整理
 - 基本语法
 - 分组与捕获
+- 字符类、锚点与量词
 - 贪婪与非贪婪
-- Rust 中的使用方式
+- 查找、替换与校验
+- 命令行工具及 Rust 中的使用方式
