@@ -1,4 +1,5 @@
 #+title: Active Learning
+#+TODO: TODO(t) NEXT(n) | DONE(d)
 
 * 学习计划
 | 优先级 | 类型 | 主题    | 状态    | 下一步                                      |
@@ -7,6 +8,25 @@
 |      2 | 语言 | OCaml   | PAUSED  | 适时重启；先复盘 CS3110 第 3 章              |
 |      3 | 工具 | Regex   | PLANNED | 学习通用语法、分组捕获、量词与实际文本处理   |
 |      4 | 语言 | Haskell | PLANNED | 在 OCaml 或 C++ 主线告一段落后开始系统学习   |
+
+* 未来三天
+
+** TODO 复盘 C++ 所有权与对象生命周期
+SCHEDULED: <2026-07-18 Sat>
+- 阅读动态内存、RAII 和 Rule of Zero/Five 的现有笔记。
+- 用自己的话总结“谁拥有资源、何时释放、能否复制或移动”三个问题。
+- 产出：在 C++ 主题笔记中补充一段可复述的总结。
+
+** TODO 用资源管理类练习类设计
+SCHEDULED: <2026-07-19 Sun>
+- 检查 [[file:../../projects/cpp-primer/exercises_with_chapters/chapter13_16/simplevector_alloc/][simplevector_alloc]] 的资源不变量。
+- 核对析构、复制与移动操作是否表达了明确的所有权语义，并运行项目已有测试。
+- 产出：记录一个设计决定和一个仍需解决的问题。
+
+** TODO 完成 Regex 最小入门练习
+- 学习字符类、锚点和常用量词，暂不深入不同引擎的高级差异。
+- 为日志字段提取、文本替换和输入校验各写一个小例子。
+- 产出：把例子整理到 [[file:../20-topics/rust-regex/index.org][Regex 学习入口]] 或其后续笔记。
 
 * 当前主线
 
