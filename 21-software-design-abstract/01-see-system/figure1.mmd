@@ -1,0 +1,24 @@
+flowchart LR
+    subgraph Input["外部世界"]
+        pdf["PDF 文件"]
+        parser["PDF 解析库"]
+        deepl["DeepL 服务"]
+        fs["文件系统"]
+        config["用户配置"]
+    end
+
+    subgraph System["系统"]
+        app["PDF Extract-Translator"]
+    end
+
+    subgraph Output["输出"]
+        result["原文和译文交替的输出文档"]
+    end
+
+    pdf --> app
+    parser --> app
+    deepl --> app
+    fs --> app
+    config --> app
+
+    app --> result
