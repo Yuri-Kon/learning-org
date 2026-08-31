@@ -1,0 +1,262 @@
+#+title:      并发学习收集箱
+#+date:       [2026-07-26 Sun 00:55]
+#+filetags:   
+#+identifier: 20260726T005501
+
+* 并发学习
+前言&学习目录。
+
+* 建立统一的并发模型
+学习任何并发系统，都用下面七个问题分析:
+
+** 工作如何分解
+程序不是“创建几个线程”那么简单，而是先形成一个任务图:
+- 哪些任务互相独立
+- 哪些任务有先后依赖
+- 哪些任务可以批量处理
+- 哪些任务需要保持输入顺序
+- 哪些任务属于CPU计算，哪些任务主要等待I/O
+
+
+并发设计首先是任务分解，其次才是线程、协程或进程的选择。
+
+** 谁来执行任务
+常见执行体包括:
+
+- 进程: 独立地址空间
+- OS线程: 共享进程地址空间，由内核调度
+- 用户态线程或goroutine: 由语言运行时调度到OS线程
+- 协程或async task: 通常合作式调度，只有在显式让出时才切换
+- 事件循环中的回调：一个或少量线程处理大量I/O状态机
+
+
+这里有几个关键词:
+- 并发: 多个任务在时间上重叠推进
+- 并行: 多个任务在同一时刻由不同CPU核执行
+- 异步: 发起操作后不原地等待结果
+- 多线程: 用多个线程作为执行载体
+
+** 数据如何传输
+主要有两种模型。一种是共享内存模型，一种是消息传递模型。
+
+共享内存模型:
+#+begin_example
+线程 A ──┐
+         ├── 共享对象
+线程 B ──┘
+#+end_example
+
+消息传递模型:
+#+begin_example
+任务 A -> 队列/通道 -> 任务 B
+#+end_example
+
+共享内存模型必然会面临内存先后被修改等各种问题，因此需要锁、原子变量或其他同步机制。消息传递模型通常更容易约束所有权，但并不等于底层没有共享内存。
+
+** 如何建立顺序关系
+并发程序的关键不是“某条语句在源码中写得更早”，而是是否建立的可证明的顺序关系:
+#+begin_example
+写入数据
+   ↓
+释放锁 / 发送消息 / release 操作
+   ↓
+获取锁 / 接收消息 / acquire 操作
+   ↓
+读取数据
+#+end_example
+这就是以后会反复提及的 ~happens-before~.
+
+在C++中，两个线程对同一内存位置发生冲突访问，至少一个是写操作、且没有 happens-before 关系，就构成数据竞争。标准将这种情况定义为UB。互斥量和原子操作的重要作用之一，就是建立可见性和顺序关系。
+
+** 如何控制流量
+当生产速度可能超过消费速度时，队列就会无限增长，程序最终会耗尽内存。
+
+因此并发系统必须考虑:
+- 有界队列
+- 最大并发数
+- 背压
+- 丢弃、覆盖、阻塞或降级策略
+- 请求限速
+
+
+“启动无限个线程或goroutine”通常并不是完整的并发设计。
+
+** 如何约束
+并发程序必须能够明确回答:
+
+- 谁拥有线程或任务
+- 谁等待它结束
+- 如何请求取消
+- 队列关闭后消费者如何退出
+- 生产者失败后其他任务是否继续
+- 超时后资源如何释放
+
+很多并发程序并不是死在锁上，而是死在生命周期管理上。
+
+** 如何证明和观察
+
+- 正确性
+- 吞吐量
+- 平均延迟和尾延迟
+- CPU利用率
+- 队列长度
+- 锁竞争
+- 线程或goroutine泄露
+- 是否存在数据竞争
+* 理解Linux底层
+** 进程与线程
+在用户视角中，进程拥有地址空间和系统资源，线程是进程内部的执行流。线程通常共享代码、全局数据、堆和打开的文本描述符，但各自拥有寄存器状态、栈和局部状态。Linux 可以在 ~/proc/<pid>/task/~ 下列出一个进程的各个线程。
+
+这一部分需要理解:
+- 地址空间是什么
+- 用户栈与内核栈的区别
+- 线程上下文包含什么
+- 线程创建为什么比普通函数调用昂贵
+- 上下文切换为什么有成本
+- 线程数为什么不能无限增加
+** 调度、阻塞与唤醒
+线程大致会在这些状态间转换:
+#+begin_example
+runnable -> running -> runnable
+                    -> blocked
+blocked  -> runnable
+#+end_example
+线程等待互斥锁、条件变量、磁盘、网络或定时器时，可能进入阻塞状态。内核将CPU分配给其他runnable任务；条件结束后，等待线程重新进入可运行队列。
+
+注意区分:
+- 阻塞: 当前执行实体不能继续
+- 睡眠: 通常指不占用CPU等待
+- 自旋: 持续占用CPU检查条件
+- 抢占: 调度器强制暂停当前任务
+- 协作式让出: 任务主动允许其他任务进行
+** 用户锁与 futex
+~futex~ 的核心是用户内存中的一个32位值。内核主要参与等待和唤醒，而不是管理每一次无竞争锁操作。
+
+可以形成以下理解:
+
+mutex:
+- 无竞争：用户态原子操作
+- 有竞争：原子操作 + futex 等待/唤醒
+** 条件变量不是事件标志
+条件变量表达的是：
+#+begin_quote
+在持有互斥锁的前提下，等待某个共享状态满足。
+#+end_quote
+
+标准模式是：
+#+begin_src cpp
+  std::unique_lock lock{mutex};
+
+  condition_variable.wait(lock, [&] {
+    return !queue.empty() || closed;
+  });
+#+end_src
+条件必须在循环或 predicate 中重新检查，因为:
+- 线程被唤醒时，其他线程可能先获取锁并改变状态
+- 唤醒不等于条件一定成立
+- 实现可能伪唤醒
+** 内存系统与内存模型
+Linux内核本身有完整的[[https://www.kernel.org/doc/html/latest/core-api/wrappers/memory-barriers.html?utm_source=chatgpt.com][内存屏障文档]] 。
+* C和C++应该承担什么角色
+建议用C/POSIX做少量底层实验，然后把主要精力放在C++.
+** C/POSIX阶段
+1. ~pthread_create~ 和 ~pthread_join~
+2. 多线程递增计数器，先故意制造线程竞争
+3. 用 ~pthread_mutex_t~ 修复
+4. 用 mutex+condition variable 实现有界队列
+5. 故意制造顺序死锁
+6. 用 ~strace~ 观察 ~clone~ 和 ~futex~
+** C++ 阶段
+C++是理解共享内存并发和内存模型的主要语言。
+
+学习顺序:
+1. ~std::thread~, ~join~, ~detach~
+2. ~std::jthread~ 和自动 join
+3. ~std::mutex~, ~std::lock_guard~, ~std::unique_lock~
+4. ~std::scoped_lock~ 和多路死锁规避
+5. ~std::condition_variables~
+6. ~std::future~, ~std::promise~, 异常传播
+7. ~std::counting_semaphore~, ~std::latch~, ~std::barrier~
+8. ~std::stop_token~ 与协作式取消
+9. ~std::atomic~
+10. acquire/release 与 relaxed
+11. false sharing 和锁竞争
+* Python 并发
+不能只看 GIL. 应学习四部分机制:
+** ~threading~
+适合:
+- 网络请求
+- 文件操作
+- 调用后会释放GIL的C/C++扩展
+- 后台监控
+- GUI与后台I/O协作
+** ~concurrent.futures~
+重点理解:
+- executor
+- future
+- ~submit~
+- ~map~
+- 异常如何通过 future 返回
+- executor如何关闭
+- 任务取消的局限
+- 线程池死锁
+** ~multiprocessing~
+适合纯Python CPU密集型任务。进程之间不直接共享普通Python对象。
+** ~asyncio~
+适合:
+- 大量网络连接
+- 高并发但单个任务计算很少
+- 协议服务器
+- 爬虫
+- 事件驱动系统
+* Go
+Go 的价值不是“语法更简单的线程”，而是Go把轻量任务、调度器、通道和取消机制整合成了一套相对统一的并发结构。
+** goroutine
+由Go运行时管理。不等于一个OS线程。运行时把大量goroutine调度到较少的OS线程上。
+** channel
+Go倡导“通过通信共享内存”，但不要为了使用channel而使用channel
+** ~context.Context~
+实际Go并发程序必须掌握:
+- 超时
+- 截止时间
+- 取消传播
+- 请求范围数据
+- goroutine 如何响应取消
+** 锁和内存模型
+Go没有取消共享内存，也没有消除锁。需要学习:
+- ~sync.Mutex~
+- ~sync.RWMutex~
+- ~sync.WaitGroup~
+- ~sync.Once~
+- ~sync.Cond~
+- ~sync~/~atomic~
+* 推荐阅读材料
+** 第一优先级: OSTEP
+[[https://pages.cs.wisc.edu/~remzi/OSTEP/][Operating Systems: Three Easy Pieces]] 三大部分就是虚拟化、并发和持久化。并发部分适合作为最初的理论框架。
+
+重点阅读:
+- Concurrency and Threads
+- Thread API
+- Locks
+- Locked Data Structures
+- Condition Variables
+- Semaphores
+- Concurrency Bugs
+- Event-based Concurrency
+** 第二优先级: CSAPP第12章
+Computer Systems: A Programmer's Perspective 的并发章节会将进程、I/O多路复用、pthread、信号量、并发服务器放在同一个问题中比较。尤其适合纠正“并发等于线程”的观念。
+** 第三优先级: C++ Concurrency in Action
+
+适合作为C++并发主教材。覆盖C++11到C++17的并发标准机制、内存模型、线程安全数据结构和任务系统。
+* 学习习惯
+每个并发练习都执行以下过程:
+1. 写顺序版本
+2. 写出共享状态和所有者
+3. 标注线程/任务生命周期
+4. 标注 happens-before
+5. 加入并发
+6. 用小容量队列制造压力
+7. 注入失败和取消
+8. 使用 race detector
+9. 测量性能
+10. 解释为何正确

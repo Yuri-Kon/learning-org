@@ -1,0 +1,133 @@
+:PROPERTIES:
+:END:
+
+#+title: tail call 尾递归
+#+date:       [2026-06-06 Sat 10:18]
+#+startup: overview
+#+filetags: :ocaml:recursion:tailcall:
+#+identifier: 20260606T101830
+
+* 尾递归
+:PROPERTIES:
+:CUSTOM_ID: 2c282804-0599-40a6-90ae-246246c6ba2e
+:END:
+
+尾递归非常重要。因为 OCaml 鼓励用递归表达循环。而尾递归正是让递归在运行时像循环一样安全、高效的关键。尾递归的递归循环在 OCaml 运行时会被编译器转换成真正的循环，从而使用常量栈空间。
+* 什么是递归
+
+递归就是函数在自己的定义中调用自己。最简单的例子就是阶乘:
+
+#+begin_src ocaml
+  let rec fact n =
+    if n = 0 then 1
+    else n * fact (n - 1)
+#+end_src
+
+调用 ~fact 5~ ，计算过程大致是:
+
+#+begin_src ocaml
+  fact 5
+  = 5 * fact 4
+  = 5 * 4 * (fact 3)
+  = 5 * (4 * (3 * fact 2))
+  = 5 * (4 * (3 * (2 * fact 1)))
+  = 5 * (4 * (3 * (2 * (1 * fact 0))))
+  = 5 * (4 * (3 * (2 * (1 * 1))))
+  = 120
+#+end_src
+
+这里的问题是，每一层 ~fact n~ 都不能马上结束，因为它还要等 ~fact (n - 1)~ 算完之后，再做一次乘法。
+
+* 尾递归的定义
+
+尾递归指的是：递归调用时函数执行的最后一步。也就是说，函数调用自己之后，外层函数不需要做任何额外计算。
+
+例如:
+
+#+begin_src ocaml
+  let rec fact_aux n acc =
+    if n = 0 then acc
+    else fact_aux (n - 1) (n * acc)
+#+end_src
+
+我们调用 ~fact_aux 5 1~ ，计算过程是:
+
+#+begin_src ocaml
+  fact_aux 5 1
+  fact_aux 4 5
+  fact_aux 3 20
+  fact 2 60
+  fact 1 120
+  fact 0 120
+  120
+#+end_src
+
+这里每一步都可以直接进入下一次调用。当前这一层的函数已经没有后续工作要做，所以旧的调用栈帧可以被回收。
+
+*这就是尾递归的核心：递归调用之后没有“收尾工作”* 。
+
+CS3110 对尾递归的空间优势讲的很清楚：尾调用优化可以把递归算法的空间复杂度从 O(n) 降低到 O(1) ，也就是从每次调用占用一个栈帧，变成所有调用共用一个栈帧。
+
+* 判断一个函数是不是尾递归
+:PROPERTIES:
+:CUSTOM_ID: 2867827e-fc47-4cbf-9c38-cd33fc2a817e
+:END:
+
+判断标准很简单：看递归调用的结果返回后，还需不需要继续加工。
+
+** 不是尾递归
+
+#+begin_src ocaml
+  let sum lst =
+    match lst with
+    | [] -> 0
+    | x :: xs -> x + sum xs
+#+end_src
+
+这里:
+
+#+begin_src ocaml
+  x + sum xs
+#+end_src
+
+递归调用是 ~sum xs~ ，但它调用完成之后，还要做 ~x + ...~ ，所以它不是尾递归。
+
+展开一下:
+
+#+begin_src ocaml
+  sum [1;2;3]
+  = 1 + sum [2;3]
+  = 1 + (2 + sum [3])
+  = 1 + (2 + (3 + sum []))
+  = 1 + (2 + (3 + 0))
+  = 6
+#+end_src
+
+每一层都要等下一层返回。
+
+** 是尾递归
+
+#+begin_src ocaml
+  let sum lst =
+    let rec aux acc lst =
+      match lst with
+      | [] -> acc
+      | x :: xs -> aux (acc + x) xs
+    in
+    aux 0 lst
+#+end_src
+
+展开:
+
+#+begin_src ocaml
+  aux 0 [1;2;3]
+  aux 1 [2;3]
+  aux 3 [3]
+  aux 6 []
+  6
+#+end_src
+
+递归调用 ~aux (acc + x) xs~ 就是当前分支的最后一步。
+
+这里的 ~acc~ 叫 accumulator ，也就是 “累加器”。它负责把原本留在返回阶段才做的事情，提前在递归进入下一层之前完成。
+

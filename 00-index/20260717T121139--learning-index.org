@@ -1,0 +1,36 @@
+#+title: Learning Index
+#+date:       [2026-07-17 Fri 12:11]
+#+identifier: 20260717T121139
+
+* 总入口
+- [[denote:20260717T121656][当前学习中]]
+- [[denote:20260530T004708][收集箱]]
+- [[denote:20260530T004745][资源粗索引]]
+- [[denote:20260530T004746][归档]]
+
+* 课程
+- [[denote:20260530T004709][编译原理]]
+- [[denote:20260530T004710][软件测试]]
+
+* 主题
+- [[denote:20260530T004714][Agent Protocols]]
+- [[denote:20260530T004739][REST]]
+- [[denote:20260530T004741][Spring JWT]]
+- [[denote:20260530T004725][Go]]
+- [[denote:20260530T004726][Java]]
+- [[denote:20260530T004737][JSON Schema]]
+- [[denote:20260530T004738][Python]]
+- [[denote:20260530T004740][Shell]]
+- [[denote:20260717T120527][Regex]]
+- [[denote:20260717T120545][Some Tools]]
+- [[denote:20260530T004723][Emacs ORG]]
+- [[denote:20260713T231526][C++ Primer]]
+- [[denote:20260717T120544][OCaml]]
+
+* 项目
+- [[file:../../projects/cpp-primer/][c++ primer]]
+- [[file:../../projects/mini-wafer-engine/][mini-wafer-engine]]
+- [[file:../../projects/cs3110-ocaml-nix/][cs3110 ocaml]]
+- [[file:../../projects/haskell/][haskell]]
+- [[file:../../projects/snake-tui/][snake-tui]]
+- [[file:../../projects/text-query/][text-query]]

@@ -1,0 +1,96 @@
+#+title:      Gentoo Portage
+#+date:       [2026-08-03 Mon 23:24]
+#+filetags:   
+#+identifier: 20260803T232401
+
+* Gentoo Portage
+
+Porage 准确地说，是Gentoo系统构建、软件配置、依赖求解和生命周期管理框架。 ~emerge~ 只是 Portage 最常用的命令入口。
+
+* 为什么 Gentoo 使用 Portage
+
+严格来说，并不是 Gentoo 先成为一个发行版，然后从众多包管理器中选择了 Portage. Portage 与 Gentoo 是共同发展起来的。Gentoo 的前身 Enoch 始于 1999 年，其创始人 Daniel Robbins 接触到 FreeBSD 后，借鉴 BSD Ports 的思想开发了 Portage. 它从一开始就是 Gentoo 的核心，而不是后来附加的安装工具。
+
+Gentoo 的核心思想就是: 发行版不应预先替用户决定所有软件功能，而应该提供机制，让用户表达“我需要什么样的系统”。 Portage 因而处理的不只是: “我要安装 Emacs” ，还包括:
+
+- 我要启用 GUI 和原生编译
+- 不要 GTK
+- 启用 tree-sitter
+- 使用特定的 Python 实现
+- 这个软件允许 testing 版本
+- 那个软件必须固定版本
+
+Gentoo 早期对这种思想的概括是: Gentoo is all about choices. 工具应传递用户的意图，而不是强迫用户接受发行版维护者选定的唯一组合.
+
+* 理解 Portage 的整体模型
+
+可以把 Portage 看成下面几个部分:
+
+#begin_example
+Gentoo 仓库与 overlay
+        │
+        │ 提供 ebuild、依赖、版本、USE、mask 等元数据
+        ▼
+Profile ──────────── 系统默认策略
+        │
+/etc/portage ─────── 用户覆盖策略
+        │
+已安装包数据库 ──── 当前系统状态
+@world ───────────── 用户希望长期保留的根软件集合
+        │
+        ▼
+Portage 依赖求解器
+        │
+        ├── 下载
+        ├── 解包
+        ├── 打补丁
+        ├── 配置
+        ├── 编译
+        ├── 测试
+        ├── 安装到临时目录
+        ├── 合并到真实系统
+        └── 更新、重建或移除相关包
+#end_example
+
+安装一个软件时， Portage 经常在计算:
+
+- 哪些版本能够共存
+- 哪些 USE flag 必须匹配
+- 哪些 ABI 变化要求反向依赖构建
+- 哪些包能够被 mask
+- 哪些许可证尚未被接受
+- 哪些包与当前 profile 不兼容
+
+
+* Portage / emerge / ebuild 分别是什么
+
+** Portage
+
+portage 是整个包管理系统，包括 Python 实现的依赖求解器、配置处理、安装数据库、包集合和维护工具。
+
+** emerge
+
+~emerge~ 主要是用户界面。它可以:
+
+#begin_src bash
+emerge 包名
+emerge @world
+emerge --sync
+emerge --depclean
+emerge --search keyword
+emerge --info
+#end_src
+
+官方将 ~emerge~ 定义为 Portege 的主要命令行接口；它既能处理源码包，也能处理二进制包，还能生成二进制包。
+
+** ebuild
+
+ebuild 是包的构建说明。它通常是受 EAPI 规则约束的 Bash 脚本，描述如何下载、解包、打补丁、配置、编译、测试和安装软件。
+
+一个简化的 ebuild 可能类似:
+
+#begin_src bash
+EAPI=8
+
+#end_src
+

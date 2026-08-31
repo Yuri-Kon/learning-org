@@ -1,0 +1,422 @@
+:PROPERTIES:
+:CREATED: 2026-05-13
+:UPDATED: 2026-05-16
+:COURSE: CS3110
+:END:
+#+title: OCaml 第一章：为什么要通过 OCaml 学习编程
+#+date:       [2026-06-01 Mon 18:12]
+#+startup: overview
+#+filetags: :beginning:functionalprogramming:ocaml:
+#+identifier: 20260601T181248
+#+roam_alias: "Better Programming Through OCaml"
+
+* 为什么要通过 OCaml 学习函数式编程
+:PROPERTIES:
+:CUSTOM_ID: 为什么要通过-ocaml-学习函数式编程
+:END:
+这一阶段核心是建立三个判断标准：OCaml 中程序主要由表达式构成；函数是一等值；不可变性是默认思维。CS3110 把函数式语言的核心抽象归结为数序而函数：同样输入得到同样输出，函数无状态，并且函数可以作为输入和输出被传递。它还指出，命令式语言依赖可变状态和副作用，而可变性会破坏引用透明性，使程序更难推理。
+
+CS3110 面向的读者就是已经会 Python、Java 等主流语言的人。学习 OCaml 会要求暂时放下过去熟悉的东西，比如赋值语句、循环、类和对象；这种过程会接触不变量、抽象、类型系统和程序语言理论，从而改变看待编程的方式。
+
+今天从四个概念进入：函数式编程、不可变性、静态类型、抽象
+
+** 函数式编程到底在改变什么
+:PROPERTIES:
+:CUSTOM_ID: 函数式编程到底在改变什么
+:END:
+以前写 Java 或 Python 时，通常会把程序想象成一连串动作，比如：
+
+#+begin_src java
+  int x = 1;
+  x = x + 1;
+  System.out.println(x);
+#+end_src
+
+这里的核心思想是：程序按照顺序执行，每一步修改一个状态。变量 =x= 原来是1，后来变成2。这里关心的是 “程序如何一步步改变世界” 。
+
+但是 OCaml 更希望我们先从 “表达式求值” 来理解程序：
+
+#+begin_src ocaml
+let x = 1 in
+x + 1
+#+end_src
+
+这里更重要的是： =x= 被绑定到一个值1 ，整个表达式的值是2。它没有强调 “修改x” ，而是在构造一个可以被求值的表达式。
+
+这是这一章背后的一个大转向。从 “命令” 转向 “表达式”。命令式语言通描述 “怎么一步步做” ；函数式语言更强调 “这个表达式表示什么值”。
+
+CS3110 对函数式语言的定义如下：函数把输入映射到输出；相同输入总是得到相同输出；函数本身并不保存额外状态；并且函数是一等值，可以作为其他函数的输入，也可以作为输出返回。OCaml 的官方文档也强调，OCaml 中函数被当作值，因此可以把函数传递给函数，也可以从函数中返回函数。
+
+举一个最小的例子：
+
+#+begin_src ocaml
+let square x = x * x
+#+end_src
+
+可以把它读作：square 是一个函数，它接受 x，返回 x * x
+
+如果 =square 3= 的值是9，那么在任何地方出现 =square 3= ，原则上都可以替换为9。这个性质叫做 *引用透明性* 。
+
+现在对比一个 Python 例子：
+
+#+begin_src python
+counter = 0
+def next_number():
+  global counter
+  counter = counter + 1
+  return counter
+#+end_src
+
+第一次调用：
+
+#+begin_src python
+next_number() # 1
+#+end_src
+
+第二次调用：
+
+#+begin_src python
+next_number() # 2
+#+end_src
+
+这里同一个表达式 =next_number()= 在不同时间返回不同值，因为它修改了外部状态 =counter= 。这就不具备引用透明性。 CS3110 讲 “可变性的幻想” 时说，人们容易以为 “机器先做这个，再做那个” 很好理解，但现实中人类不擅长追踪复杂状态；可变性会破坏引用透明性，使程序更难理解。
+
+这就是为什么函数式编程更强调不可变性。
+
+** 不可变性为什么重要
+:PROPERTIES:
+:CUSTOM_ID: 不可变性为什么重要
+:END:
+不可变性会被初学者误解为 “变量不能改，所以写起来麻烦” 。这只是表面现象。更深层的原因是：不可变性能降低程序推理成本。
+
+看一个命令式的例子：
+
+#+begin_src python
+scores = [80, 90, 100]
+
+def add_bonus(xs):
+  xs.append(10)
+  return xs
+a = scores
+b = add_bonus(scores)
+#+end_src
+
+现在 =scores= 、=a= 、 =b= 之间的关系并不直观。=add_bonus= 修改了传入的列表，所以=scores= 本身也变了。因此我们读代码时必须追踪：这个列表在哪里修改过？谁持有它的引用？函数有没有副作用？
+
+函数式风格会倾向于这样：
+
+#+begin_src ocaml
+let scores = [80; 90; 100]
+let add_bonus xs = 
+  xs @ [10]
+#+end_src
+
+这里的 =add_bonus scores= 会产生一个心列表，原来的 =scores= 仍然保持不变。于是我们可以更放心地说：旧值还是旧值，新值是计算出的结果
+
+注意，OCaml 并不是完全不能写可变状态。CS3110 明确说 OCaml 支持命令式编程和可变状态，只是课程会在很后面才使用这些特性，因为在前期想训练我们摆脱对可变状态的依赖。
+
+这也能和 Nix 对应起来。Nix 官方文档说，Nix 语言是领域特定、纯函数式、惰性求值、动态类型的语言，主要用于创建和组合 derivation ，也就是描述如何从已有文件构造新文件。我们现在在用 Nix 管理 OCaml 环境，其实也在接触同一类思想：通过声明表达 “我想要什么环境”，让系统根据描述构造结果。
+
+例如 Nix 里的：
+
+#+begin_src nix
+let
+  x = 1;
+in
+  x + 1
+#+end_src
+
+和 OCaml 里的：
+
+#+begin_src ocaml
+let x = 1 in
+x + 1
+#+end_src
+
+形式上很像。它们都在训练我们把程序看成 “表达式求值”，而不是 “不断修改变量”。
+
+** 静态类型与类型安全
+:PROPERTIES:
+:CUSTOM_ID: 静态类型与类型安全
+:END:
+CS3110 第一章特别强调 OCaml 是静态类型、类型安全的语言。静态类型表示类型错误会在编译时被发现；类型安全表示语言会 *限制哪些操作可以作用在哪些数据上* ，避免把整数当函数、把字符串当数字之类的错误。
+
+我们接下来可以用 Python、Java、C++ 来进行对比。
+
+Python 是动态类型，但大体类型安全：
+
+#+begin_src python
+1 + "hello"
+#+end_src
+
+这段代码要 *运行到* 这里才会报错。Python 不会允许你真的把整数和字符串相加，但是它在运行时才发现问题。
+
+#+begin_src java
+int x = "hello";
+#+end_src
+
+Java 是静态类型，并且通过静态检查加运行时机制实现较强的类型安全。上述代码在 *编译时* 就会报错。
+
+C/C++ 是静态类型，但类型安全程度弱一些。通过指针、强类型转换、越界访问等方式，程序可能越过类型系统，制造运行时内存错误。
+
+OCaml 的体验通常是：一开始会觉得编译器很烦，经常拒绝我们写的代码；过一段时间后，我们会发现它拒绝的程序确实有很多问题。CS3110 开篇也直接说，我们一开始可能会讨厌类型系统，因为它拒绝我们以为正确的程序；但后来往往会发现是程序错了，类型系统是对的。
+
+看一个 OCaml 例子：
+
+#+begin_src ocaml
+let add x y = x + y
+#+end_src
+
+OCaml 会推断：
+
+#+begin_src ocaml
+val add : int -> int -> int = <fun>
+#+end_src
+
+这意味着：=add= 接收一个 =int= ，再接收一个 =int= ，最后返回一个 =int=。
+
+如果写：
+
+#+begin_src ocaml
+add 1 "hello"
+#+end_src
+
+编译器会直接拒绝。这里并没有写类型标注，但编译器已经推断出 =add= 只能接受整数。这就是 OCaml 的一个重要特性： *类型推导* 。
+
+这里有一个关键区别：
+
+Java 的静态类型经常需要手写很多类型，比如：
+
+#+begin_src java
+List<Integer> xs = new ArrayList<Integer>()
+#+end_src
+
+而 OCaml 的静态类型通常由编译器推断：
+
+#+begin_src ocaml
+let xs = [1; 2; 3]
+#+end_src
+
+编译器知道 =xs= 是 =int list= 。 OCaml 官方文档也把 values、expressions、names 和 functions 的关系作为入门重点，并推荐通过 UTop 交互式实验来理解这些概念。
+
+** 为什么 OCaml 和 “程序语言理论” 关系很深
+:PROPERTIES:
+:CUSTOM_ID: 为什么-ocaml-和-程序语言理论-关系很深
+:END:
+OCaml 来自于 ML 语言家族。ML 起源于 Robin Milner 等人在20世纪70年代末，80年代初关于定理证明器的工作。当时他们遇到的问题是：证明器可能构造出错误的 “证明” 但仍然声称有效。于是 Milner 想设计一种语言，使得只能构造有效证明，ML 就是在这个背景下产生的。
+
+而普通业务语言常常从 “怎么方便写程序” 出发；ML 的历史背景更接近 “如何让程序结构本身受到严格约束，从而减少错误”。所以 OCaml 学起来更像是在学：表达式如何求值、类型如何推导、数据结构如何被建模、程序为什么被认为是正确的。
+
+这也是为什么 CS3110 后面会讲 substitution、model、environment model、解释器、类型推导、程序正确性等内容。
+
+** 应掌握的区别
+:PROPERTIES:
+:CUSTOM_ID: 应掌握的区别
+:END:
+*** 表达式 vs 语句
+:PROPERTIES:
+:CUSTOM_ID: 表达式-vs-语句
+:END:
+Python/Java 中很熟悉语句：
+
+#+begin_src python
+x = 1
+x = x + 1
+print(x)
+#+end_src
+
+而 OCaml 中更核心的是表达式：
+
+#+begin_src ocaml
+let x = 1 in x + 1
+#+end_src
+
+表达式有值。1 + 2 的值是3，=if ... then ... else ...= 也是表达式，也有值。
+
+例如：
+
+#+begin_src ocaml
+let sign x = 
+  if x > 0 then "positive"
+  else if x = 0 then "zero"
+  else "negative"
+#+end_src
+
+这里整个 =if= 结构会产生一个字符串值。它更像数学里的分段函数。
+
+*** 变量赋值 vs 名字绑定
+:PROPERTIES:
+:CUSTOM_ID: 变量赋值-vs-名字绑定
+:END:
+Python 中：
+
+#+begin_src python
+x = 1
+x = 2
+#+end_src
+
+会很自然地理解为：x 这个变量先指向1，再指向2。
+
+OCaml 中：
+
+#+begin_src ocaml
+let x = 1
+#+end_src
+
+更好的理解是：名字 =x= 被绑定到值1。
+
+而如果再写：
+
+#+begin_src ocaml
+let x = 2
+#+end_src
+
+这通常是新的绑定覆盖了旧绑定。我们可以暂时理解为 “新名字覆盖了旧名字关系的可见性”，而不理解为 “原来的那个盒子被修改了”。
+
+*** 过程/方法 vs 函数
+:PROPERTIES:
+:CUSTOM_ID: 过程方法-vs-函数
+:END:
+Java 方法常常依赖对象状态：
+
+#+begin_src java
+account.deposit(100);
+account.withdraw(30);
+#+end_src
+
+这里 account 内部状态不断变化。因此我们必须知道调用顺序。
+
+而 OCaml 函数更强调输入输出：
+
+#+begin_src ocaml
+let balance_after_deposit balance amount =
+  balence + amount
+#+end_src
+
+它不修改旧余额，而是计算新余额。读函数时只需要看参数和返回值。
+
+*** 运行时发现错误 vs 编译期提前阻止
+:PROPERTIES:
+:CUSTOM_ID: 运行时发现错误-vs-编译期提前阻止
+:END:
+Python:
+
+#+begin_src python
+def f(x):
+  return x + 1
+
+f("hello")
+#+end_src
+
+运行到这里才能发现字符串不能加整数。
+
+OCaml:
+
+#+begin_src ocaml
+let f x = x + 1
+f "hello"
+#+end_src
+
+类型检查阶段就会拒绝。这相当于把一部分测试提前到了编译阶段。
+
+** 小练习
+:PROPERTIES:
+:CUSTOM_ID: 小练习
+:END:
+我们现在可以进入项目目录:
+
+#+begin_src shell
+nix develop
+utop
+#+end_src
+
+然后逐行输入：
+
+#+begin_src ocaml
+1 + 2;;
+#+end_src
+
+会得到：
+
+#+begin_src ocaml
+- : int = 3
+#+end_src
+
+这行输出表示：
+
+- 这个表达式没有名字
+- 它的类型是 =int=
+- 它的值是3
+
+再输入：
+
+#+begin_src ocaml
+let x = 10;;
+#+end_src
+
+会得到：
+
+#+begin_src ocaml
+val x : int = 10
+#+end_src
+
+这行输出表示：
+
+- 名字：x
+- 类型: int
+- 值: 10
+
+再输入：
+
+#+begin_src ocaml
+let square n = n * n;;
+#+end_src
+
+得到：
+
+#+begin_src ocaml
+val square : int -> int = <fun>
+#+end_src
+
+它表示：
+
+- =square= 是一个函数；
+- 它接收 =int=；
+- 返回 =int=；
+- 函数本身显示为 =<func>=
+
+再输入：
+
+#+begin_src ocaml
+square 5
+#+end_src
+
+会得到：
+
+#+begin_src ocaml
+- : int = 25
+#+end_src
+
+** 本章小结
+:PROPERTIES:
+:CUSTOM_ID: 本章小结
+:END:
+本章的核心问题是：为什么在已经会 Python/Java 之后，还需要学习 OCaml？
+
+对此，OCaml 的价值不在于学习一门新语言，而是通过函数式编程重新理解程序设计。它强调表达式、不可变性、函数作为值、静态类型、类型推导和抽象能力。
+
+本章包括了四个核心概念：
+
+- 函数式编程：函数把输入映射到输出，相同输入应当得到相同输出。函数可以作为值传递
+- 不可变性：值默认不被修改。程序通过构造新值来体现变化。这有助于降低状态追踪成本。
+- 静态类型与类型安全：类型错误尽量在程序运行前发现。类型系统就会拒绝一些看似能写、实则有隐患的程序
+- 抽象：通过函数、类型、模块等机制把重复模式提取出来，使程序更清晰、更可维护。
+
+与 Python/Java 这类语言的区别：
+
+- Python / Java 中常见的思路是修改变量、调用方法、方法常常依赖对象状态
+- OCaml 更强调表达式求值、名字绑定、函数组合和类型推导。
+
+与 Nix 的联系：
+
+- Nix 也是表达式语言，强调声明式描述和纯函数式思维。

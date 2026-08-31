@@ -1,0 +1,22 @@
+#+title: Emacs Lisp 学习索引
+#+date:       [2026-06-06 Sat 10:09]
+#+identifier: 20260606T100911
+* ELisp 学习索引
+根据 [[https:www.gnu.org/software/emacs/manual/html_node/eintr/][ELisp]] 学习 Emacs Lisp 。
+
+目前我正在把 Emacs 当作 NixOS 工作站的全局编辑器，并逐步使其承担更多的功能。学习 ELisp 可以立刻用于修改自己的配置、编写命令和理解插件源码。
+
+这篇教程是 GNU 官方为初学者提供的 ELisp 入门教程。 Elisp 参考手册也建议初学者先阅读这本入门教程；参考手册更接近工具书，覆盖面完整，但并不适合作为第一条学习路线。
+
+这本教程的优点在于：
+1. 从零开始，不要求已经学过其他 Lisp 方言
+2. 学到的内容可以直接在 Emacs 中执行
+3. 会把抽象语法和真实的编辑器对象结合起来
+4. 可以一边阅读一边理解自己的 ~init.el~ 和第三方插件
+
+
+它的局限在于：
+1. 主要教授 Elisp, 不会系统比较 Common Lisp, Scheme 和 Clojure
+2. 它会花较多时间讨论 buffer 、 光标位置、文本编辑和 Emacs 内部机制
+3. 某些示例带有较强历史风格
+4. 不足以单独覆盖 Lisp 宏系统、解释器设计、函数式编程和语言实现

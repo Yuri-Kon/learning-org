@@ -1,0 +1,20 @@
+#+title:      Mihomo 学习
+#+date:       [2026-08-05 Wed 21:13]
+#+filetags:   
+#+identifier: 20260805T211328
+
+* Mihomo 学习
+
+* 学习目标
+
+完成后应当能够:
+
+1. 解释一条连接如何进入 Mihomo , 匹配规则, 选择代理组并从节点发出
+2. 区分配置状态、 Provider 资源、运行时状态和持久化缓存
+3. 阅读并审查完整的 Mihomo 配置
+4. 使用 External Controller API 查询和操作 Mihomo
+5. 判断某个功能应该由 Mihomo, MetaCubeXD, 还是 mihogr 负责
+6. 安全地验证、加载和回滚配置
+7. 将 Mihomo 的概念映射为 Python 数据模型、服务和测试
+
+

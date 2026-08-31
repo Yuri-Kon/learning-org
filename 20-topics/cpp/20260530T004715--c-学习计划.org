@@ -1,0 +1,195 @@
+#+TITLE: C++ 学习计划
+#+date:       [2026-05-30 Sat 00:47]
+#+identifier: 20260530T004715
+#+LANGUAGE: zh-CN
+#+LATEX_COMPILER: xelatex
+#+LATEX_CLASS: ctexart
+#+LATEX_CLASS_OPTIONS: [UTF8,a4paper,12pt]
+#+OPTIONS: toc:t num:t
+
+* 1. 学习目的
+
+本计划的目标，是把我目前“会用 C++ 写算法题”的能力，推进到能够参与工业软件开发的工程能力。重点不放在刷语法细节，而放在以下几类能力上：
+
+1. 理解 C++ 程序从源码到可执行文件的完整过程，包括编译、链接、头文件、源文件、库、构建系统。
+2. 掌握现代 C++ 的核心对象模型，包括值语义、引用、指针、const、生命周期、RAII、异常安全、移动语义。
+3. 学会把算法逻辑封装为可测试、可维护、可复用的 C++ 模块。
+4. 建立 C++ 与 Python 协作的工程链路：Python 做原型和验证，C++ 做核心计算和性能敏感模块。
+5. 形成基本的工业质量意识：测试、日志、错误处理、性能评估、Sanitizer、文档化、可复现构建。
+
+面向的工作场景是：算法团队可能给出 Python 原型或算法说明，我需要将其落地为稳定、高性能、可维护的工程模块，并能与上层 Python 或系统服务协作。
+
+* 2. 主线项目
+
+** 2.1 项目名称
+
+~mini-wafer-engine~ ：一个小型半导体检测数据处理引擎。
+
+** 2.2 项目定位
+
+该项目模拟“算法工程化落地”的过程。项目使用二维矩阵表示晶圆检测数据，CSV 文件中的每个数值可以代表检测点强度、缺陷概率、异常分数或传感器读数。
+
+项目不追求真实半导体业务复杂度，重点是训练工程结构：
+
+1. 从 CSV 读取数据。
+2. 用 C++ 表示二维矩阵。
+3. 对矩阵执行统计、清洗、异常检测、连通区域分析等算法。
+4. 用测试保证输入输出稳定。
+5. 用 Sanitizer 和调试工具暴露内存与未定义行为问题。
+6. 用 pybind11 暴露 C++ 模块给 Python。
+7. 用 benchmark 和简单性能报告说明 C++ 实现的性能特征。
+
+** 2.3 推荐目录结构
+
+#+begin_example
+mini-wafer-engine/
+├── CMakeLists.txt
+├── README.md
+├── cpp/
+│   ├── main.cpp
+│   ├── Matrix.h
+│   ├── Matrix.cpp
+│   ├── CsvReader.h
+│   ├── CsvReader.cpp
+│   ├── Stats.h
+│   ├── Stats.cpp
+│   └── algorithms/
+├── python/
+│   ├── hello.py
+│   ├── mini_wafer_engine/
+│   └── tests/
+├── data/
+│   ├── wafer_small.csv
+│   ├── wafer_with_missing.csv
+│   └── wafer_noisy.csv
+├── tests/
+│   ├── cpp/
+│   └── python/
+└── docs/
+    ├── architecture.org
+    ├── decisions.org
+    └── project-summary.org
+#+end_example
+
+* 3. 学习依据与参考资料
+
+本学习计划以官方文档和工业常用实践作为依据。
+
+** 3.1 C++ 语言与编码规范
+
+- C++ Core Guidelines：现代 C++ 编码规范，目标是写出更简单、高效、可维护的 C++ 代码。
+  - https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines
+- cppreference：C++ 标准库和语言特性的查询手册。
+  - https://en.cppreference.com/w/
+
+** 3.2 构建与测试
+
+- CMake Tutorial：用示例项目介绍 CMake 处理常见构建问题的方式。
+  - https://cmake.org/cmake/help/latest/guide/tutorial/index.html
+- CTest 文档：CMake 提供的测试执行和报告工具。
+  - https://cmake.org/cmake/help/latest/manual/ctest.1.html
+
+** 3.3 调试与内存问题检查
+
+- Clang AddressSanitizer 文档：用于检测越界访问、use-after-free 等内存错误。
+  - https://clang.llvm.org/docs/AddressSanitizer.html
+- UBSan 文档：用于检测未定义行为。
+  - https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html
+
+** 3.4 Python / C++ 协作
+
+- pybind11 文档：把 C++ 类型和函数暴露给 Python。
+  - https://pybind11.readthedocs.io/en/stable/
+- pytest 文档：Python 测试框架。
+  - https://docs.pytest.org/
+
+* 4. 阶段路线图
+
+| 阶段 | 主题 | 核心问题 | 阶段产出 |
+|------+------|----------|----------|
+| 阶段 0 | 项目准备与源码到可执行文件 | C++ 文件如何变成可执行程序？ | 可运行的最小 C++/Python 项目，README 初稿 |
+| 阶段 1 | 头文件、源文件与 C++ 对象模型 | 类声明、定义、链接、对象生命周期如何协作？ | Matrix 类、CsvReader、基础统计函数 |
+| 阶段 2 | 现代 C++ 资源管理 | 如何避免裸 new/delete 和悬垂资源？ | 数据清洗模块，RAII 风格错误处理 |
+| 阶段 3 | 算法模块封装 | 如何把算法从“函数”变成稳定接口？ | 异常检测、滑动窗口、连通区域算法 |
+| 阶段 4 | 测试、调试与构建质量 | 如何证明代码可靠？ | CTest、单元测试、ASan/UBSan、Debug/Release 构建 |
+| 阶段 5 | Python 原型与 C++ 绑定 | 如何让 Python 调用 C++ 核心？ | Python 参考实现、pybind11 模块、一致性测试 |
+| 阶段 6 | 性能与可靠性加固 | 如何发现性能瓶颈与稳定性风险？ | benchmark、日志、配置文件、性能报告 |
+| 阶段 7 | 项目收尾与复述 | 如何把项目变成可展示经历？ | 项目总结文档、架构图、面试讲述稿 |
+
+* 5. 当前进度
+
+** DONE 阶段 0：项目准备
+
+已经完成：
+
+1. 建立 ~mini-wafer-engine~ 项目骨架。
+2. 成功使用 CMake 配置与构建项目。
+3. 写出最小 C++ 程序和最小 Python 脚本。
+4. 初步理解源码、构建目录、可执行文件之间的关系。
+5. 完成头文件与源文件的第一轮拆分练习。
+6. 写出第一个核心类 ~Matrix~。
+7. 准备 CSV 样例数据。
+
+** NEXT 阶段 1：C++ 模型基础
+
+接下来应进入阶段 1。阶段 1 的重点是补齐 C++ 的基础对象模型，尤其是：
+
+1. 头文件只声明接口，源文件实现细节。
+2. 编译单元、链接、符号解析如何解释“为什么需要把 .cpp 加入 CMake”。
+3. 类、构造函数、成员变量、成员函数、const 成员函数如何组织对象行为。
+4. 引用、指针、const、值传递、引用传递的差异。
+5. 栈对象、堆对象、局部变量、成员变量的生命周期。
+
+阶段 1 完成后，应当能独立写出一个拆分良好的小型 C++ 模块，并能解释它如何被编译、链接、调用和销毁。
+
+* 6. 阶段产出标准
+
+** 6.1 代码产出
+
+1. C++ 代码至少包含一个可复用核心库，而非所有逻辑堆在 ~main.cpp~。
+2. 每个核心模块有头文件、源文件、测试文件。
+3. CMake 支持 Debug/Release 构建。
+4. 测试可以通过 ~ctest~ 或统一脚本运行。
+5. Python 侧可以调用 C++ 模块，并能与 Python 参考实现对比结果。
+
+** 6.2 文档产出
+
+1. ~README.md~ ：说明项目目标、构建方式、运行方式。
+2. ~docs/architecture.org~ ：说明模块结构和数据流。
+3. ~docs/decisions.org~ ：记录重要设计决策，例如为什么 Matrix 使用连续内存、为什么 at() 做边界检查。
+4. ~docs/project-summary.org~ ：用于面试复述的项目总结。
+
+** 6.3 解释能力产出
+
+每一阶段结束后，需要能回答三个问题：
+
+1. 这个阶段解决了什么工程问题？
+2. 我写出的代码在内存、构建、接口或测试层面有什么改进？
+3. 如果输入异常、数据很大、算法变慢或模块需要给 Python 调用，我会如何处理？
+
+* 7. 学习方法
+
+每个知识点都按“原理 + 最小代码 + 项目落地 + 复述”的顺序学习。
+
+1. 原理：先理解该概念解决什么问题。
+2. 最小代码：写一个 20 到 50 行的小例子。
+3. 项目落地：把概念应用到 ~mini-wafer-engine~。
+4. 复述：用自己的话写进 org 笔记。
+
+建议每节笔记采用固定结构：
+
+#+begin_example
+,* 主题名称
+,** 本节定位
+,** 官方文档对应章节
+,** 核心概念
+,** 设计原理
+,** 最小代码
+,** 项目落地
+,** 常见混淆点
+,** 本节总结
+#+end_example
+
+* 8. 主线总结
+
+这条路线的核心，是用 Python 写原型，用 C++ 实现核心计算，用测试验证正确性，用构建系统组织工程，用 Sanitizer 和 benchmark 发现问题，用文档把经验沉淀为可复述的工程经历。

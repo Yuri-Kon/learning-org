@@ -1,0 +1,351 @@
+#+title: Function
+#+date:       [2026-07-02 Thu 22:08]
+#+identifier: 20260702T220811
+#+author: yurikon
+#+language: zh-cn
+* 函数核心概念
+C++ 中的函数首先是一个接口:
+#+begin_src cpp
+  retun_type function_name{paramter_list};
+#+end_src
+这个接口告诉调用者三件事:
+#+begin_src cpp
+  int add(int lhs, int rhs);
+#+end_src
+~add~ 需要什么输入、是否可修改实参、返回什么结果。函数定义则提供实现。
+* 函数基础: 定义、声明、调用
+函数定义通常由返回类型、函数名、形参列表、函数体组成。函数调用会发生两件事情:
+
+- 用实参初始化形参
+- 将控制权转移到被调用函数
+
+
+函数返回时， ~return~ 也做两件事: 返回结果，并把控制权交给调用点。
+
+~paramter~ 是函数定义/声明中的形参； ~argument~ 是调用时传入的实参。
+
+一个重要细节: *不要依赖多个实参的求值顺序* 。现代C++仍不规定函数实参之间是否按照从左到右求值； C++17 后各参数初始化之间是 indeterminately sequenced, 但相对顺序仍未指定。也就是说，不要写 ~f(++i, i++)~ 这类代码。
+* 声明、定义、头文件与分离编译
+函数和变量一样，可以声明多次，但通常只能定义一次。变量通过 ~extern~ 在头文件中进行声明；函数声明也叫 function prototype, 包含返回类型、函数名和形参类型。
+
+#+begin_src cpp
+  // game.hpp
+  #ifndef GAME
+  #define GAME
+
+  #include <string>
+
+  int parse_width(const std::string &text);
+  #define GAME
+#+end_src
+函数定义则放在源文件:
+
+#+begin_src cpp
+  //game.cpp
+  #include "game.hpp"
+  #include <stdexcept>
+
+  int parse_width(std::string &text) {
+    // ...
+  }
+#+end_src
+调用者包含头文件以使用:
+
+#+begin_src cpp
+  // main.cpp
+  #include "game.hpp"
+
+  int main() {
+    auto w = parse_width("40");
+  }
+#+end_src
+
+- 头文件: 声明接口
+- 源文件：定义实现
+- 使用者： include 头文件
+- 定义者: 也 include 自己对应的头文件，让编译器检查声明与定义一致
+* 参数传递：值、引用、指针、const
+** 值传递: 函数拿到副本
+#+begin_src cpp
+  void reset(int x) {
+    x = 0;
+  }
+
+  int i = 42;
+  reset(i);
+#+end_src
+值传递会复制实参。函数内部修改的是实参的拷贝。适合便宜复制的小类型，例如 ~int~, ~char~, ~bool~, 枚举，小型指针/迭代器等。
+
+现代C++的经验是： *只读输入参数，便宜复制的类型按值传递；不便宜复制的类型按引用 ~const &~ 传递* 。
+** 引用传递: 函数拿到原对象的别名
+#+begin_src cpp
+  void reset(int &x) {
+    x = 0;
+  }
+
+  int i = 42;
+  reset(i); // i 变成 0
+#+end_src
+
+~int &x~ 不是副本，而是实参对象的别名。适合函数需要修改实参的场景。
+
+现代风格下，非 ~const~ 引用表示 *in-out* 参数: 调用者应该意识到这个对象会被修改。
+** ~const &~: 只读借用
+#+begin_src cpp
+  bool is_shorter(const std::string &a, const std::string &b) {
+    return a.size() < b.size();
+  }
+#+end_src
+~const std::string &~ 的含义是：不复制字符串，也不修改字符串。它还允许传入临时对象、字符串字面值、 ~const~ 对象:
+
+#+begin_src cpp
+  is_shorter("hello", "world"); // ok
+#+end_src
+这就是为什么 “不会修改的引用参数” 应该写成 ~const &~, 因为如果误写成 ~std::stiring &s~ , 它就不能接收 ~std::string~, 临时字符串、字符串字面值，而且会误导调用者以为函数可能修改 ~s~ 。
+** 指针参数
+#+begin_src cpp
+  void reset(int *p) {
+    if (p != nullptr) {
+      ,*p = 0;
+    }
+  }
+#+end_src
+指针参数本身也是值传递：函数得到的是指针值的副本。修改 ~*p~ 会改变外部对象；修改 ~p~ 本身不会改变外部指针。
+
+现代C++中，一般优先用引用来表示“必须存在的对象”，用指针表示“可以为空”或“需要表达可选对象”。当 “无实参” 是有效情况时，优先用 ~T*~ 而不是 ~T&~ .
+#+begin_src cpp
+  void update(Game &game); // game 必须存在
+  void update(Point *p); // p 可以是 nullptr
+#+end_src
+* 返回值: 返回对象、引用、指针
+** 普通返回值
+现代C++中有很对对象可以安心按值返回。编译器有返回值优化，C++11 后还有移动语义。输出值优先用返回值，而不是输出参数；多个输出值则优先返回结构体或类似多成员类型。
+
+相比:
+
+#+begin_src cpp
+  void find_char(const std::string &s, char c, std::size_t &occurs);
+#+end_src
+
+更推荐写:
+
+#+begin_src cpp
+  struct FindResult {
+    std::string::size_type first_pos;
+    std::size_t count;
+  };
+
+  FindResult find_char(const std::string &s, char c);
+#+end_src
+这样接口更清楚:
+#+begin_quote
+返回的是结果，而不是偷偷在函数过程中修改某个引用的参数
+#+end_quote
+** 返回引用
+返回引用表示：函数返回的是某个已存在对象的别名。
+#+begin_src cpp
+  char &get_char(std::string &s, std::string::size_type i) {
+    return s[i];
+  }
+
+  std::string text = "hello";
+  get_char(text, 0) = 'H'; // text 变成 "Hello"
+#+end_src
+** 永远不要返回局部对象的引用或指针
+错误示例:
+#+begin_src cpp
+  const std::string &bad() {
+    std::string s = "hello";
+    return s; // 错误，s 离开函数后销毁
+  }
+#+end_src
+函数结束后，局部自动对象的 lifeline 结束，返回它的引用或指针会产生悬垂引用/悬垂指针。
+
+#+begin_quote
+返回引用/指针前先问：它指向的对象在函数返回后还活着吗
+#+end_quote
+* 数组参数: 本质上退化为指针
+数组不能按值传递。形如 ~void print(const int arr[10]);~ 看起来像传入了10个元素的数组，实际上等价于: ~void print(const int *arr);~ 。
+
+~10~ 只是文档提示，不参与参数类型检查。调用者传入长度为2的数组也能成功编译，所以函数自己必须知道边界。
+
+C++ Primer 给出三种传统方式:
+#+begin_src cpp
+  void print(const char *cp); // 用结束标记，例如 '\0'
+  void print(const int *begin, const int *end); // 半开区间
+  void print(const int arr[], std::size_t size); // 显示传 size
+#+end_src
+现代C++20更推荐用 ~std::span~ 表达连续序列:
+#+begin_src cpp
+  #include <span>
+  void print(std::span<const int> xs) {
+    for (int x : xs) {
+      std::cout << x << '\n';
+    }
+  }
+#+end_src
+~span~ 将指针+长度封装为一个对象，接口比裸指针跟清晰。建议使用 ~span<T>~ 表示半开区间。
+* 可变数量参数: ~initializer_list~ 优先于省略号
+
+如果参数类型可变，但类型相同，可以用:
+#+begin_src cpp
+  #include <initializer_list>
+
+  int sum(std::initializer_list<int> xs) {
+    int ret = 0;
+    for (int x : xs) {
+      ret += x;
+    }
+    return ret;
+  }
+
+  sum({1, 2, 3, 4});
+#+end_src
+~std::initializer_list<T>~ 里的元素是 ~const~, 不能修改。它适合错误消息、求和、批量添加等 “同类型任意数量参数”。
+
+C风格省略号 ~void f(...);~ 主要用于兼容 C varargs, 不建议普通 C++ 代码使用，因为它缺少类型安全，类类型也容易出问题。
+* 函数重载: 同名，不同参数列表
+Override. 重载函数必须在同一作用域内，名字相同，但参数数量或参数类型不同。
+#+begin_src cpp
+  void print(const char*);
+  void print(const int*, const int*);
+  void print(const int[], std::size_t);
+#+end_src
+不能只依靠返回类型区分。
+
+参数名不参与函数类型，类型别名也不创建新类型。
+** ~const~ 与重载
+顶层 ~const~ 不参与重载区分:
+#+begin_src cpp
+  void f(int);
+  void f(const int); // 错误：重复声明
+#+end_src
+但底层 ~const~ 可以区分, 例如指针/引用指向的对象是否为 ~const~:
+#+begin_src cpp
+  void f(std::string &);
+  void f(const std::string &);
+
+  std::string s;
+  const std::string s;
+
+  f(s); // 调用 std::string&
+  f(cs); // 调用 const std::string&
+#+end_src
+设计原则是: “只在语义相同、参数类型不同” 的情况下重载。不要为了少取名字而重载完全不同的操作。比如 ~moveHome()~, ~moveRel()~, ~moveAbs()~ 往往比全部作为 ~move()~ 的重载清晰很多。
+* 函数匹配: 编译器如何选择重载
+函数匹配，也叫 overload resolution, 核心流程是三步: 先找 candidate functions, 再筛选 viable functions,, 最后选 best viable function. cppreference 对重载决议也是按这三部描述：构造候选集、筛选可行函数、根据隐式转换序列排名选出唯一最佳函数。
+
+比如
+#+begin_src cpp
+  void f();
+  void f(int);
+  void f(int, int);
+  void f(double, double = 3.14);
+
+  f(5.6);
+#+end_src
+候选函数是所有当前作用域内可见的 ~f~, 可行函数包括:
+#+begin_src cpp
+  void f(int); // double 可以转 int
+  void f(double, double = 3.14); // 第二个参数有默认值
+#+end_src
+最佳匹配是:
+#+begin_src cpp
+  f(double, double = 3.14);
+#+end_src
+因为 ~5.6~ 到 ~double~ 是精确匹配，而到 ~int~ 需要转换。
+
+*重载会按照标准转换等级排序* 。
+* 默认实参
+默认实参可以让调用者省略尾部参数。不能跳过中间参数。
+#+begin_src cpp
+  using Size = std::string::size_type;
+
+  std::string screen(Size height = 24,
+                     Size width = 80,
+                     char background = ' ');
+
+  screen(); // 24, 80, ' '
+  screen(40); // 40, 80, ' '
+  screen(, , '#'); // error
+#+end_src
+设计时把“最可能使用默认值”的参数放最后面。默认实参通常写在头文件的函数声明中，不要再多个地方重复指定。
+* ~inine~, ~constexpr~, ~noexcept~
+** ~inline~
+对编译器的要求。希望把函数调用展开，减少调用开销。它适合短小、调用频繁、逻辑简单的函数。编译器可以忽略这个请求。 ~inline~ 函数通常放在头文件，因为编译器需要看到定义才能展开。
+
+#+begin_src cpp
+  inline bool is_shorter(const std::string &a, const std::string &b) {
+    return a.size() < b.size();
+  }
+#+end_src
+** ~constexpr~
+~constexpr~ 函数表示它们可以在编译期求值。前提是实参也是常量表达式。
+#+begin_src cpp
+  constexpr int board_area(int w, int h) {
+    return w * h;
+  }
+
+  int arr[board_area(40, 20)]; // OK, 编译期可算
+#+end_src
+** ~noexcept~
+表示函数承诺不会让异常逃出。 ~noexcept~ 不是编译期证明；如果异常真的逃出 ~noexcept~ 函数，会调用 ~std::terminate~ 。 ~noexcept~ 用来指定函数是否会抛异常。且  ~noexcept~ 函数中未捕获异常逃出程序时会终止程序。
+* ~assert~ 与辅助调试
+~assert(expr)~ 用来检查 “理论上不可能失败的” 内部条件。失败时打印信息并终止程序。定义 ~NDEBUG~ 后， ~assert~ 会被关闭。
+
+#+begin_src cpp
+  #include <cassert>
+  void move_to(Point p) {
+    assert(p.x >= 0);
+    assert(p.y >= 0);
+  }
+#+end_src
+不要把 ~assert~ 当作运行时错误处理。用户输入非法、文件打不开、网络失败，这些都不能只靠 ~assert~, 它更适合检查内部不变量。
+* 指向函数的指针
+函数也有类型。函数类型由返回类型和参数类型决定，函数名不属于类型。
+#+begin_src cpp
+  bool length_compare(const std::string &, const std::string &);
+#+end_src
+它的类型是:
+#+begin_src cpp
+  bool(const std::string &, const std::string &);
+#+end_src
+指向该函数的指针写作:
+#+begin_src cpp
+  bool (*pf)(const std::string &, const std::string &);
+#+end_src
+必须带着括号。这样 ~*pf~ 才是函数指针。
+
+可以这样使用:
+#+begin_src cpp
+  pf = length_compare;
+  bool b = pf("hello", "world");
+#+end_src
+可以用 ~using~ 简化:
+#+begin_src cpp
+  using Compare = bool (*)(const std::string &, const std::strin &);
+
+  void use_bigger(const std::string &a, const std::string &b, Compare comp);
+#+end_src
+现代C++中，如果只是传入一个比较逻辑，常用选择更多:
+#+begin_src cpp
+  template <class Compare>
+  void use_bigger(const std::string &a, const std::string &b, Compare comp) {
+    std::cout << (comp(a, b) ? b : a);
+  }
+#+end_src
+这样既能接收普通函数，也能接收 lambda 和函数对象。函数指针仍然重要，因为它是理解回调、 C API、重载取地址、策略函数的基础。
+* Function 实践准则
+1. 小而便宜复制的只读参数：按值传递，如 int, char, bool, enum
+2. 大对象只读参数: ~const T&~, 如 ~string~, ~vector~, 自定义大对象
+3. 需要修改实参: ~T&~
+4. 可以为空或可选对象: ~T*~, 调用前检查 ~nullptr~
+5. 输出值: 优先 ~return~, 多个输出值优先构造结构体
+6. 不要返回局部对象的引用或指针
+7. 数组参数优先用 vector / array / span; 少用裸指针 + size
+8. 重载只用于语义相同的一组函数
+9. 默认实参只能省略尾部参数，默认值写在声明处
+10. 函数指针能用，但现代C++更常用 lambda, 函数对象, 模板或 ~std::function~
+
+
+

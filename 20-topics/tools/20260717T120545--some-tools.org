@@ -1,0 +1,20 @@
+#+title: Some Tools
+#+date:       [2026-07-17 Fri 12:05]
+#+identifier: 20260717T120545
+
+* 原始目录
+- [[file:/home/yurikon/Learning/software/tools/Some-Tools][software/tools/Some-Tools]]
+
+* 当前工具
+- Gradle
+- LaTeX
+- OCRMypdf
+- Podman
+- SSH
+
+* 计划学习
+- [[denote:20260717T120527][Regex]]
+
+* 用法建议
+- 这个页面只做工具导航。
+- 某个工具如果笔记开始稳定增长，再拆成单独目录。

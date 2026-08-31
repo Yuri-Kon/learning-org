@@ -1,0 +1,9 @@
+:PROPERTIES:
+:END:
+#+title: rule of three/five/zero
+#+date:       [2026-07-03 Fri 15:17]
+#+identifier: 20260703T151744
+* 三/五/零原则
+
+* 来源
+- [[https://zh.cppreference.com/cpp/language/rule_of_three][cppreference]]

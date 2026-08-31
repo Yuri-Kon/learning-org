@@ -1,0 +1,479 @@
+#+title: Pattern Matching, Type Synonyms, Options, Association Lists and Algebraic Data
+#+date:       [2026-08-30 Sun 11:43]
+#+identifier: 20260830T114321
+#+author: yurikon
+#+language: zh-cn
+* 第三章剩余内容
+第三章的剩余内容可以合并进一条主线:
+
+#+begin_quote
+用类型描述数据的形状，用模式匹配拆开数据，用递归和高阶函数处理数据，用 option/result/exception 表达失败
+#+end_quote
+这正是函数式语言编程的核心，不只是OCaml语法。
+
+* 模式匹配：函数式语言中的 “结构化分支”
+OCaml manual 对 pattern 的定义很准确: pattern 是一种模板，用来选择 _某种形状_ 的数据，并把数据结构中的组成成分绑定到名字上。
+
+所以可以把模式匹配理解为:
+
+#+begin_src ocaml
+  match 数据 with
+  | 形状1 -> 处理方式1
+  | 形状2 -> 处理方式2
+  | 形状3 -> 处理方式3
+#+end_src
+命令式语言中的 ~if~ 通常是在问:
+#+begin_quote
+这个条件是否成立?
+#+end_quote
+而 pattern matching 更像是在问:
+#+begin_quote
+这个值是什么结构？里面装了什么？
+#+end_quote
+例如 list:
+#+begin_src ocaml
+  let rec sum = function
+    | [] -> 0
+    | h :: t -> h + sum t
+#+end_src
+可以查看 [[denote:20260718T225518::#7f102180-9e83-4c9b-8f1d-10384f083bc5][~function~: 立即匹配的语法糖]] 有关 ~function~ 的阐述.
+
+这里是直接在区分 list 的两种形状:
+
+#+begin_src ocaml
+  [] (* 空列表 *)
+  h :: t (* 头部 h + 剩余列表 t *)
+#+end_src
+** 高级 pattern 的几种方式
+有几种很常用的 pattern: or-pattern, 类型标注 pattern, 常量 pattern, 字符范围 pattern, 带 guard 的 pattern.
+
+#+begin_src ocaml
+  type sign = Neg | Zero | Pos
+
+  let sign = function
+    | 0 -> Zero
+    | n when n > 0 -> Pos
+    | _ -> Neg
+#+end_src
+字符范围:
+#+begin_src ocaml
+  let digit_value = function
+    | '0'..'9' as c -> Some (Char.Code c - Char.code '0')
+    | _ -> None
+#+end_src
+or-pattern:
+#+begin_src ocaml
+  let is_vowel = function
+    | 'a' | 'e' | 'i' | 'o' | 'u' -> true
+    | _ -> false
+#+end_src
+注意: or-pattern 的每个分支必须绑定相同变量。下面这种不合法:
+
+#+begin_src ocaml
+  （* 错误: 左边绑定 x, 右边不绑定 x *）
+  | Some x | None -> ...
+#+end_src
+** ~let~ 表达式的等号左边也可以是 pattern
+之前所写的:
+#+begin_src ocaml
+  let x = 1 in x + 1
+#+end_src
+但完整形式是:
+#+begin_src ocaml
+  let p = e1 in e2
+#+end_src
+也就是说， ~let~ 的等号左边不一定只是变量名，也可以是 pattern. 其动态语义是:
+#+begin_quote
+先计算 ~e1~, 再根据 pattern ~p~ 匹配结果；匹配失败会抛出 ~Match_failure~; 匹配成功把绑定用于 ~e2~.
+#+end_quote
+例如:
+#+begin_src ocaml
+  let distance p1 p2 =
+    let (x1, y1) = p1 in
+    let (x2, y2) = p2 in
+    let dx = x1 -. x2 in
+    let dy = y1 -. y2 in
+    sqrt(dx *. dx + dy *. dy)
+#+end_src
+更 OCaml 的写法是直接在参数中匹配:
+#+begin_src ocaml
+  let distance (x1, y1) (x2, y2) =
+    let dx = x1 -. x2 in
+    let dy = y1 -. y2 in
+    sqrt (dx *. dx + dy *. dy)
+#+end_src
+函数定义里的参数位置也可以是 pattern, 真正核心形式是 ~fun p -> e~
+** 函数式思维: pattern matching 是 “消除规则”
+以后每当遇到一个类型，可以这样想:
+#+begin_src ocaml
+  type t =
+    | A of ...
+    | B of ...
+    | C of ...
+#+end_src
+构造值时用 constructor:
+#+begin_src ocaml
+  A ...
+  B ...
+  C ...
+#+end_src
+消费值时用 pattern matching:
+#+begin_src ocaml
+  match x with
+  | A .. -> ...
+  | B .. -> ...
+  | C .. -> ...
+#+end_src
+这就是函数式语言中非常重要的思维:
+#+begin_quote
+定义类型，就是定义数据可能有哪些形状；写函数，就是穷尽处理这些形状
+#+end_quote
+
+* Type Synonyms: 给类型取名，但不创造新类型
+#+begin_src ocaml
+  type point = float * float
+  type vector = float list
+  type matrix = float list list
+#+end_src
+这里 ~type point = float * float~ 只是类型别名。 ~point~ 和 ~float * float~ 完全可交换。目的只是为了让代码更自文档化，而不是引入新的不兼容类型。
+
+比如:
+#+begin_src ocaml
+  type point = float * float
+  let get_x (x, _) = x
+  let p : point = (1.0, 2.0)
+  let q : float * float  = (3.0, 4.0)
+
+  let a = get_x p
+  let b = get_x q
+#+end_src
+~p~ 和 ~q~ 都能传递进函数，因为 ~point~ 不是一个真正独立的新类型。
+
+**什么时候不用 type synonym**
+如果真的想防止把不同概念混在一起，不要用 synonym, 而要用 record 和 variant 包装一层:
+#+begin_src cpp
+  type point = { x : float; y : float}
+  type velocity = { dx : float; dy : float}
+#+end_src
+这样 ~point~ 和 ~velocity~ 就不会被误用。
+
+* Option: 用类型代替 null
+
+OCaml 没有像Java那样的 ~null~, 当一个函数“可能返回值，也可能没有值”时，通常使用:
+#+begin_src ocaml
+  'a option
+#+end_src
+它本质上是 ~type 'a option = None | Some of 'a~.
+
+option 可以被理解为一个有可能为空、有可能有东西的盒子。 ~Some 42~ 表示盒子里有 ~42~, ~None~ 表示空盒子。它同时也是一个 type constructor: 给定类型 ~t~, 得到 ~t option~
+
+例如:
+#+begin_src ocaml
+  let safe_hd = function
+    | [] -> None
+    | h :: _ -> Some h
+#+end_src
+
+类型是:
+
+#+begin_src ocaml
+  val safe_hd: 'a list -> 'a option
+#+end_src
+
+这比下面这种危险函数好: ~List.hd []~, 因为它会抛出异常，而 ~safe_hd []~ 的失败被类型显式表达。
+
+** option 的基本处理模式
+
+最直接的是:
+
+#+begin_src ocaml
+  let string_of_int_option = function
+    | None -> "none"
+    | Some n -> string_of_int n
+#+end_src
+
+或者我们可以把函数作用到 ~Some~ 里:
+
+#+begin_src ocaml
+  let option_map f = function
+    | None -> None
+    | Some x -> Some (f x)
+#+end_src
+
+官方文档也用 ~('a -> 'b) -> 'a option -> 'b option~ 来解释 Option.map: 有值就应用函数，没有值就保持 None.
+
+连续可能失败的情况，用 ~bind~:
+
+#+begin_src ocaml
+  let option_bind o f =
+    match o with
+    | None -> None
+    | Some x -> f x 
+#+end_src
+
+例如:
+
+#+begin_src ocaml
+  let safe_div x y =
+    if y = 0 then None else Some ( x / y)
+
+  let compute x y z =
+    option_bind (safe_div x y) (fun a -> option_bind (safe_div a z) (fun b -> Some (b + 1)))
+#+end_src
+
+OCaml 官方文档也指出，Option.bind 适合处理函数返回值本身已经是 option 的情况，例如安全除法。
+
+** option, result, exception 的选择
+
+经验规则是:
+
+| 情况                                | 建议       |
+|------------------------------------+-----------|
+| 没有值是正常情况                      | option    |
+| 失败是正常情况，而且需要解释原因         | result    |
+| 真正异常、bug、外部系统错误、想中断控制流 | exception |
+
+~option~ 的缺点是 ~None~ 不携带失败原因。 OCaml 官方文档 error handling 文档明确说， ~None~ 是沉默的，说明哪里出错。 ~result~ 用 ~Ok x~ / ~Error e~ 同时表达成功值和失败信息。
+
+#+begin_src ocaml
+  let parse_positive_int s =
+    match int_of_string_opt s with
+    | None -> Error "not an integer"
+    | Some n when n <= 0 -> Error "not positive"
+    | Some n -> Ok n
+#+end_src
+
+Haskell 对应的关系是:
+
+#+begin_src haskell
+  Maybe a -- OCaml: 'a option
+  Either e a -- OCaml: ('a, 'e) result，概念上类似
+#+end_src
+
+* Association List: list + tuple 做小字典
+
+association list 是一个 pair list:
+
+#+begin_src ocaml
+  let env = [("x", 1); ("y", 2); ("z", 3)]
+#+end_src
+
+其类型是:
+
+#+begin_src ocaml
+  val env : (string * int) list
+#+end_src
+
+
+association list 并不是 OCaml 内建的数据结果，是 list 和 pair 的组合。插入就是把 ~(k, v)~ cons 到前面，查找就是从左到右找第一个匹配的 key.
+
+#+begin_src ocaml
+  let insert k v env =
+    (k, v) :: env
+
+  let rec lookup k = function
+    | [] -> None
+    | (k', v) :: rest ->
+       if k = k' then Some v else lookup k rest
+#+end_src
+
+这种写法有一个很重要的语义： *后插入的绑定会遮蔽前面的绑定*.
+
+比如:
+
+#+begin_src ocaml
+  let env =
+    []
+    |> insert "x" 1
+    |> insert "x" 2
+#+end_src
+
+这时 env 是:
+
+#+begin_src ocaml
+  - : (string * int) list = [("x", 2); ("x", 1)]
+#+end_src
+
+#+begin_src ocaml
+  lookup "x" env
+  (* Some 2 *)
+#+end_src
+
+因为我们的 lookup 是找到第一个匹配的就返回，因此后绑定的 ("x", 2) 会覆盖前面的绑定。
+
+官方的 ~List~ API 中也有 association list 函数: ~List.assoc~ 返回 _左侧第一个绑定的值_ ，找不到会抛出 ~Not_found~; ~List.assoc_opt~ 返回 option.
+
+** association list 适合什么
+
+适合一些小型的字典，比如:
+
+#+begin_src ocaml
+  [("debug", "true"); ("port", "8080")]
+#+end_src
+
+而不适合百万级别的 key-value 存储。因为它的插入是 O(1), 但查找是 O(n). 之后我们进入 ~Map.Make~ 、哈希表、平衡树时，会看到更加工程化的字典结构。
+
+* Algebraic Data Types: 代数数据结构
+
+这是函数式编程最重要的建模工具。
+
+可以把 ADT 理解为:
+
+#+begin_quote
+用类型列出数据的所有合法形状。
+#+end_quote
+
+OCaml 的 variant 比枚举类型强得多，因为 constructor 可以携带数据。 CS3110 的 ~shape~ 例子是:
+
+#+begin_src ocaml
+  type point = float * float
+
+  type shape =
+    | Point of point
+    | Circle of point * float
+    | Rect of point * point
+#+end_src
+
+每个 ~shape~ 值必须恰好来自一个 constructor: ~Point~, ~Circle~, ~Rect~ 。 constructor 可以理解为 tag, 负责标记这个值是哪种情况。
+
+#+begin_src ocaml
+  let area = function
+    | Point _ -> 0.0
+    | Circle (_, r) -> Float.pi *. r *. r
+    | Rect ((x1, y1), (x2, y2)) -> abs_float ((x2 -. x1) *. (y2 -. y1))
+#+end_src
+
+这里的 ~shape~ 是 sum type, 因为它是三种情况之一； ~Circle of point * float~ 里的 ~point * float~ 是 product type, 因为它同时包含 center 和 radius.
+
+
+** 不要滥用 catch-all
+
+下面这种写法不推荐:
+
+#+begin_src ocaml
+  type color = Bule | Red
+
+  let string_of_color = function
+    | Blue -> "blue"
+    | _ -> "red"
+#+end_src
+
+因为以后新增 ~type color = Blue | Red | Green~ ， ~Green~ 会悄悄落入 ~_ -> "red"~. 对 variant 使用 catch-all 会让代码对未来类型变化不健壮，最好显式列出 constructor.
+
+** 递归 variant: 自己定义 list / tree
+
+OCaml list 本质上可以理解为:
+
+#+begin_src ocaml
+  type 'a mylist =
+    | Nil
+    | Cons of 'a * 'a mylist
+#+end_src
+
+因此，我们可以自己写:
+
+#+begin_src ocaml
+  let rec length = function
+    | Nil -> 0
+    | Cons (_, rest) -> 1 + length rest
+#+end_src
+
+更重要的是 tree:
+
+#+begin_src ocaml
+  type 'a tree =
+    | Leaf
+    | Node of 'a tree * 'a * 'a tree
+#+end_src
+
+#+begin_src ocaml
+  let rec size = function
+    | Leaf -> 0
+    | Node (left, _, right) -> 1 + size left + size right
+#+end_src
+
+#+begin_src ocaml
+  let rec map_tree f = function
+    | Leaf -> Leaf
+    | Node (left, x, right) ->
+       Node (map_tree f left, f x, map_tree f right)
+#+end_src
+
+这就是函数式数据结构的核心： *数据结构本身是递归定义的，处理函数也自然递归*.
+
+
+** paramterized variant: 类型层面的函数
+
+#+begin_src ocaml
+  type 'a box =
+    | Empty
+    | Full of 'a
+#+end_src
+
+这里 ~box~ 本身不是具体类型， ~int box~, ~string box~ 才是具体类型。 CS3110 中把这个称为 type constructor: 一个从类型到类型的函数。
+
+比如:
+
+#+begin_src ocaml
+  let is_empty = function
+    | Empty -> true
+    | Full _ -> false
+#+end_src
+
+其类型是:
+
+#+begin_src ocaml
+  val is_empty : 'a box -> bool = <fun>
+#+end_src
+
+这就是 paramter polymorphism: 函数不关心 ~'a~ 是什么，所以能够处理任意的 ~'a box~
+
+* 高阶函数, fold 与递归
+
+我们之前已经见过:
+
+#+begin_src ocaml
+  List.map
+  List.filter
+  List.fold_left
+  List.fold_right
+  List.iter
+#+end_src
+
+官方的 ~List~ API 中， ~List.iter~ 会依次对应列表元素应用函数； ~List.map~ 会把函数应用到每个元素并构造新列表； ~List.filter~ 保留满足谓词的元素。
+
+** map: 保持结构，改变元素
+
+#+begin_src ocaml
+  List.map (fun x -> x * x) [1;2;3]
+  (* [1;4;9] *)
+#+end_src
+
+这里列表 _长度_ 不变，元素类型可以改变。
+
+思维:
+
+#+begin_src ocaml
+  'a list -> 'b list
+#+end_src
+
+** filter: 保持元素，筛选结构
+
+#+begin_src ocaml
+  List.filter (fun x -> x mod 2 = 0) [1; 2; 3; 4]
+  (* [2; 4] *)
+#+end_src
+
+思维:
+
+#+begin_src ocaml
+  'a list -> 'a list
+#+end_src
+
+这里元素 _类型_ 不变，列表长度可能变。
+
+** fold: 把结构压缩成一个结果
+
+#+begin_src ocaml
+  List.fold_left (fun acc x -> acc + x) 0 [1; 2; 3]
+#+end_src

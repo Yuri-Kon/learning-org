@@ -1,0 +1,812 @@
+:PROPERTIES:
+:END:
+
+#+title: OCaml 与 Nix 学习总览
+#+date:       [2026-07-17 Fri 12:05]
+#+startup: overview
+#+tags: ocaml functional_programming nix reproducible_environment cs3110
+#+filetags: :cs3110:functionalprogramming:nix:ocaml:reproducibleenvironment:
+#+identifier: 20260717T120544
+
+* 总体定位
+
+本学习计划的核心目标是：以 OCaml 作为主要语言，系统理解函数式编程思想；以 Nix 作为学习环境和辅助对象，在配置 OCaml 工具链的过程中逐步理解 Nix 语言、flake、可复现开发环境与声明式依赖管理。
+
+也就是说，本计划中两者的关系是：
+
+- OCaml 是主要学习对象，用来学习函数式编程、类型系统、模块系统、递归、代数数据类型、解释器和程序正确性。
+- Nix 是环境提供者，同时也是一个值得学习的函数式配置语言，用来管理 OCaml 学习环境，并帮助理解纯函数式、惰性求值、声明式构建和可复现性。
+- 学习顺序上，不需要先把 Nix 学完再学 OCaml；更合适的方式是“边使用 Nix 提供环境，边在必要时理解 Nix 的语言和机制”。
+
+* 当前进度与恢复点
+
+- 状态：暂停，未来在合适的时间重新开始。
+- 已完成：基础语法，以及 CS3110 第 3 章中的列表与模式匹配、变体、OUnit、record 和 tuple 等内容。
+- 代码进度：[[file:../../../projects/cs3110-ocaml-nix/][cs3110-ocaml-nix]] 中已有第 1 至第 3 章练习及 OUnit 小实验。
+- 恢复方式：先复盘第 3 章笔记与练习，补齐第 3 章剩余内容，再进入高阶函数与递归模式。
+
+* 可靠资料与链接
+
+** OCaml / CS3110
+
+- CS3110 Textbook: [[https://cs3110.github.io/textbook/cover.html][OCaml Programming: Correct + Efficient + Beautiful]]
+- CS3110 Install Page: [[https://cs3110.github.io/textbook/chapters/preface/install.html][Installing OCaml]]
+- OCaml 官方安装文档: [[https://ocaml.org/docs/installing-ocaml][Installing OCaml]]
+- OCaml 官方包与工具生态入口: [[https://ocaml.org/docs][OCaml Documentation]]
+- Dune 官方文档: [[https://dune.readthedocs.io/en/stable/][Dune Documentation]]
+- OCaml-LSP 官方仓库: [[https://github.com/ocaml/ocaml-lsp][ocaml-lsp]]
+- Learn Programming with OCaml: [[https://usr.lmf.cnrs.fr/lpo/][Learn Programming with OCaml]]
+
+** Nix / Nix Flakes
+
+- Nix 官方文档入口: [[https://nix.dev/][nix.dev]]
+- Nix language basics: [[https://nix.dev/tutorials/nix-language.html][Nix language basics]]
+- Nix flakes 概念说明: [[https://nix.dev/concepts/flakes.html][Flakes]]
+- ~nix develop~ 官方手册: [[https://nix.dev/manual/nix/stable/command-ref/new-cli/nix3-develop.html][nix develop]]
+- Nixpkgs OCaml 文档: [[https://nixos.org/manual/nixpkgs/stable/#ocaml][OCaml in Nixpkgs]]
+- Nix Pills: [[https://nixos.org/guides/nix-pills/][Nix Pills]]
+- NixOS Wiki - Flakes: [[https://wiki.nixos.org/wiki/Flakes][Flakes - NixOS Wiki]]
+
+* 笔记索引
+
+** 章节笔记
+
+- [[denote:20260601T181247][Installing OCaml]]
+- [[denote:20260601T181248][OCaml 第一章：为什么要通过 OCaml 学习编程]]
+- [[denote:20260604T182845][OCaml 第二章：OCaml 基础]]
+
+** 补充笔记
+
+- [[denote:20260706T153131][labmda 表达式]]
+- [[denote:20260601T180530][部分应用 partial application]]
+- [[denote:20260606T101830][尾递归]]
+
+* 学习原则
+
+** 主线原则
+
+1. 以 CS3110 为主线，优先保证 OCaml 语言本身的学习连续性。
+2. 以 Learn Programming with OCaml 作为练习补充，用具体程序把 OCaml 写熟。
+3. 以 Nix flake 管理本学习项目的环境，不优先使用全局安装或临时手动配置。
+4. Nix 的学习采用“够用后深入”的方式：先会写 devShell，再理解属性集、函数、let、with、inherit、flake inputs/outputs、lock file。
+5. 所有环境配置和练习代码尽量放入同一个仓库，形成可复现、可迁移、可回顾的学习项目。
+
+** 环境原则
+
+本项目不把 OCaml 工具链安装到系统全局作为主线，而是通过 ~nix develop~ 进入项目级开发环境。
+
+这样做的好处：
+
+- OCaml、Dune、utop、ocaml-lsp、ocamlformat 等工具由 ~flake.nix~ 统一声明。
+- ~flake.lock~ 固定 nixpkgs 版本，便于将来复现环境。
+- 不污染系统环境，退出 shell 后工具链不再暴露到普通 PATH。
+- 可以在学习 OCaml 的同时自然接触 Nix 的函数式配置思想。
+
+** OPAM 与 Nix 的关系
+
+CS3110 官方安装页默认使用 OPAM 创建课程 switch。该路线适合严格跟随课程环境，也适合普通 OCaml 开发者。
+
+本计划采用 Nix 作为主环境，因此：
+
+- 初期不以 OPAM switch 为主线。
+- 优先使用 Nixpkgs 中的 OCaml 包。
+- 遇到 Nixpkgs 缺包、版本不匹配或需要严格复现 OPAM 生态时，再补充研究 ~opam-nix~ 或 Nix + OPAM 混合路线。
+- 理解上可以把 OPAM 看作 OCaml 生态的包管理器，把 Nix 看作更外层的、跨语言的开发环境和构建环境管理工具。
+
+* 主参考资料
+
+** 主线教材：CS3110
+
+用途：
+
+- 系统理解函数式编程思想。
+- 理解 OCaml 的语言语义。
+- 理解数据与类型、模块系统、高阶函数、可变性、正确性、解释器、类型推导。
+- 建立“程序如何被语言解释”的视角。
+- 通过 OCaml 训练类型驱动、表达式驱动、数据建模驱动的程序设计方式。
+
+** 辅助教材：Learn Programming with OCaml
+
+用途：
+
+- 用具体程序把 OCaml 写熟。
+- 通过算法和数据结构理解 OCaml 的表达方式。
+- 对照 Python / Java 已有知识，重新理解数组、列表、树、集合、字典、图、动态规划、排序等概念。
+- 训练把“算法思想”写成 OCaml 风格代码。
+
+重点章节：
+
+- Part I: Programming with OCaml
+  - Chapter 1: The Working Environment
+  - Chapter 2: First Steps with OCaml
+  - Chapter 3: OCaml Concepts: A Closer Look
+- Part II: Data Structures
+  - Chapter 4: Arrays
+  - Chapter 5: Sets and Dictionaries
+  - Chapter 6: Queues
+  - Chapter 7: Graphs
+  - Chapter 8: Disjoint Sets
+  - Chapter 9: Zippers
+- Part III: Algorithmic Techniques and Applications
+  - Chapter 10: Arithmetic
+  - Chapter 11: Dynamic Programming and Memoization
+  - Chapter 12: Sorting Algorithms
+  - Chapter 13: Graph Algorithms
+
+** 辅助对象：Nix
+
+用途：
+
+- 为 OCaml 学习提供可复现开发环境。
+- 理解声明式配置、纯函数式表达、惰性求值、属性集、函数、依赖固定。
+- 为后续学习 NixOS、Home Manager、flakes、开发环境管理打基础。
+- 通过和 OCaml 对照，理解不同函数式语言在“通用程序设计”和“配置/构建描述”上的差异。
+
+重点内容：
+
+- Nix language basics
+- Attribute set
+- Function
+- let expression
+- with expression
+- inherit
+- Derivation
+- nixpkgs
+- flake.nix
+- flake.lock
+- inputs / outputs
+- devShells
+- nix develop
+
+* 学习总目标
+
+** 第一层：会写 OCaml
+
+完成后应当能够：
+
+- 使用 Nix flake 提供 OCaml 学习环境。
+- 使用 ~nix develop~ 进入项目级开发 shell。
+- 使用 ~utop~ 进行交互式实验。
+- 使用 ~dune~ 创建、编译、运行 OCaml 项目。
+- 看懂 ~.ml~ / ~.mli~ / ~dune~ / ~dune-project~ 等文件。
+- 使用 ~let~ / ~let in~ / ~function~ / ~match~ / ~type~ / ~module~ / ~module type~ / ~functor~。
+- 熟悉 ~list~ / ~array~ / ~option~ / ~result~ / ~record~ / ~variant~ / ~tuple~。
+- 能写递归、尾递归、~map~ / ~filter~ / ~fold~ 风格程序。
+- 能写简单命令行程序。
+- 能写简单单元测试和性质测试。
+
+** 第二层：理解函数式编程思想
+
+完成后应当能解释：
+
+- 为什么函数式语言强调表达式。
+- 为什么不可变数据有助于推理。
+- 什么是递归和尾递归。
+- 什么是模式匹配，为什么它比普通分支语句更适合结构化数据。
+- 什么是代数数据类型。
+- 什么是高阶函数。
+- 什么是柯里化和部分应用。
+- 什么是 ~fold~，以及为什么 ~fold~ 可以表达很多递归模式。
+- 什么是持久化数据结构。
+- 什么是结构共享。
+- 什么是抽象类型、模块签名和函子。
+- 什么是类型推导。
+- 什么是副作用，以及为什么函数式语言会谨慎对待副作用。
+
+** 第三层：理解 Nix 的函数式配置思想
+
+完成后应当能够解释：
+
+- Nix 为什么是一门纯函数式、惰性求值、动态类型的领域特定语言。
+- ~flake.nix~ 中的 ~inputs~ 和 ~outputs~ 分别表示什么。
+- ~flake.lock~ 为什么能提高环境复现性。
+- ~devShells.${system}.default~ 为什么可以为项目提供开发环境。
+- ~pkgs.mkShell~ 的作用是什么。
+- ~let ... in ...~ 在 Nix 中如何组织中间变量。
+- Attribute set 和 OCaml record / JavaScript object / Python dict 的相似与差异。
+- Nix 函数与 OCaml 函数在语法和用途上的差异。
+- Nix 的惰性求值和 OCaml 中表达式求值的差异。
+- Nix store、derivation、声明式构建与不可变数据思想的关系。
+
+** 第四层：迁移到 Lisp / NixOS / Python / Java
+
+完成后应当能够建立以下联系：
+
+- OCaml 的 list / recursion / pattern matching 与 Lisp 的 list processing。
+- OCaml 的 expression-oriented style 与 Nix 的表达式式配置。
+- OCaml 的 immutability / persistence 与 Nix store、derivation、声明式配置。
+- OCaml 的 module / signature / functor 与 Java interface / generic / package 的差异。
+- OCaml 的 higher-order function 与 Python 中 map/filter/reduce、decorator、callback 的联系。
+- OCaml 的 ADT 与 Java sealed class / enum / record 的联系。
+- OCaml 的 type inference 与 Python 动态类型、Java 显式类型之间的差异。
+
+* 环境方案：用 Nix flake 学习 CS3110
+
+** 项目初始化
+
+#+begin_src bash
+mkdir -p ~/code/cs3110-nix
+cd ~/code/cs3110-nix
+git init
+#+end_src
+
+** 推荐 flake.nix
+
+说明：
+
+- CS3110 当前安装页使用 OCaml 5.3.0。
+- Nixpkgs 中可以通过 ~ocaml-ng.ocamlPackages_5_3~ 选择 OCaml 5.3 系列包集。
+- 如果本机 nixpkgs 暂时没有该属性，可以先改成 ~pkgs.ocamlPackages~，优先保证学习环境跑通。
+
+#+begin_src nix
+{
+  description = "CS3110 OCaml learning environment with Nix flakes";
+
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  };
+
+  outputs = { self, nixpkgs }:
+    let
+      system = "x86_64-linux";
+      pkgs = import nixpkgs { inherit system; };
+
+      ocamlPackages = pkgs.ocaml-ng.ocamlPackages_5_3;
+    in
+    {
+      devShells.${system}.default = pkgs.mkShell {
+        packages = with ocamlPackages; [
+          ocaml
+          findlib
+          dune_3
+          utop
+          odoc
+          ounit2
+          qcheck
+          bisect_ppx
+          menhir
+          ocaml-lsp
+          ocamlformat
+        ];
+
+        shellHook = ''
+          echo "CS3110 OCaml environment"
+          echo "OCaml: $(ocamlc -version)"
+          echo "Try: utop"
+        '';
+      };
+    };
+}
+#+end_src
+
+** 进入环境
+
+#+begin_src bash
+nix develop
+#+end_src
+
+* 学习路线总览
+
+** Phase 0: 环境与最小项目
+
+目标：
+
+- 使用 Nix flake 搭建 OCaml 学习环境。
+- 能运行 ~utop~。
+- 能用 ~dune~ 创建项目。
+- 能在编辑器中获得 LSP 支持。
+- 初步理解 ~flake.nix~、~flake.lock~、~nix develop~、~devShells~ 的关系。
+
+参考：
+
+- CS3110 Preface: Installing OCaml
+- CS3110 Chapter 2: The Basics of OCaml
+- LPO Chapter 1: The Working Environment
+- Nix language basics
+- Nix flakes documentation
+
+产出：
+
+- 一个 ~cs3110-nix~ 仓库。
+- 一个可用的 ~flake.nix~。
+- 一个 ~flake.lock~。
+- 一个 ~hello_ocaml~ dune 项目。
+- 一份环境配置笔记：~notes/00-environment.org~。
+
+Nix 检查点：
+
+- 能解释为什么 ~nix develop~ 不等于把 OCaml 全局安装到系统。
+- 能解释 ~flake.lock~ 的作用。
+- 能解释 ~pkgs.mkShell~ 的用途。
+- 能解释 ~ocamlPackages = pkgs.ocaml-ng.ocamlPackages_5_3;~ 的含义。
+
+** Phase 1: 表达式、函数、类型基础
+
+目标：
+
+- 适应 OCaml 的表达式式语法。
+- 理解 ~let~、函数、类型推导、基本类型。
+- 理解 ~if~ 是表达式。
+- 初步对照 Nix 的表达式式配置。
+
+参考：
+
+- CS3110 Chapter 2
+- LPO 2.1 Leap Years
+- LPO 2.2 Monte-Carlo Method
+- LPO 2.3 Drawing a Cardioid
+- Nix language basics: Values, Names, Functions, let
+
+产出：
+
+- ~exercises/cs3110/ch02/basics.ml~
+- ~exercises/lpo/ch02/leap_year.ml~
+- ~exercises/lpo/ch02/approx_pi.ml~
+- 若不方便使用 Graphics，可以改写为纯命令行版本。
+- ~notes/nix/01-language-basics.org~
+
+Nix 对照问题：
+
+- OCaml 的 ~let x = ... in ...~ 和 Nix 的 ~let x = ...; in ...~ 有什么相似与差异？
+- OCaml 函数和 Nix 函数都可以作为值，但它们的主要使用场景有什么不同？
+- Nix 为什么强调表达式求值，而不是命令执行？
+
+** Phase 2: 数据建模：list / tuple / record / variant
+
+目标：
+
+- 理解函数式语言里“先设计数据，再写函数”的风格。
+- 掌握 tuple、record、variant、option、list、pattern matching。
+- 能写结构化递归。
+- 对照 Nix attribute set 理解“用数据描述结构”的方式。
+
+参考：
+
+- CS3110 Chapter 3: Data and Types
+- LPO 2.6 Drawing a Curve
+- LPO 2.8 Reversing the Order of Lines in a Text
+- LPO 2.12 Playing a Musical Score
+- LPO 2.13 Quadtrees
+- Nix language basics: Attribute sets, Lists
+
+产出：
+
+- ~list_utils.ml~
+- ~simple_ast.ml~
+- ~music_score.ml~
+- ~quadtree.ml~
+- ~notes/nix/02-attrset-and-list.org~
+
+Nix 对照问题：
+
+- Nix attribute set 和 OCaml record 有什么相似之处？
+- Nix list 和 OCaml list 在用途上有什么差异？
+- 为什么 Nix 配置大量使用嵌套 attribute set？
+
+** Phase 3: 高阶函数与递归模式
+
+目标：
+
+- 掌握 ~map~ / ~filter~ / ~fold~。
+- 理解函数作为值。
+- 理解匿名函数、部分应用、柯里化。
+- 能把普通递归改写成 ~fold~。
+- 能区分 ~fold_left~ / ~fold_right~。
+- 对照 Nix 函数、参数集、默认参数的写法。
+
+参考：
+
+- CS3110 Chapter 4: Higher-Order Programming
+- LPO 2.9 Converting Integers from an Arbitrary Base
+- LPO 2.8 中关于 tail call 的部分
+- Nix language basics: Functions
+
+产出：
+
+- ~higher_order_notes.org~
+- ~fold_exercises.ml~
+- ~radix_converter.ml~
+- ~notes/nix/03-functions.org~
+
+Nix 对照问题：
+
+- Nix 中 ~{ pkgs, ... }:~ 这种写法为什么是函数？
+- Nix 的函数参数集和 OCaml 的 record 参数有什么联系？
+- Nix 的函数式风格主要服务于配置组合，OCaml 的函数式风格主要服务于通用程序设计，这两者有什么不同？
+
+** Phase 4: 可变性与命令式特性
+
+目标：
+
+- 理解 OCaml 支持命令式写法，但默认鼓励不可变建模。
+- 掌握 ~ref~、mutable record fields、array、for、while。
+- 理解 side effect、unit、evaluation order。
+- 对照 Nix 的纯函数式限制，理解为什么构建描述要尽量避免隐式副作用。
+
+参考：
+
+- CS3110 Chapter 6: Mutability
+- LPO 2.2 Monte-Carlo Method
+- LPO 2.5 Sieve of Eratosthenes
+- LPO Chapter 4 Arrays
+- Nix language basics: Laziness and purity
+- Nix Pills: Nix language basics
+
+产出：
+
+- ~sieve.ml~
+- ~mutable_vs_immutable.org~
+- ~array_exercises.ml~
+- ~notes/nix/04-purity-and-laziness.org~
+
+Nix 对照问题：
+
+- OCaml 允许副作用，Nix 为什么尽量把构建描述做成纯表达式？
+- Nix store 的不可变路径和函数式不可变数据有什么直觉上的联系？
+- 为什么环境管理需要可复现性？
+
+** Phase 5: 模块系统与程序组织
+
+目标：
+
+- 掌握 module、module type、.ml、.mli、compilation unit。
+- 理解封装、抽象类型、私有类型。
+- 初步理解 functor。
+- 能用 dune 组织多文件项目。
+- 对照 Nix flakes 的 inputs / outputs 理解“模块化组织配置”的思想。
+
+参考：
+
+- CS3110 Chapter 5: Modular Programming
+- LPO 2.10 Breakout without Bricks
+- LPO 2.11 Logo Turtle
+- LPO Chapter 5 Sets and Dictionaries
+- Nix flakes documentation
+
+产出：
+
+- ~stack.mli~ / ~stack.ml~
+- ~set_demo.ml~
+- ~turtle_functor.ml~
+- ~module_system_notes.org~
+- ~notes/nix/05-flake-structure.org~
+
+Nix 对照问题：
+
+- OCaml 的 module 和 Nix 的 attribute set 都能组织名称空间，但抽象能力有什么差异？
+- ~flake.nix~ 的 ~outputs~ 为什么像一个“对外导出的接口”？
+- ~inputs~ 固定外部依赖，与 OCaml/Dune 项目的依赖管理有什么相似之处？
+
+** Phase 6: 函数式数据结构与持久化
+
+目标：
+
+- 理解 persistent data structure。
+- 理解 sharing。
+- 理解不可变 list 为什么适合头部插入。
+- 理解树、集合、字典、队列、优先队列。
+- 能对照 Java/Python 的可变容器理解差异。
+- 对照 Nix store 理解“不可变结果”和“结构复用”的直觉。
+
+参考：
+
+- CS3110 Chapter 5.6 Functional Data Structures
+- CS3110 Chapter 9 Data Structures
+- LPO Chapter 5 Sets and Dictionaries
+- LPO Chapter 6 Queues
+- LPO Chapter 9 Zippers
+- LPO 2.14 N-Queens Problem
+- Nix / NixOS 文档中关于 Nix store 与 derivation 的内容
+
+产出：
+
+- ~persistent_stack.ml~
+- ~persistent_queue.ml~
+- ~bst.ml~
+- ~zipper_notes.org~
+- ~n_queens.ml~
+- ~notes/nix/06-store-and-derivation.org~
+
+Nix 对照问题：
+
+- 持久化数据结构中的 sharing 和 Nix store 中复用已有路径有什么直觉联系？
+- 为什么不可变结构更容易被缓存、复用和推理？
+- Nix 的 derivation 更像“构建动作”还是“构建结果的描述”？
+
+** Phase 7: 正确性、测试与规格
+
+目标：
+
+- 理解 specification。
+- 使用 OUnit / QCheck 做测试。
+- 理解 black-box / glass-box testing。
+- 初步理解结构归纳证明和等式推理。
+- 理解 Nix flake 对环境正确性的帮助：固定依赖、固定工具链、固定输入版本。
+
+参考：
+
+- CS3110 Chapter 8: Correctness
+- LPO 中每章 exercises 选择性完成
+- Nix flakes documentation
+- Nix develop manual
+
+产出：
+
+- ~tests/~
+- ~spec_notes.org~
+- ~qcheck_demo.ml~
+- 为前面写过的数据结构补测试。
+- ~notes/nix/07-reproducibility.org~
+
+Nix 对照问题：
+
+- 程序测试关注代码行为，flake.lock 关注环境输入，这两者分别解决什么“不确定性”？
+- 为什么“我的机器上能跑”不是可靠的软件工程状态？
+- 如何用 flake 记录一个课程项目的完整工具链？
+
+** Phase 8: 解释器、求值模型与类型推导
+
+目标：
+
+- 理解语言实现的基本结构。
+- 理解 AST、parser、substitution model、environment model。
+- 理解 type checking 和 type inference 的基本思想。
+- 为 Lisp / Nix 表达式求值建立基础。
+- 将 Nix 作为一个表达式语言来观察：名称绑定、函数调用、惰性求值、属性选择。
+
+参考：
+
+- CS3110 Chapter 10: Interpreters
+- LPO Chapter 3: OCaml Concepts: A Closer Look
+- Nix language basics
+- Nix Pills
+
+产出：
+
+- ~mini_expr_interpreter.ml~
+- ~env_model_notes.org~
+- ~type_inference_notes.org~
+- ~notes/nix/08-evaluation-model.org~
+
+Nix 对照问题：
+
+- Nix 的表达式求值和 OCaml 的表达式求值有什么相似与差异？
+- 惰性求值会如何影响错误暴露的时机？
+- 为什么 Nix 适合描述构建和配置，而 OCaml 更适合写通用程序？
+
+* Nix 学习路线嵌入表
+
+| 阶段 | OCaml 主线 | Nix 辅线 | 目标 |
+|---|---|---|---|
+| Phase 0 | 安装、utop、dune | flake.nix、nix develop、devShell | 用 Nix 提供 OCaml 环境 |
+| Phase 1 | let、函数、表达式 | let、函数、表达式 | 理解表达式式语言 |
+| Phase 2 | list、record、variant | list、attribute set | 理解数据描述结构 |
+| Phase 3 | 高阶函数、柯里化 | 函数、参数集 | 理解函数式组合 |
+| Phase 4 | 可变性、副作用 | 纯函数式、惰性求值 | 理解副作用与可复现性 |
+| Phase 5 | module、signature | inputs、outputs、flakes | 理解模块化组织 |
+| Phase 6 | 持久化数据结构 | Nix store、derivation | 理解不可变结果与复用 |
+| Phase 7 | 测试、规格、正确性 | flake.lock、环境固定 | 理解环境层面的可复现 |
+| Phase 8 | 解释器、求值模型 | Nix 表达式求值 | 建立语言实现视角 |
+
+* 推荐仓库结构
+
+#+begin_src text
+Learning
+├── org-learning
+│   ├── 00-index
+│   ├── 10-courses
+│   ├── 20-topics
+│   ├── 30-projects
+│   ├── 40-resources
+│   ├── 90-archive
+│   ├── MIGRATION.org
+│   └── README.org
+├── projects
+│   ├── cs3110-ocaml-nix
+#+end_src
+
+* 每阶段检查问题
+
+** Environment / Nix
+
+- ~nix develop~ 会读取哪个文件？
+- ~flake.nix~ 和 ~flake.lock~ 分别承担什么职责？
+- ~devShells.x86_64-linux.default~ 是什么意思？
+- 为什么通过 Nix 进入环境不会污染系统全局 PATH？
+- 如果 ~ocaml-ng.ocamlPackages_5_3~ 不存在，应该如何临时处理？
+- Nix 的纯函数式、惰性求值、动态类型分别是什么意思？
+
+** Basics
+
+- OCaml 中 ~if~ 为什么必须有统一的返回类型？
+- ~let x = ...~ 和 ~let x = ... in ...~ 有什么区别？
+- ~unit~ 类型有什么意义？
+- 为什么函数调用通常不用括号？
+- ~int~ 和 ~float~ 为什么使用不同运算符？
+- OCaml 的 ~let~ 与 Nix 的 ~let ... in ...~ 有什么相似和差异？
+
+** Data and Types
+
+- tuple 和 record 的差异是什么？
+- variant 和 enum 的差异是什么？
+- option 相比 null 的优势是什么？
+- pattern matching 相比普通分支语句的优势是什么？
+- list 为什么天然适合递归？
+- Nix attribute set 和 OCaml record 有什么相似与差异？
+
+** Higher-Order Programming
+
+- 什么是一等函数？
+- 什么是高阶函数？
+- ~map~ / ~filter~ / ~fold~ 分别抽象了什么递归模式？
+- ~fold_left~ 和 ~fold_right~ 的求值方向、栈使用有什么区别？
+- 柯里化为什么有助于组合？
+- Nix 函数为什么常用参数集？
+
+** Modular Programming
+
+- module 和 compilation unit 的关系是什么？
+- ~.mli~ 文件解决了什么问题？
+- abstract type 的价值是什么？
+- functor 和普通函数有什么相似与不同？
+- OCaml 模块系统和 Java interface 有什么差异？
+- flake 的 ~inputs~ / ~outputs~ 和模块接口之间有什么类比关系？
+
+** Mutability
+
+- ~ref~ 是什么？
+- mutable field 和 ref 的关系是什么？
+- array 和 list 的使用场景有什么不同？
+- side effect 对程序推理有什么影响？
+- 为什么函数式语言依然需要可变性？
+- Nix 为什么尽量通过纯表达式描述构建？
+
+** Persistence
+
+- 什么是 persistent data structure？
+- 什么是 sharing？
+- 为什么向 list 头部添加元素是 O(1)？
+- 为什么向 list 尾部添加元素通常要复制前面的结构？
+- 回溯问题为什么适合持久化数据结构？
+- Nix store 的不可变路径如何帮助复现和缓存？
+
+** Correctness
+
+- specification 和 implementation 的关系是什么？
+- black-box testing 和 glass-box testing 有什么区别？
+- randomized testing 适合什么场景？
+- 结构归纳为什么适合证明递归函数？
+- 等式推理依赖什么前提？
+- flake.lock 如何减少环境变化带来的不确定性？
+
+** Interpreters
+
+- AST 是什么？
+- substitution model 如何解释变量？
+- environment model 如何解释变量？
+- type checking 和 type inference 有什么区别？
+- 解释器学习如何帮助理解 Lisp / Nix？
+- Nix 的惰性求值会如何影响表达式求值顺序？
+
+* 最终项目建议
+
+** Project 1: list-utils
+
+目标：
+
+- 重新实现 List 中常见函数。
+- 练习递归、尾递归、高阶函数。
+
+内容：
+
+- length
+- append
+- rev
+- map
+- filter
+- fold_left
+- fold_right
+- find
+- exists
+- for_all
+
+额外 Nix 目标：
+
+- 为项目写一个最小 ~dune-project~。
+- 用当前 flake 环境编译和运行。
+- 记录 ~nix develop~ 内外命令可见性的区别。
+
+** Project 2: persistent-queue
+
+目标：
+
+- 理解函数式队列。
+- 理解摊还分析的直觉。
+
+内容：
+
+- empty
+- is_empty
+- enqueue
+- dequeue
+- peek
+- to_list
+
+额外 Nix 目标：
+
+- 用 ~ocamlformat~ 格式化。
+- 用 ~dune runtest~ 运行测试。
+- 在笔记中解释为什么同一 flake 环境有利于测试复现。
+
+** Project 3: mini-radix-converter
+
+目标：
+
+- 练习字符串、列表、高阶函数、错误处理。
+
+内容：
+
+- 支持 2 到 36 进制。
+- 使用 option / result 处理错误。
+- 写测试。
+
+额外 Nix 目标：
+
+- 将测试依赖固定在 flake 中。
+- 记录 ~ounit2~ / ~qcheck~ 在 Nix 环境中的来源。
+
+** Project 4: mini-interpreter
+
+目标：
+
+- 为 Lisp / Nix 语言理解做准备。
+
+内容：
+
+- AST 表示整数、布尔、变量、let、if、二元运算。
+- 实现 eval。
+- 实现 environment。
+- 可选：实现 type_check。
+
+额外 Nix 目标：
+
+- 在解释器笔记中对照 Nix 的 ~let~、函数调用、属性选择。
+- 观察惰性求值和严格求值对错误暴露时机的影响。
+
+** Project 5: n-queens
+
+目标：
+
+- 理解回溯、集合、持久化数据结构。
+
+内容：
+
+- 统计 N 皇后解数。
+- 输出一个解。
+- 对照命令式版本，分析状态管理差异。
+
+额外 Nix 目标：
+
+- 使用 flake 固定运行环境。
+- 记录性能测试时工具链版本。
+- 对比“代码确定”和“环境确定”对结果复现的影响。
+
+* 阶段性总结模板
+
+每完成一个阶段后，在对应笔记末尾加入：
+
+#+begin_src org
+* 本阶段总结
+
+** 我学会了什么
+
+** 我仍然不清楚什么
+
+** OCaml 关键概念
+
+** Nix 关键概念
+
+** 与 Python / Java / Lisp 的联系
+
+** 下一阶段准备
+#+end_src

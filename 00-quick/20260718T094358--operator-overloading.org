@@ -1,0 +1,59 @@
+:PROPERTIES:
+:END:
+#+title: operator overloading
+#+date:       [2026-07-18 Sat 09:43]
+#+identifier: 20260718T094358
+* 运算符重载
+参见: [[https://en.cppreference.com/cpp/language/operators][cpp reference operator overloading]]
+
+为用户定义的类型定义运算符和操作数。
+* 语法
+Operator Functions 是具有特殊函数名的函数:
+- ~operator op~: overloaded punctuation operator
+- ~operator new~ / ~operator new []~: allocation function
+- ~operator delete~ / ~operator delete []~: deallocation function
+- ~operator co_await~: overloaded co_await operator
+* Explanation
+运算符重载的场景: 如果一个运算符出现在一个表达式中，且至少它的一个操作数是类类型或枚举类型，那么重载决议就会被用于决定应该调用那个用户定义函数。这些函数需要从符合以下签名的函数中选择:
+| Expression | As a member function | As no-member function | Example                                                                |
+|------------+----------------------+-----------------------+------------------------------------------------------------------------|
+| @a         | (a).operator@ ()     | operator@(a)          | ~!std::cin~ calls ~std::cin::operator!()~                              |
+| a@b        | (a).operator@ (b)    | operator@(a, b)       | ~std::cout << 42~ calls ~std::cout.operator<<(42)~                     |
+| a=b        | (a).operator=(b)     | cannot be non-member  | Given ~std::string s~, ~s = "abc";~, calls ~s.operator=("abc")~        |
+| a(b...)    | (a).operator()(b...) | cannot be non-member  | Given ~std::random_deivce r;~, ~auto n = r();~, calls ~r.operator()()~ |
+| a[b...]    | (a).operator[](b)    | cannot be non-member  | Given ~std::map<int, int>m;~, ~m[1] = 2;~, calls ~m.operator[](1)~     |
+| a->        | (a).operator->()     | cannot be non-member  | Given ~std::unique_ptr<S> p;~, ~p->bar()~ calls ~p.operator->()~       |
+| a@         | (a).operator@ (0)    | operator(a, 0)        | Given ~std::vector<int>::iterator i;~, ~i++~ calls ~i.operator++(0)~   |
+
+上表中的 ~@~ 是一个占位符，代表所有匹配的运算符: ~@a~ 中的所有前缀运算符、 ~a@~ 中除了 ~->~ 以外的所有后缀运算符，以及 ~a@b~ 中除了 ~=~ 的所有中缀运算符。
+* Static overloaded operators
+
+作为成员函数的重载运算符可以被声明为 static, 但是仅仅有 ~operator()~ 和 ~operator[]~ 被允许。
+
+#+begin_src cpp
+  struct SwapThem {
+    template<typename T>
+    static void operator()(T& lhs, T& rhs) {
+      std::ranges::swap(lhs, rhs);
+    }
+    static void operator[](T& lhs, T& rhs) {
+      std::ranges::swap(lhs, rhs);
+    }
+  };
+  inline constexpr SwapThem swap_them{};
+
+  void foo() {
+    int a = 1, b = 2;
+    swap_them(a, b); // OK
+    swap_them[a, b]; // OK
+
+    SwapThem{}(a, b); // OK
+    SwapThem{}[a, b]; // OK
+
+    SwapThem::operator()(a, b); // OK
+    SwapThem::operator[](a, b); // OK
+
+    SwapThem(a, b); // error, invalid construction
+    SwapThem[a, b]; // error
+  }
+#+end_src

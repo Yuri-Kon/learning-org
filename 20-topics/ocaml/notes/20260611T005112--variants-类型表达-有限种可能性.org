@@ -1,0 +1,1042 @@
+:PROPERTIES:
+:END:
+#+title: Variants 类型表达 “有限种可能性”
+#+date:       [2026-06-11 Thu 00:51]
+#+identifier: 20260611T005112
+* Variants 类型表达 “有限种可能性”
+
+上一讲解中，我们学习了列表:
+
+#+begin_src ocaml
+  type 'a list =
+    | []
+    | (::) of 'a * 'a list
+#+end_src
+
+列表中的 ~[]~ 和 ~(::)~ 已经暗示了 OCaml 的一种核心思想：一个值可以具有若干种不同的形态。程序可以通过模式匹配判断当前遇到的是哪一种形态，并分别处理。
+
+这一讲正式学习 *variant types* ，通常翻译为 “变体类型” 或 “变体” 。它是 OCaml 数据建模能力的核心。后续的 ~option~ 、异常、递归树、编译器抽象语法树，以及更复杂的状态机模型，都会建立在变体类型之上。
+
+* 什么是变体类型
+#+begin_quote
+A variant is a data type representing a value that is one of several possibilities.
+#+end_quote
+
+也就是说，变体类型表示: 一个值属于若干种可能情况中的一种。
+
+例如，一周中的某天只可能属于七种情况之一:
+
+#+begin_src ocaml
+  type day =
+    | Sun
+    | Mon
+    | Tue
+    | Wed
+    | Thu
+    | Fri
+    | Sat
+#+end_src
+
+定义之后，我们可以创建一个值:
+#+begin_src ocaml
+  let d = Tue
+#+end_src
+在 ~utop~ 中我们可以看到:
+
+#+begin_src ocaml
+  val d : day = Tue
+#+end_src
+这里的 ~Tue~ 是一个值，它的类型是 ~day~ 。
+
+从数学集合的角度来看，可以把 ~day~ 暂时理解成:
+
+#+begin_quote
+day = { Sun, Mon, Tue, Wed, Thu, Fri, Sat }
+#+end_quote
+一个 ~day~ 类型的值只能落在这个集合之中。
+
+下面的写法无法通过类型检查:
+
+#+begin_src ocaml
+  let today : day = "Fri"
+#+end_src
+因为字符串 ~"Fri"~ 的类型是 ~string~ ，构造器 ~Fri~ 的类型才是 ~day~ 。
+
+
+* 为什么不直接使用字符串
+我们当然可以直接使用字符串记录星期：
+
+#+begin_src ocaml
+  let today = "Friday"
+#+end_src
+但字符串允许任意字符:
+#+begin_src ocaml
+  let today = "Friday"
+  let today = "星期八"
+  let today = ""
+#+end_src
+如果函数接收一个 ~string~ ，编译器只能确认它收到了字符串，无法确认该字符串确实表示有效星期。
+
+例如：
+#+begin_src ocaml
+  let is_weekend day =
+    day = "Saturday" || day = "Sunday"
+#+end_src
+类型为:
+#+begin_src ocaml
+  val is_weekend : string -> bool
+#+end_src
+调用者却可以传入:
+#+begin_src ocaml
+  is_weekend "Cat"
+#+end_src
+编译器不会阻止这件事情。 ~"Cat"~ 确实是一个字符串。
+
+而我们使用变体类型之后:
+
+#+begin_src ocaml
+  type day =
+    | Sun
+    | Mon
+    | Tue
+    | Wed
+    | Thu
+    | Fri
+    | Sat
+
+  let is_weekend day =
+    match day with
+    | Sat | Sun -> true
+    | Mon | Tue | Wed | Thu | Fri -> false
+#+end_src
+类型是:
+#+begin_src ocaml
+  val is_weekend : day -> bool = <fun>
+#+end_src
+
+调用 ~is_weekend Sat~ ，结果为 ~true~ 。
+
+而调用 ~is_weekend "Cat"~ ，会产生类型错误，因为函数只接受 ~day~:
+
+#+begin_quote
+Error: This constant has type string but an expression was expected of type day
+#+end_quote
+
+变体类型使 “合法取值范围” 进入类型系统。错误可以在编译期间暴露出来。
+
+-----
+
+* 构造器：用于建立变体值的名字
+在定义:
+#+begin_src ocaml
+  type day =
+    | Sun
+    | Mon
+    | Tue
+    | Wed
+    | Thu
+    | Fri
+    | Sat
+#+end_src
+之后， ~Sun~ , ~Mon~ , ~Tue~ 等名称称为 *constructors* ，即构造器。教材特别提醒这里的 constructor 与 Java 、 C++ 面向对象语境中的构造法方法含义不同。
+
+在 Java 中，我们会看到:
+#+begin_src java
+  new Student("Alice")
+#+end_src
+这里的构造器负责初始化一个对象。
+
+在 OCaml 的变体类型中，构造器负责标记哪一个值属于哪一种情况。这一讲中的构造器暂时不携带额外数据。它们本身已经是完整值。
+
+教材原文概括为:
+
+#+begin_quote
+A constructor is already a value.
+#+end_quote
+因此， ~Tue~ 无需继续计算，已经完成求值。
+
+-----
+
+* 变体类型的语法
+
+最简单的形式为:
+#+begin_src ocaml
+  type t =
+    | C1
+    | C2
+    | ...
+    | Cn
+#+end_src
+
+也可以写在同一行:
+#+begin_src ocaml
+  type t = C1 | C2 | ... | Cn
+#+end_src
+这里，
+- ~type~ 表示开始定义一个类型
+- ~t~ 是新类型的名称
+- ~C1~ 到 ~Cn~ 是构造器
+- ~|~ 可以读作 “或者”
+
+
+例如:
+
+#+begin_src ocaml
+  type direction =
+    | North
+    | South
+    | East
+    | West
+#+end_src
+可以读作:
+#+begin_quote
+一个 ~direction~ 类型的值，可以是 ~North~ , ~South~ , ~East~ 或 ~West~ 。
+#+end_quote
+构造器必须以 *大写字母开头* 。 OCaml 使用首字母区分构造器与普通变量。教材直接将这一点列入语法规则。
+
+因此，下面的定义合法:
+
+#+begin_src ocaml
+  type answer =
+    | Yes
+    | No
+    | Unknown
+#+end_src
+
+普通变量通常使用小写开头:
+#+begin_src ocaml
+  let answer = Yes
+#+end_src
+这里:
+- ~answer~ 是变量名
+- ~Yes~ 是构造器
+- ~Yes~ 是一个值
+- ~answer~ 绑定到该值
+
+
+这种大小写规则让模式匹配更容易阅读。看到 ~Tue~ 编译器知道它是构造器；看到 ~x~ 编译器知道它是模式变量。
+
+-----
+
+* 静态语义：构造器具有什么类型
+教材给出的静态语义可以概括为：
+
+#+begin_quote
+如果类型 t 的定义中包含构造器 C, \\
+那么 C : t 
+#+end_quote
+
+例如:
+
+#+begin_src ocaml
+  type direction =
+    | North
+    | South
+    | East
+    | West
+#+end_src
+那么:
+
+#+begin_quote
+  North : direction \\
+  South : direction \\ 
+  East : direction \\
+  West : direction
+#+end_quote
+这里的冒号表示“具有类型”。
+
+定义列表: ~[North; South; East]~ ，会得到:
+#+begin_src ocaml
+  - : direction list = [North; South; East]
+#+end_src
+
+因为列表中三个元素都具有类型 ~direction~ 。
+
+-----
+
+* 动态语义：构造器如何求值
+对于这一讲中的简单构造器，动态语义非常直接：
+
+#+begin_quote
+C ==> C
+#+end_quote
+也就是说，构造器已经是值，不再发生计算。
+
+下面的表达式:
+
+#+begin_src ocaml
+  let d = Tue in d
+#+end_src
+求值过程可以写为:
+#+begin_quote
+Tue ==> Tue \\
+d 绑定到 Tue \\
+d ==> Tue
+#+end_quote
+最终结果是 ~Tue~ 。这与整数常量类似: ~42~ 已经是值。
+
+-----
+
+* 使用模式匹配读取变体值
+读取变体值时，需要判断它属于哪一个构造器。 OCaml 使用模式匹配完成这一任务。
+
+比如:
+#+begin_src ocaml
+  let int_of_day d =
+    match d with
+    | Sun -> 1
+    | Mon -> 2
+    | Tue -> 3
+    | Wed -> 4
+    | Thu -> 5
+    | Fri -> 6
+    | Sat -> 7
+#+end_src
+
+类型为:
+#+begin_src ocaml
+  val int_of_day : day -> int
+#+end_src
+教材强调， OCaml 不会自动把构造器映射成整数。如果需要这种映射，必须显式指定。
+
+-----
+
+* 模式匹配的精确规则
+对于简单构造器，新增的模式形式是 ~C~ ，教材给出的匹配规则可以概括为:
+
+#+begin_quote
+模式 C 只匹配值 C ，不产生新的变量绑定
+#+end_quote
+
+例如:
+
+#+begin_src ocaml
+  match East with
+  | North -> "up"
+  | South -> "down"
+  | East -> "right"
+  | West -> "left"
+#+end_src
+
+结果为 ~"right"~ 。这里， ~East~ 模式只会匹配 ~East~ ，它不会匹配剩余的变体值，也不会引入新的变量。
+
+这与变量模式匹配形成对比，比如:
+
+#+begin_src ocaml
+  match East with
+  | x -> x
+#+end_src
+这里的 ~x~ 是一个变量模式，可以匹配任意 ~direction~ 值，并产生绑定: ~x -> East~ 。
+
+-----
+
+* 区分：构造器模式和变量模式
+考虑变体类型:
+
+#+begin_src ocaml
+  type answer =
+    | Yes
+    | No
+    | Unknown
+#+end_src
+下面函数含义明确:
+#+begin_src ocaml
+  let describe answer =
+    match answer with
+    | Yes -> "confirmed"
+    | No -> "rejected"
+    | Unknown -> "insufficient information"
+#+end_src
+其中， ~Yes~ 、 ~No~ 、 ~Unknown~ 是构造器模式。在匹配时只会根据输入匹配，而不会进行绑定。
+
+再看下面的函数:
+#+begin_src ocaml
+  let broken_describe answer =
+    match answer with
+    | yes -> "confirmed"
+    | no -> "rejected"
+    | unknown -> "insufficient information"
+#+end_src
+这段代码存在问题。这里，小写的 ~yes~ 会被理解为变量模式。变量模式可以匹配任何值，因此第一个分支就已经覆盖了所有输入。实际的行为将是:
+
+#+begin_src ocaml
+  broken_describe Yes
+  (* "confirmed" *)
+
+  broken_describe No
+  (* "confirmed" *)
+
+  broken_describe Unknown
+  (* "confirmed" *)
+#+end_src
+大小写并非风格偏好，而是直接参与语法分析，也直接影响程序含义。
+
+-----
+
+* 变体中的穷尽性检查
+
+我们在上一节讨论过 [[denote:20260718T225518::#b736d3db-bb1f-43d3-bef6-3d5b547f940a][穷尽性检查]] ，在这里我们主要讨论变体类型中的穷尽性检查。
+
+考虑:
+
+#+begin_src ocaml
+  type traffic_light =
+    | Red
+    | Yellow
+    | Green
+#+end_src
+
+下面的函数遗漏了 ~Yellow~:
+
+#+begin_src ocaml
+  let action light =
+    match light with
+    | Red -> "stop"
+    | Green -> "go"
+#+end_src
+编译器会提醒:
+
+#+begin_quote
+Warning 8[partial-match]: \\
+this pattern-matching is not exhaustive. \\
+Here is an example of a case is not matched: \\
+Yellow
+#+end_quote
+这是变体类型非常重要的优势。
+
+如果使用字符串:
+
+#+begin_src ocaml
+  let action light =
+    if light = "red" then "stop"
+    else "go"
+#+end_src
+编译器无法知道 ~"yello"~ 是否应该被单独处理，也无法知道 ~"cat"~ 是否是非法输入。
+
+而我们如果使用变体的话，以后如果新增新状态:
+#+begin_src ocaml
+  type traffic_light =
+    | Red
+    | Red_yellow
+    | Yellow
+    | Green
+#+end_src
+已有模式匹配可能会缺少 ~Red_yello~ 。编译器会在遗漏处理的位置发出警告。
+
+这种能力对大型程序很有价值：类型定义成为合法情况的统一清单，模式匹配成为逐项处理清单。
+
+-----
+
+* 变体类型中的通配符 ~_~
+我们之前已经讨论过 [[denote:20260718T225518::#ca55af89-b8e8-4cb0-a762-b3d185f690e4][通配符 ~_~]] 的定义和使用方式，现在我们放在变体类型中具体讨论一下什么时候适合使用 ~_~ 。
+
+比如，下面的函数只关注红灯:
+
+#+begin_src ocaml
+  let must_stop light =
+    match light with
+    | Red -> true
+    | _ -> false
+#+end_src
+类型为:
+#+begin_src ocaml
+  val must_stop : traffic_light -> bool = <fun>
+#+end_src
+这里， ~_~ 会匹配所有剩余情况，但不绑定名称。
+
+对于当前定义:
+
+#+begin_src ocaml
+  type traffic_light =
+    | Red
+    | Yellow
+    | Green
+#+end_src
+它相当于我们之前的写法。这两种写法都合法，但他们对未来修改的反应不同。
+
+假设增加:
+#+begin_src ocaml
+  | Brown
+#+end_src
+第一种写法仍然通过检查，此时 ~Brown~ 会落入 ~_~ 分支，结果为 ~false~ 。这个结果可能是符合意图的，也可能隐藏错误：
+#+begin_src ocaml
+  let must_stop light =
+    match light with
+    | Red -> true
+    | _ -> false
+#+end_src
+第二种写法会产生遗漏警告:
+#+begin_src ocaml
+  let must_stop light =
+    match light with
+    | Red -> true
+    | Yellow -> false
+    | Green -> false
+#+end_src
+因为新出现的 ~Broken~ 尚未处理。
+
+因此，通配符适合表达真正统一的剩余情况。如果每一种新增状态都值得重新审视，显式列出构造器通常更加稳妥。
+
+-----
+
+* 多个模式共享一个分支
+OCaml 允许使用:
+#+begin_src ocaml
+  pattern1 | patter2 -> expression
+#+end_src
+表示多个模式共享同一段处理逻辑。
+
+例如:
+
+#+begin_src ocaml
+  let is_weekend day =
+    match day with
+    | Sat | Sun -> true
+    | Mon | Tue | Wed | Thu | Fri -> false
+#+end_src
+这些可以理解为:
+
+#+begin_src ocaml
+  let is_weekend day =
+    match day with
+    | Sat -> true
+    | Sun -> true
+    | Mon -> false
+    | Tue -> false
+    | Wed -> false
+    | Thu -> false
+    | Fri -> false
+#+end_src
+第一种写法更紧凑，同时也能保留穷尽性检查。
+
+-----
+
+* 例题1：有限状态机的雏形
+考虑一个门禁系统:
+#+begin_src ocaml
+  type door_state =
+    | Locked
+    | Closed
+    | Open
+#+end_src
+定义一个操作:
+#+begin_src ocaml
+  type command =
+    | Lock
+    | Unlock
+    | Open_door
+    | Close_door
+#+end_src
+我们暂时只定义一部分状态转移:
+#+begin_src ocaml
+  let apply_command state command =
+    match state, command with
+    | Locked, Unlock -> Closed
+    | Closed, Lock -> Locked
+    | Closed, Open_door -> Open
+    | Open, Close_door -> Closed
+    | state, _ -> state
+#+end_src
+类型为:
+#+begin_src ocaml
+  val apply_command : door_state -> command -> door_state = <fun>
+#+end_src
+这里出现了元组模式: ~state, command~ , 元组会在 3.4 节正式学习。当前可以先把它理解为：我们同时根据两个值进行分类。
+
+-----
+
+* 例题2：布尔值失语
+假设我们写一个权限检查函数:
+#+begin_src ocaml
+  let can_edit is_admin is_owner =
+    is_admin || is_owner
+#+end_src
+调用:
+#+begin_src ocaml
+  can_edit true false
+#+end_src
+结果为 ~true~ 。但如果我们单独看到了函数的返回结果 ~true~ ，有时候很难知道它表示:
+- 可以编辑
+- 已登陆
+- 是管理员
+- 请求成功
+- 资源存在
+- 用户选择了确认
+
+
+布尔表达式适合表达清晰的二元问题。情况较多时，变体通常更有表达力。
+
+例如:
+#+begin_src ocaml
+  type edit_permission =
+    | Allowed
+    | Denied_not_logged_in
+    | Denied_read_only
+    | Denied_insufficient_role
+#+end_src
+处理函数:
+#+begin_src ocaml
+  let message = function
+    | Allowed -> "editing is allowed"
+    | Denied_not_logged_in -> "please log in"
+    | Denied_read_only -> "the document is read-only"
+    | Denied_insufficient_role -> "your role cannot edit this document"
+#+end_src
+这样，程序不只会知道 “失败了” ，还知道失败原因属于哪一种合法情况。
+
+-----
+
+* 作用域：重命名构造器
+
+现在考虑:
+
+#+begin_src ocaml
+  type t1 =
+    | C
+    | D
+
+  type t2 =
+    | D
+    | E
+
+  let x = D
+#+end_src
+问题是: ~D~ 到底属于 ~t1~ 还是 ~t2~ ？
+
+教材给出的答案是: *较晚定义的类型获胜* 。因此， ~val x : t2 = D~ 。
+
+原因在于，第二个定义中的 ~D~ 覆盖了当前作用域中先前可见的同名构造器。这种行为容易造成意外。因此，当构造器名称可能重叠时，惯用做法是引入具有区分度的前缀。
+
+比如 Pokemon 类型:
+
+#+begin_src ocaml
+  type ptype =
+    | TNormal
+    | TFire
+    | TWater
+
+  type peff =
+    | ENormal
+    | ENotVery
+    | ESuper
+#+end_src
+这里的:
+- ~TNormal~ 中的 ~T~ 表示 Pokemon Type
+- ~ENormal~ 中的 ~E~ 表示 effectiveness
+
+
+如果都写成:
+
+#+begin_src ocaml
+  Normal
+#+end_src
+就容易发生重名。
+
+-----
+
+* 为什么重名构造器并未彻底禁止
+我们可以先接受一个实用结论:
+
+#+begin_quote
+同一作用域中尽量避免定义容易混淆的同名构造器。
+#+end_quote
+未来学习模块之后，可以通过模块限定名称提高可读性。
+
+例如:
+#+begin_src ocaml
+  module Pokemon_type = struct
+    type t =
+      | Normal
+      | Fire
+      | Water
+  end
+
+  module Effectiveness = struct
+    type t =
+      | Normal
+      | Not_very
+      | Super
+  end
+#+end_src
+使用时写:
+#+begin_src ocaml
+  Pokemon_type.Normal
+  Effectiveness.Normal
+#+end_src
+这样，构造器都可以保留自然名称 ~Normal~ ，同时由模块路径消除歧义。
+
+模块会在第五章学习。现在只需要知道：构造器名称也处在作用域中，命名规则会影响可读性和类型推导结果。
+
+-----
+
+* 变体是一种“和类型”
+这一部分属于原理补充，后面的3.9节会正式展开。
+
+考虑:
+#+begin_src ocaml
+  type answer =
+    | Yes
+    | No
+    | Unknown
+#+end_src
+它可以读作:
+#+begin_quote
+answer = Yes + No + Unknown
+#+end_quote
+这里的加号不是整数加法，它表示“若干种可能情况中的一种”。因此，变体类型通常被称为 *sum type* ，即 *和类型* 。
+
+而列表则可以抽象成:
+
+#+begin_quote
+'a list = 空列表 + 非空列表
+#+end_quote
+在 OCaml 中，
+#+begin_src ocaml
+  type 'a list =
+    | []
+    | (::) of 'a * 'a list
+#+end_src
+其中， ~[]~ 表示空列表这一种可能性；而 ~(::) of 'a * 'a list~ 表示非空列表这一种可能性。同时，非空列表内部还会携带:
+#+begin_quote
+头部元素 * 尾部元素
+#+end_quote
+这里的 ~*~ 表示两个数据同时存在，后续会被称为 *product type* ，即积类型。
+
+于是，列表可以理解为:
+#+begin_quote
+列表 = 空 + (头部元素 * 尾部元素)
+#+end_quote
+这个表达式非常重要。它将列表递归、类型变体和元组连接到一起。
+
+-----
+
+* 从列表重新理解变体
+
+上一讲中，我们已经使用过:
+#+begin_src ocaml
+  match xs with
+    | [] -> ...
+    | x :: rest -> ...
+#+end_src
+现在可以更加精确地理解它:
+
+列表包含两个 *构造器*:
+- ~[]~
+- ~(::)~
+
+
+因此，模式匹配实际是在判断:
+- 当前值是由 ~[]~ 构造出来的吗？
+- 还是由 ~(::)~ 构造出来的?
+
+
+如果是 ~[]~ 则无需从构造器中提取数据，而如果是 ~x :: rest~ 则需要从构造器中提取出两个部分：
+
+#+begin_quote
+x = 头部元素 \\
+rest = 尾部元素
+#+end_quote
+这正是变体类型与模式匹配的通用关系:
+
+#+begin_quote
+构造数据时：使用构造器包裹信息 \\
+分析数据时：使用构造器模式拆解信息
+#+end_quote
+
+-----
+
+* 预览: 携带额外参数的构造器
+我们刚才提到列表的构造器，它的 ~(::)~ 正是携带参数的构造器。那么为了形成更完整的模型，我们提前看一个例子:
+
+定义几何形状:
+
+#+begin_src ocaml
+  type shape =
+    | Point
+    | Circle of float
+    | Rectangle of float * float
+#+end_src
+这里的 ~Point~ 不携带额外数据； ~Circle of float~ 表示圆形需要携带一个浮点数； ~Rectangle of float * float~ 表示矩形需要携带两个浮点数。
+
+变体类型可以同时覆盖枚举型写法与联合类型写法，例如 ~All~ , ~Current~ 和 ~Rectangle of int * int~ 可以共同描述打印页码范围。
+
+我们的面积函数可以写成:
+
+#+begin_src ocaml
+  let area = function
+    | Point -> 0.0
+    | Circle radius -> Float.pi *. radius *. radius
+    | Rectangle (width, height) -> width *. height
+#+end_src
+其类型是: ~val area : shape -> float~ 。
+
+可以通过下面的方式调用:
+
+#+begin_src ocaml
+  area Point
+  (* 0.0 *)
+
+  area (Circle 3.0)
+  (* 28.274333882308138 *)
+
+  area (Rectangle (1.0, 3.0))
+  (* 3. *)
+#+end_src
+这里，模式中的 ~Circle radius~ 会匹配到 ~Circle 3.0~ 并建立绑定: ~radius -> 3.0~ 。同理，模式中的 ~Rectangle (width, height)~ 会匹配到 ~Rectangle (1.0, 3.0)~ 并建立 ~width -> 1.0, height -> 3.0~ 的绑定。
+
+简单的构造器 ~Point~ 只需要判断标签是否相同，而带额外数据的构造器既判断标签，也拆出内部数据。
+
+-----
+
+* 常见误区：构造器不只是分类标签
+
+初学时容易把变体理解为“更漂亮的常量”。对于每个构造器没有额外参数的变体，我们暂时可以这样理解。但是对于上面的 ~shape~ ，构造器还负责将信息包装成一种明确形态： ~Circle 3.0~ 以及 ~Rectangle (1.0, 3.0)~ 。以后定义抽象语法树时，会出现:
+#+begin_src ocaml
+  type expr =
+    | Int of int
+    | Add of expr * expr
+    | Mul of expr * expr
+#+end_src
+例如:
+#+begin_src ocaml
+  Add(Int 1, Mul (Int 2, Int 3))
+#+end_src
+表示 : ~1 + 2 * 3~ 。求值器可以递归编写:
+
+#+begin_src ocaml
+  let rec eval = function
+    | Int n -> n
+    | Add (left, right) -> eval left + eval right
+    | Mul (left, right) -> eval left * eval right
+#+end_src
+调用 ~eval Add(Int 1, Mul (Int 2, Int 3))~ 结果为 ~7~ 。
+
+这就是编译器、解释器与语言工具中常见的数据建模方式。 CS3110 后面第十章会进入解释器，并讨论抽象语法树、求值与类型检查。
+
+-----
+
+* 从运行时表示理解构造器
+
+这一部分属于实现原理补充，日常编程不需要依赖这些细节。
+
+对于:
+#+begin_src ocaml
+  type fruit =
+    | Apple
+    | Orange
+    | Pear
+#+end_src
+三个构造器都不带参数。 OCaml 官方文档说明，这些简单变体在运行时通常使用递增整数表示:
+
+#+begin_quote
+Apple -> 0 \\
+Orange -> 1 \\
+Pear -> 2 
+#+end_quote
+但是源代码层面依然应当将他们视为 ~fruit~ 类型的值。教材所说的 “没有自动映射到整数” ，强调的是 OCaml 语言层面的使用方式: 你不能直接将 ~Apple~ 当成普通整数参与到算术运算。
+
+例如:
+#+begin_src ocaml
+  Apple + 1
+#+end_src
+无法通过类型检查。
+
+如果构造器携带数据，那么需要存储标签与参数。这类值通常会分配为内存块，并在块 中保存构造器标签和字段。因此，类型层面可以理解为:
+
+#+begin_quote
+构造器 = 明确的数据形态
+#+end_quote
+运行时层面可以粗略理解为:
+#+begin_quote
+构造器 = 标签 + 可选参数
+#+end_quote
+模式匹配会根据标签选择分支，再提取相应参数。
+
+-----
+
+* 与其他语言的关系
+
+** Python: ~Enum~
+Python 提供:
+#+begin_src python
+  from enum import Enum
+
+  class Color(Enum):
+      RED = 1
+      GREEN = 2
+      BLUE = 3
+#+end_src
+Python 的枚举成员具有名称与关联值。官方文档将枚举值描述为与唯一值绑定的符号名称集合。
+
+OCaml 中最接近的简单变体是:
+#+begin_src ocaml
+  type color =
+    | Red
+    | Green
+    | Blue
+#+end_src
+对于有限状态机建模，二者都有用途。
+
+OCaml 的变体还能自然扩展为携带不同形态数据的构造器，这已经超出传统枚举的范围。
+
+** TypeScript: 可辨识联合类型
+TypeScript 可以写:
+#+begin_src typescript-ts
+  type Shape =
+  | { kind: "circle"; radius: number }
+  | { kind: "rectangle"; width: number; height: number }
+#+end_src
+然后根据 ~kind~ 字段缩小类型范围:
+#+begin_src typescript-ts
+  function area(shape: Shape): number {
+    switch (shape.kind) {
+      case "circle":
+        return Math.PI * shape.radius ** 2;
+      case "rectangle":
+        return shape.width * shape.height;
+    }
+  }
+#+end_src
+TypeScript 官方文档称这类模型为 *discriminated unions* ，可辨识联合类型。 ~kind~ 字段承担辨识标签的作用。
+
+OCaml 的写法更加紧凑:
+#+begin_src ocaml
+  type shape =
+    | Circle of float
+    | Rectangle of float * float
+
+  let area = function
+    | Circle radius -> Float.pi *. radius *. radius
+    | Rectangle (width, height) -> width *. height
+#+end_src
+其中， ~Circle~ 和 ~Rectangle~ 本身已经承担标签作用，无需手动添加 ~"kind"~ 字段。
+
+-----
+
+** Java 与 C 风格枚举
+最简单的 OCaml 变体可类比为 C 或 Java 的枚举。
+
+例如 Java 中可以写：
+
+#+begin_src java
+  enum Day {
+      SUN, MON, TUE, WED, THU, FRI, SAT
+  }
+#+end_src
+当 OCaml 构造器开始携带参数时，变体类型会比简单枚举更强。它可以统一表达:
+
+#+begin_quote
+分类标签 + 每一类专属数据结构 + 模式匹配 + 穷尽性检查
+#+end_quote
+
+-----
+
+* 例题：订单状态
+我们设计一个订单处理系统。
+
+#+begin_src ocaml
+  (* 使用简单变体 *)
+  type order_status =
+    | Created
+    | Paid
+    | Shipped
+    | Delivered
+    | Cancelled
+
+  (* 判断订单是否仍可取消 *)
+  let can_cancel = function
+    | Created | Paid -> true
+    | Shipped | Delivered | Cancelled -> false
+
+  (* 判断状态是否终结 *)
+  let is_terminal = function
+    | Delivered | Cancelled -> true
+    | Created | Paid | Shipped -> false
+
+  (* 定义合法状态转移 *)
+  type order_event =
+    | Pay
+    | Ship
+    | Confirm_delivery
+    | Cancel
+
+  let transition status event =
+    match status, event with
+    | Created, Pay -> Paid
+    | Created, Cancel -> Cancelled
+    | Paid, Ship -> Shipped
+    | Paid, Cancel -> Cancelled
+    | Shipped, Confirm_delivery -> Delivered
+    | status, _ -> status
+#+end_src
+这个例子展示了一个关键建模习惯:
+- 先枚举合法状态
+- 再枚举合法事件
+- 最后描述状态转移。
+
+
+相比于使用字符串，变体类型可以排除拼写错误和非法值。
+
+
+* 例题：表达式求值器
+定义:
+#+begin_src ocaml
+  type expr =
+  | Int of int
+  | Negate of expr
+  | Add of expr * expr
+  | Multiply of expr * expr
+#+end_src
+
+实现: ~val eval : expr -> int~
+
+#+begin_src ocaml
+  let rec eval = function
+    | Int n -> n
+    | Negate expr -> -(eval expr)
+    | Add (left, right) -> eval left + eval right
+    | Multiply (left, right) -> eval left * eval right
+#+end_src
+这题中已经出现了 *递归变体* ~expr~ ，它将会在学习树和解释器的时候反复出现。
+
+-----
+
+* 本节小结
+第一层是语法:
+#+begin_src ocaml
+  type day =
+    | Sun
+    | Mon
+    | Tue
+#+end_src
+第二层是构造值:
+#+begin_src ocaml
+  let d = Tue
+#+end_src
+第三层是分析值:
+#+begin_src ocaml
+  let int_of_day = function
+      | Sun -> 1
+      | Mon -> 2
+      | Tue -> 3
+#+end_src
+第四层是作用域:
+#+begin_src ocaml
+  type t1 = C | D
+  type t2 = D | E
+#+end_src
+同名构造器可能产生歧义，较晚定义的构造器在当前作用域中占优势。可以通过前缀、类型注解和未来能学到的模块限定名称来改善可读性。
+
+第五层是原理:
+#+begin_quote
+变体类型 = 若干合法情况的总和 \\
+模式匹配 = 根据构造器判断当前属于那种情况
+#+end_quote
+第六层是更一般的数据建模。每种情况都能携带自己的数据。
+
+-----
+
+* 下一阶段
+根据 CS3110 的顺序，下一阶段是: ~3.3 Unit Testing with OUnit~ 。
+
+我们会开始建立 OCaml 项目的单元测试体系，包括: ~open OUnit2~ 、测试用例、测试套件、断言、测试驱动开发以及如何测试刚刚写过的

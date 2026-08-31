@@ -1,8 +1,0 @@
-:PROPERTIES:
-:ID:       f7350317-27a7-4ac7-83c1-cc5998aafd2b
-:END:
-#+title: rule of three/five/zero
-* 三/五/零原则
-
-* 来源
-- [[https://zh.cppreference.com/cpp/language/rule_of_three][cppreference]]

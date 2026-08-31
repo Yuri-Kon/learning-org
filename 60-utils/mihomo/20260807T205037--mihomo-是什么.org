@@ -1,0 +1,212 @@
+#+title: Mihomo 是什么
+#+date:       [2026-08-07 Fri 20:50]
+#+identifier: 20260807T205037
+#+author: yurikon
+#+language: zh-cn
+* Mihomo 的整体模型
+
+本节的目的是理解 *Mihomo 到底由哪些部分组成* ，具体包括:
+
+- 流量入口
+- DNS 与域名恢复
+- 路由规则
+- 策略组
+- 代理节点
+- Provider
+- External Controller
+- 配置状态与运行状态
+
+* Mihomo 并不是完整的“代理客户端”
+
+Mihomo 本质上是代理内核。它负责接收连接、解析目标、匹配规则、选择出站并转发流量。 MetaCubeXD 是控制界面，它通过 External Controller API 查询 Mihomo 的代理组、节点、连接流量和日志，并发起节点切换、 Provider 更新等操作。
+
+可以先用下面的模型理解 Mihomo:
+
+#+begin_src mermaid
+  flowchart LR
+  A["应用程序"] --> B["流量入口"]
+  B --> C["DNS / Sniffer"]
+  C --> D["规则匹配"]
+  D --> E["代理组"]
+  E --> F["代理节点 / Direct / REJECT"]
+  F --> G["目标服务器"]
+
+  H["Proxy Provider"] --> E
+  I["Rule Provider"] --> D
+
+  J["配置文件"] --> K["Mihomo 运行实例"]
+  L["MetaCubeXD"] --> M["External Controller API"]
+  N["mihomgr"] --> M
+  M --> K
+#+end_src
+
+** 流量入口
+应用流量首先必须以某种方式进入 Mihomo, 例如:
+
+- 应用显式使用 HTTP/SOCKS 代理
+- 应用连接 ~mixed-port~
+- 系统将路由导入 TUN
+- 路由器环境使用 redirect 或 tproxy
+
+
+** DNS 与 Sniffer
+
+路由规则经常需要域名，但某些连接进入 Mihomo 时只有目标IP.
+
+DNS 模块和 Sniffer 的重要作用之一，就是帮助 Mihomo 获得用于决策的域名信息。区别于 “代理节点“ 或 “规则组”，而是支持路由决策的基础设施。
+
+** 规则匹配
+
+规则匹配解决的是 *这条连接应该交给哪个策略组或出站* ？
+
+例如:
+
+#+begin_src yaml
+  rules:
+    - DOMAIN-SUFFIX,github.com,PROXY
+    - GEOIP,CN,DIRECT
+    - MATCH,PROXY
+#+end_src
+
+规则结果通常不是直接指定某个节点，而是指向一个策略组。
+
+
+** 代理组
+
+代理组回答的是：在这组候选出站中，最终选择使用的是哪一个？
+
+例如:
+
+#+begin_src yaml
+  proxy-groups:
+   - name: PROXY
+     type: select
+     proxies:
+       - 日本-01
+       - 新加坡-02
+       - DIRECT
+#+end_src
+
+对于 ~select~ 组，当前选择的可能是 ~日本-01~ 。规则只需要引用稳定的组名 ~PROXY~, 节点可以随时切换，而不需要修改所有规则。
+
+** 出站
+
+最终结果可能是:
+
+- 某个代理节点
+- ~DIRECT~
+- ~REJECT~
+- 另一个代理组
+
+
+这构成了 Mihomo 的主要数据路径。
+
+-----
+
+* 三种状态
+
+** 配置状态
+
+配置文件描述 Mihomo 启动时应具有的结构，例如:
+
+#+begin_src yaml
+  proxy-providers:
+  proxy-groups:
+  rule-providers:
+  rules:
+  dns:
+  tun:
+#+end_src
+
+它相当于 “期望结构” 。
+
+修改代理组定义、规则或 TUN 设置，通常需要重新加载配置。
+
+** 远程资源状态
+
+Provider 从外部或本地加载资源:
+
+#+begin_src yaml
+  proxy-providers:
+    airport-a:
+      type:http:
+      url: "..."
+      path: ./proxy_providers/airport-a.yaml
+      interval: 86400
+#+end_src
+
+官方支持的 Provider 类型是:
+
+- ~http~
+- ~file~
+- ~inline~
+
+
+对于 HTTP Provider, ~url~ 必填；下载内容可以保存到 ~path~, 更新周期由 ~interval~ 控制。 Provider 路径默认受到 Mihomo HomeDir 和 ~SAFE_PATHS~ 限制。
+
+因此：
+
+#+begin_quote
+Subscription 是 mihomgr 的领域模型； Proxy Provider 才是 Mihomo 的原生概念。
+#+end_quote
+
+mihomgr 中的关系可以设计为:
+
+#+begin_example
+Subscription
+| 生成或参与生成
+proxy-providers
+| Mihomo 加载
+Provider Runtime State
+#+end_example
+
+** 运行时状态
+
+运行时状态包括:
+
+- 当前代理组
+- 当前选中的节点
+- 节点延迟
+- Provider 最近更新的时间
+- 当前连接
+- 流量速度
+- 当前内存占用
+
+
+这些内容主要从 External Controller API 获取。
+
+例如:
+
+#+begin_src http
+  GET /proxies
+  PUT /proxies/{group}
+  GET /providers/proxies
+  PUT /providers/proxies/{providers}
+#+end_src
+
+选择节点时，向指定代理组发送:
+
+#+begin_src json
+  {
+    "name": "日本-01"
+  }
+#+end_src
+
+官方 API 中， ~GET /proxies~ 用于查询代理和策略组， ~PUT /proxies/{name}~ 用于改变组的选择； ~GET /providers/proxies~ 查询 Provider, ~PUT /providers/proxies/{name}~ 用于更新 Provider
+
+-----
+
+* External Controller 是控制面
+
+配置:
+
+#+begin_src yaml
+  external-controller: 127.0.0.1:9090
+  secret: ""
+#+end_src
+
+会让 Mihomo 在本机暴露 REST API. 官方配置说明中， ~external-controller~ 用于启用 RESTful 控制接口， ~secret~ 是 API 访问密钥。
+
+MetaCubeXD 和 mihomgr 可以同时连接一个控制器。但是二者不应分别维护一套运行状态。 Mihomo 才是运行时状态的事实来源。
+
+

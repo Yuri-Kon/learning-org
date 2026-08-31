@@ -1,0 +1,15 @@
+#+title: Spring JWT
+#+date:       [2026-05-30 Sat 00:47]
+#+identifier: 20260530T004741
+
+* 目标
+- 把 Spring Security + JWT 的认证链路讲清楚。
+
+* 原始目录
+- [[file:/home/yurikon/Learning/software/framework/Spring/JWT][software/framework/Spring/JWT]]
+
+* 推荐记录
+- 登录流程
+- Token 生成与校验
+- Filter 链位置
+- 常见错误和排查路径

@@ -1,0 +1,19 @@
+#+title: C++ Primer 学习目录
+#+date:       [2026-07-13 Mon 23:15]
+#+identifier: 20260713T231526
+* 目录结构
+- [[denote:20260611T002128][前言]]
+- [[denote:20260612T002104][第一章: Getting Start]]
+- [[denote:20260703T151848][第二章: Variables and Basci Types]]
+- [[denote:20260705T170341][第三章: Strings, Vectors and Arraysg]]
+- [[file::chapter4.org][第四章: Expressions]]
+- [[denote:20260702T181809][第五章: Statements]]
+- [[denote:20260702T220811][第六章: Functions]]
+- [[denote:20260703T160635][第七章: Classes]]
+- [[denote:20260714T093242][第八章: The IO Library]]
+- [[denote:20260705T164608][第九章: Sequence Containers]]
+- [[denote:20260706T210023][第十章: Generic Algorithm]]
+- [[denote:20260715T112547][第十一章: Associative Containers]]
+- [[denote:20260708T192457][第十二章: Dynamic Memeory]]
+- [[denote:20260712T191808][Part III: Tools for Class Authors]]
+- [[denote:20260715T150739][Part IV: Advanced Topics]]
