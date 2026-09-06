@@ -3,6 +3,7 @@
 #+title: 部分应用 partial application
 #+date:       [2026-06-01 Mon 18:05]
 #+identifier: 20260601T180530
+#+filetags: :ocaml:
 #+startup: overview
 
 * 部分应用 partial application

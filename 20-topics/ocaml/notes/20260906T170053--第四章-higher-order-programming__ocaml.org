@@ -1,0 +1,330 @@
+#+title:      第四章-higher-order-programming
+#+date:       [2026-09-06 Sun 17:00]
+#+filetags:   :ocaml:
+#+identifier: 20260906T170053
+* Higer Order Programming
+
+本章会学习一种新的程序组织方式：把函数当成普通值，并通过高阶函数抽取重复的计算结构。主要分为三个部分：
+
+1. 函数本身也是数据: HOF -> currying -> partial application
+2. 抽象递归模式: ~map~ -> ~filter~ -> ~fold~
+3. 推广思维: pipeline -> trees / AST
+
+* 需要改变的思维
+
+之前我们写列表程序时，通常是:
+
+#+begin_src ocaml
+  let rec add_one = function
+    | [] -> []
+    | x :: xs -> (x + 1) :: add_one xs
+#+end_src
+
+如果现在我们又要平方:
+
+#+begin_src ocaml
+  let rec square_all = function
+    | [] -> []
+    | x :: xs -> (x * x) :: square_all xs
+#+end_src
+
+从算法角度看，这两个程序几乎一模一样，改变的只有 ~x + 1~ 和 ~x * x~ 。在函数式编程中，我们的第一反应应该逐渐变成:
+
+#+begin_quote
+把变化的那部分变成一个参数。
+#+end_quote
+
+这就是 Higher-Order Programming 的核心价值。 CS3110 称之为 *Abstraction Princple*: 如果两个程序只有某一小部分不同，就把共同结构抽出来，把变化部分参数化。高阶函数让“变化部分”本身也可以是函数。
+
+* First-class functions: 函数就是值
+
+比如:
+
+#+begin_src ocaml
+  let double x = x * 2
+  let square x = x * x
+#+end_src
+
+其类型我们已经知道:
+
+#+begin_src ocaml
+  double : int -> int
+  square : int -> int
+#+end_src
+
+但如果下面的表达式:
+
+#+begin_src ocaml
+  let twice f x =
+    f (f x)
+#+end_src
+
+其类型是:
+
+#+begin_src ocaml
+  val twice : ('a -> 'a) -> 'a -> 'a = <fun>
+#+end_src
+
+然后:
+ ~twice double 10~ 结果就是 40, ~twice suqare 3~ 就是 ~square (square 3)~ 结果是 81 。
+
+ ~twice~ 并不关心 “具体做什么”，只描述:
+
+ #+begin_quote
+对某个值连续进行两次同一种变换。
+ #+end_quote
+
+ 这就是一种非常典型的FP抽象。
+
+ 
+* 高阶函数: Higher-Order Function
+
+只要一个函数：
+
+- 接收函数作为参数，或者
+- 返回函数作为结果
+
+
+就是高阶函数。
+
+比如函数组合:
+
+#+begin_src ocaml
+  let compose f g x =
+    f (g x)
+#+end_src
+
+其类型是:
+
+#+begin_src ocaml
+  val compose : ('a -> 'b) -> ('c -> 'a) -> 'c -> 'b = <fun>
+#+end_src
+
+也就是:
+
+#+begin_src ocaml
+  g : 'c -> 'a
+  f : 'a -> 'b
+  x : 'c
+#+end_src
+
+其实这就是数学里的:
+
+#+begin_quote
+(f∘g)(x)=f(g(x))
+#+end_quote
+
+如果我们从映射到角度也比较容易理解，映射 + OCaml 的类型系统。
+
+~g x~ 表示 x 经过函数 g 的一种映射，其必然映射到另一个值。我们可以记这个值的类型是 ~'a~ 。那么 ~f (g x)~ 就是对这个类型为 ~'a~ 的值再做一次映射，新的值类型记为 ~'b~ 。这样就很简单了， ~x~ 自己的类型可以为任意，因此我们记为 ~'c~:
+
+- ~f : 'a -> 'b~
+- ~x : 'c~
+- ~g : 'c -> 'a~
+
+
+本质是 ~x~ 这个输入经过两次映射得到类型为 ~'b~ 的值的过程。
+
+而在 OCaml 中，值(val) 的概念相当宽泛，一个函数也能是一个值。所以我们能很容易想象，一个变量可以经过函数映射到一个变量，也可以映射到一个函数，也可以从一个函数映射到一个变量，函数之间也可以相互映射。比如说:
+
+#+begin_src ocaml
+  let make_adder n =
+    fun x -> n + x
+#+end_src
+
+这就是从一个变量映射到了一个函数。其值类型是:
+
+#+begin_src ocaml
+  val make_adder : int -> int -> int = <fun>
+#+end_src
+
+从 ~int~ 映射到 ~int -> int~ 这样一个函数。于是我们可以这样用:
+
+#+begin_src ocaml
+  let add_5 = make_adder 5
+#+end_src
+
+其类型是:
+
+#+begin_src ocaml
+  val add_5 : int -> int = <fun>
+#+end_src
+
+* Currying
+
+现在看:
+
+#+begin_src ocaml
+  let add x y -> x + y
+#+end_src
+
+不能简单理解为 ~add~ 只是一个接受两个参数的函数。在使用上确实如此，但是 OCaml 中的函数模型应该描述为:
+
+#+begin_src ocaml
+  let add =
+    fun x ->
+    fun y ->
+    x + y
+#+end_src
+
+其实是由两个匿名函数组成。
+
+* Partial application: 部分应用
+
+多参数函数实际上是一系列嵌套的单独参数函数，因此可以只提供一部分参数，得到剩余参数对应的新函数。比如:
+
+#+begin_src ocaml
+  let mul x y = x * y
+#+end_src
+
+然后：
+
+#+begin_src ocaml
+  let double = mul 2
+#+end_src
+
+这里 ~mul 2~ 会得到一个新的 ~int -> int~ 函数，概念上可以理解为:
+
+#+begin_src ocaml
+  let double =
+    fun y -> mul 2 y
+#+end_src
+
+* 为什么函数参数通常故意放在前面
+
+现在我们可以理解 OCaml 标准库很多 API 的参数顺序了:
+
+#+begin_src ocaml
+  List.map :
+    ('a -> 'b) -> 'a list -> 'b list
+#+end_src
+
+为什么不是:
+
+#+begin_src ocaml
+  'a list -> ('a -> 'b) -> 'b list
+#+end_src
+
+一个重要原因就是部分应用。比如:
+
+#+begin_src ocaml
+  let square x = x * x
+
+  let square_all =
+    List.map square
+#+end_src
+
+此时， ~square_all : int list -> int list~ 以后就可以直接使用:
+
+#+begin_src ocaml
+  square_all [1; 2; 3]
+#+end_src
+
+而不必每次都调用:
+
+#+begin_src ocaml
+  List.map square ... 
+#+end_src
+
+所以部分应用得到的本身就是一个函数。为了方便后续的调用，通常都会把高阶函数设计成第一个参数是函数参数。
+
+* ~map~
+
+考虑以下两个函数:
+
+#+begin_src ocaml
+  let rec add1 = function
+    | [] -> []
+    | x :: xs ->
+       (x + 1) :: add1 xs
+
+  let rec shout = function
+    | [] -> []
+    | x :: xs ->
+       (x ^ "!") :: shout xs
+#+end_src
+
+这两个函数结构上完全一致，仅在 ~x :: xs~ 匹配成功后的处理有差异。那么我们就可以把这部分差异参数化:
+
+#+begin_src ocaml
+  let rec map f = function
+    | [] -> []
+    | x :: xs ->
+       f x :: map f xs
+#+end_src
+
+得到:
+
+#+begin_src ocaml
+  val map : ('a -> 'b) -> 'a list -> 'b list = <fun>
+#+end_src
+
+然后我们就可以这样调用: ~map (fun x -> x + 1) [1; 2; 3]~ 以实现 ~add1~ 的效果。
+
+这其实就是 ~List.map~ 的核心结构。把相同的处理——其实本质就是映射方式——给抽象出来参数化，用于容纳更多的映射方式。
+
+
+** ~map~ 并不是循环
+
+在这里我们要摒弃命令式语言的思想，不要把 ~map~ 理解成下面的形式:
+
+#+begin_src python
+  result = []
+  for x in xs:
+      result.append(f(x))
+#+end_src
+
+这从结果上看是没有问题的，但是map实际上更贴近： _保留数据结构，只改变其中承载的值_ 。
+
+对于 list: ~[1; 2; 3]~ 结构是:
+
+~1 :: 2 :: 3 :: []~ ，应用 ~List.map f~ 后就相当于:
+
+~f 1 :: f 2 :: f 3 :: []~ 。从这里我们可以理解， ~map~ 的核心 *不是 iteration*, 而是 *structure-preserving transformation* 。也就是说， ~map~ 并不是逐个迭代，而是在保留结构的前提下对每个元素进行转换。
+
+** ~map~ 的类型
+
+我们再看 ~List.map~ 的类型:
+
+#+begin_src ocaml
+  List.map: ('a -> 'b) -> 'a list -> 'b list
+#+end_src
+
+应该这样理解:
+
+#+begin_quote
+给我一个能把 ~'a~ 转换成 ~'b~ 的函数，我会返回一个能把 ~'a list~ 转换成 ~'b list~ 的函数。
+#+end_quote
+
+也就是说， ~map~ 能把一个元素上的转换，给提升为list上的转换。比如一个函数是 ~string -> int~, 经过 ~List.map~ 就能转换为 ~string list -> int list~ 。
+
+这种理解比 “对列表循环执行函数” 更接近 FP 的核心理解。
+
+** ~map~ 的求值顺序
+
+OCaml 对一些子表达式的求值顺序并不保证。如果 ~f~ 有打印、异常、之后我们会学到 mutation 等副作用，就不要依赖隐含的求值顺序；可以用 ~let~ 明确顺序。
+
+例如写成:
+
+#+begin_src ocaml
+  let rec map f = function
+    | [] -> []
+    | x :: xs ->
+       let y =  f x in
+       y :: map f xs
+#+end_src
+
+* 本章小结
+
+1. 函数是值，可以作为参数、返回值、普通绑定
+2. 高阶函数是接收函数或返回函数的函数
+3. Curried function: ~a -> b -> c = a -> (b -> c)~
+4. ~let f x y = e~ 约等于 ~let f = fun x -> fun y -> e~
+5. 部分应用：给 curried function 一部分参数，得到一个新的函数
+6. ~('a -> 'b) -> 'a list -> 'b list~ 是 ~List.map~ 的类型
+7. ~map~ 保留数据结构，只改变元素
+8. HOF(高阶函数)的意义：把遍历/控制结构与实际操作分离，抽取重复的程序结构
+9. 当副作用使求值顺序重要时，用 ~let~ 明确求值顺序。
+
+
+

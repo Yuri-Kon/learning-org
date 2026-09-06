@@ -1,0 +1,561 @@
+#+title:      nested-let-in.org
+#+date:       [2026-09-05 Sat 17:21]
+#+filetags:   :ocaml:
+#+identifier: 20260905T172106
+* 嵌套 ~let ... in~ 
+
+由于我对于 ~let ... in~ 的语法感到困惑，因此需要通过本节进行学习。
+
+最容易混淆的点，其实是把 OCaml 的 ~let~ 按照 C/Python 的 “赋值语句” 去理解。在 OCaml 中， ~let ... in ...~ 不是 “执行一条赋值语句，然后继续执行” ，而是 “计算一个值，用模式给这个值命名/拆解，然后在一个新的词法环境里计算另一个表达式。”
+
+而且 ~let~ 本身也是表达式， ~let (x, y) = e1 in e2~ 本质上是一种模式匹配。
+* 忘掉赋值： ~let x = e1 in e2~ 到底是什么意思
+
+比如最普通的:
+
+#+begin_src ocaml
+  let x = 10 in
+      x + 1
+#+end_src
+
+并不是:
+
+- x = 10
+- 再执行 x + 1
+
+
+更准确的理解是:
+
+1. 在当前环境中计算10
+2. 得到值10
+3. 创建一个新的环境，其中 ~x -> 10~
+4. 这个新环境里计算 ~x + 1~
+5. 整个 ~let~ 表达式的结果就是 11
+
+所以上面的表达式在 utop 中我们会得到:
+
+#+begin_example
+- : int = 11
+#+end_example
+
+整个表达式的类型是 ~int~, 值是 11 。
+
+所以我们可以对 ~let x = e1 in e2~ 的语义理解为:
+
+#+begin_example
+当前环境 ρ
+    │
+    ├── evaluate e1
+    │       ↓
+    │       v
+    │
+    ├── 扩展环境
+    │       ρ' = ρ + {x ↦ v}
+    │
+    └── evaluate e2 under ρ'
+            ↓
+          result
+#+end_example
+
+~x~ 在这里只是给某一个值起了一个名字。
+
+-----
+
+* 多重 ~let ... in~ 实际上就是嵌套表达式
+
+比如下面这个表达式:
+
+#+begin_src ocaml
+  let x = 10 in
+      let y = x + 2 in
+      let z = y * 3 in
+      x + y + z
+#+end_src
+
+其实 OCaml 并没有一个特殊的“多重 let”结构。上面的表达式实际上就是:
+
+#+begin_src ocaml
+  let x = 10 in
+      (let y = x + 2 in
+       (let z = y * 3 in
+        x + y + z))
+#+end_src
+
+也就是说，这三个 ~let~ 是向右嵌套的，求值过程非常机械。
+
+首先:
+
+~let x = 10 in ...~ 得到 ~x = 10~
+
+然后进入 ~let y = x + 2 in ...~ ，此时 ~x~ 已经可见:
+
+#+begin_example
+x + 2
+-> 10 + 2
+-> 12
+#+end_example
+
+于是环境就变成:
+
+- ~x = 10~
+- ~y = 12~
+
+
+然后 ~let z = y * 3 in ...~ 得到 ~z = 36~ ，环境是:
+
+- ~x = 10~
+- ~y = 12~
+- ~z = 36~
+
+
+最终 ~x + y + z -> 10 + 12 + 36 -> 58~ ，所以整个表达式的结果就是 58。
+
+对于这种嵌套的 ~let ... in~, 其实没有很复杂的部分，只需要记住:
+
+#+begin_quote
+前一个 ~let~ 的右侧一定先于后一个 ~let~ 求值
+#+end_quote
+
+* ~let ... in let ... in~ 和 ~let ... and ... in~
+
+以下有两种情况:
+
+第一种:
+
+#+begin_src ocaml
+  let x = f() in
+      let y = g() in
+      x + y
+#+end_src
+
+第二种:
+
+#+begin_src ocaml
+  let x = f()
+  and y = g()
+      in
+      x + y
+#+end_src
+
+这是两种结构。在第一种中，根据求值的规则，顺序是确定的:
+
+#+begin_example
+f ()
+↓
+绑定 x
+↓
+g ()
+↓
+绑定 y
+↓
+x + y
+#+end_example
+
+而第二种，根据 OCaml  Reference Manual ，用 ~and~ 连接的:
+
+#+begin_src ocaml
+  let p1 = e1
+  and p2 = e2
+      in
+      e
+#+end_src
+
+其中 ~e1~ 和 ~e2~ 的求值顺序是不确定的。因此不要在 ~and~ 的左右两侧写有明确先后顺序的表达式。如果顺序重要，就应该明确写:
+
+#+begin_src ocaml
+  let x = print_endline "x" in
+      let x = print_endline "y" in
+      ...
+#+end_src
+
+但是，当纯函数没有副作用时，很多求值顺序实际上并不重要。
+
+比如:
+
+#+begin_src ocaml
+  let x = 1 + 2
+  and y = 3 * 4
+      in
+      x + y
+#+end_src
+
+无论是先求值 ~1 + 2~ 还是先求值 ~3 * 4~ 最终结果都一样。
+
+只有当引入了比如 ~print_endline~, ~read_int~, ~ref~, 文件 IO 和异常等这些effetc时，顺序才开始成为可观测行为。
+
+* ~let~ 的左边其实是 pattern
+
+~let~ 的结构并不是:
+
+#+begin_example
+let variable = expression in expression
+#+end_example
+
+而是更接近:
+
+#+begin_example
+let pattern = expression in expression
+#+end_example
+
+所以当:
+
+#+begin_src ocaml
+  let x = 10 in ...
+#+end_src
+
+只是最简单的一种 pattern.
+
+再来看:
+
+#+begin_src ocaml
+  let (x, y) = (10, 20) in
+      x + y
+#+end_src
+
+左边的 ~(x, y)~ 并不是一个变量，而是一个模式。因此求值过程是:
+
+#+begin_example
+(10, 20)
+    │
+    ▼
+得到 tuple 值
+    │
+    ▼
+用模式 (x, y) 匹配
+    │
+    ├── x ↦ 10
+    └── y ↦ 20
+    │
+    ▼
+计算 x + y
+    │
+    ▼
+30
+#+end_example
+
+因此 ~let (x, y) = pair in ...~ 同时完成 结构检查 和 绑定名字 两件事情。这其实就是 deconstructuring.
+
+* 统一认知： ~let pattern = e1 in e2~ 就是一种模式匹配
+
+#+begin_src ocaml
+  let (x, y) = e1 in
+      e2
+#+end_src
+
+可以理解为:
+
+#+begin_src ocaml
+  match e1 with
+  | (x, y) -> e2
+
+#+end_src
+
+这是很重要的等价关系。实际上就是用 ~e1~ 去匹配 ~pattern~ 的模式，产生绑定，然后应用于 ~e2~ 。
+
+比如:
+
+#+begin_src ocaml
+  let (x, y) = get_point () in
+      x * x + y * y
+#+end_src
+
+可以展开为:
+
+#+begin_src ocaml
+  match get_point () with
+  | (x, y) ->
+     x * x + y * y
+#+end_src
+
+* 多重 ~let~
+
+现在多重 ~let~ 就不再特殊了。考虑:
+
+#+begin_src ocaml
+  let (x, y) = get_point () in
+      let r2 = x * x + y * y in
+      let (a, b) = transform x y in
+      a + b + r2
+#+end_src
+
+现在一步一步走。第一步 ~get_point ()~ 假设得到 ~(3, 4)~ ，然后 ~(x, y)~ 就匹配到 ~x = 3, y = 4~ 。接下来就得到 ~r2 = 25~, 再接下来会通过 ~transform 3 4~ 假设得到 ~(10, 20)~ ，这会通过模式 ~(a, b)~ 匹配得到 ~a = 10, b = 20~ 。最终在求值 ~a + b + r2~ 得到 55.
+
+环境变化写出来就是:
+
+#+begin_quote
+ρ0 = {}
+
+get_point ()
+→ (3,4)
+
+ρ1 =
+{
+  x ↦ 3;
+  y ↦ 4
+}
+
+x*x + y*y
+→ 25
+
+ρ2 =
+{
+  x ↦ 3;
+  y ↦ 4;
+  r2 ↦ 25
+}
+
+transform x y
+→ (10,20)
+
+ρ3 =
+{
+  x ↦ 3;
+  y ↦ 4;
+  r2 ↦ 25;
+  a ↦ 10;
+  b ↦ 20
+}
+
+a + b + r2
+→ 55
+#+end_quote
+
+* 解释器角度的 ~let~
+
+从解释器角度， ~let~ 可以写成一条非常漂亮的规则。
+
+假设我们有环境 ρ, 表达式 ~let p = e1 in e2~ ，那么语义可以理解为三步:
+
+1. ~eval(ρ, e1) = v~, ~v~ 是 ~e1~ 的值
+2. ~match(p, v) = σ~, ~p~ 是 pattern
+3. ~eval(ρ ⊕ σ, e2) = result~
+
+
+例如:
+
+#+begin_src ocaml
+  let (x, y) = (3, 4) in
+      x + y
+#+end_src
+
+- 第一步: ~eval(ρ, (3, 4)) = (3, 4)~
+- 第二步: ~match((x, y), (3, 4)) = {x -> 3, y -> 4}~
+- 第三步: ~eval(ρ + {x -> 3, y -> 4}, x + y) = 7~
+
+
+这个模型能够同时解释:
+
+- ~let x = ...~
+- ~let (x, y) = ...~
+- ~let {name; age} = ...~ (这里是record匹配)
+- ~let Some x = ...~
+
+
+这些例子左边本质上都是 pattern.
+
+* pattern 的问题：可能匹配失败
+
+例如 tuple:
+
+#+begin_src ocaml
+  let (x, y) = pair in
+      ...
+#+end_src
+
+只要 ~pair~ 的类型是 ~'a * 'b~ ，就没有问题。因为任何 pair 都一定长成 ~(_, _)~ 的样子——这是一个不可失败的模式。
+
+record 也类似:
+
+#+begin_src ocaml
+  let { name; age } = person in
+      ...
+#+end_src
+
+只要类型确定，就一定能拆开。但是：
+
+#+begin_src ocaml
+  let Some x = value in
+      x + 1
+#+end_src
+
+假设 ~value = Some 10~, 就没有问题。 ~Some x~ 会匹配 ~Some 10~, 因此 ~x = 10~ 。
+
+但如果 ~value = None~, 那么 ~Some x~ 就无法匹配。再进一步看，对于上面的 ~let~ 语句，近似于:
+
+#+begin_src ocaml
+  match value with
+  | Some x -> ...
+#+end_src
+
+很明显我们缺失了 ~| None -> ...~ 的处理。OCaml 会警告:
+
+#+begin_quote
+Warning 8 [partial-match]: this pattern-matching is not exhaustive.
+  Here is an example of a case that is not matched: None
+#+end_quote
+
+会提示模式匹配没有被穷尽。因此对于这一类推荐:
+
+#+begin_src ocaml
+  match value with
+  | Some x -> x + 1
+  | None -> 0
+#+end_src
+
+而不是用 ~let~ 匹配的方法。同样，
+
+#+begin_src ocaml
+  let [x; y] = xs in
+      x + y
+#+end_src
+
+也很危险。因为这个模式匹配没有考虑:
+
+- ~[]~
+- ~[x]~
+- ~[x; y; z]~
+
+
+全部匹配失败。应该写成 ~match~ 形式:
+
+#+begin_src ocaml
+  match xs with
+  | [x; y] -> x + y
+  | _ -> ...
+#+end_src
+
+* ~match~ 本身的求值顺序
+
+例如:
+
+#+begin_src ocaml
+  match f () with
+  | Some (x, y) -> x + y
+  | None -> 0
+#+end_src
+
+它的过程是:
+
+1. 求值 ~f ()~
+2. 得到一个值 ~v~
+3. 从上到下尝试 pattern
+4. 找到第一个匹配成功的 pattern
+5. pattern 产生变量绑定
+6. 在这些绑定下求值对应的右侧表达式
+
+
+也就是：先求值 ~match~ 后面的表达式，然后按从上到下的顺序尝试模式匹配，第一个成功的分支被选中，只求值那个分支的表达式。
+
+* ~match~ 带有 ~when~
+
+带有 ~when~ 时，顺序会再多一步:
+
+#+begin_src ocaml
+  match x with
+  | Some n when n > 0 -> n
+  | Some _ -> 0
+  | None -> -1
+#+end_src
+
+假设 ~x = Some 3~ ，执行顺序是:
+
+#+begin_example
+Some 3
+  ↓
+尝试 Some n
+  ↓
+成功，n = 3
+  ↓
+求值 guard：n > 0
+  ↓
+true
+  ↓
+求值 n
+  ↓
+3
+#+end_example
+
+而如果 ~x = Some (-3)~:
+
+#+begin_example
+Some (-3)
+  ↓
+Some n 匹配成功
+  ↓
+n = -3
+  ↓
+n > 0
+  ↓
+false
+  ↓
+继续尝试下一个 pattern
+  ↓
+Some _
+  ↓
+成功
+  ↓
+0
+#+end_example
+
+官方是这样规定 guard 的: pattern 成功后才计算 guard; guard 为 false, 则继续尝试后续 pattern 。
+
+* shadowing
+
+看这一段:
+
+#+begin_src ocaml
+  let x = 10 in
+      let x = x + 1 in
+      x * 2
+#+end_src
+
+不要理解成修改x.
+
+这里实际上是建立了两层绑定。
+
+第一层:
+
+#+begin_src ocmal
+  let x = 10 in ...
+#+end_src
+
+建立 x_1 -> 10
+
+第二层:
+
+#+begin_src ocaml
+  let x = x + 1 in ...
+#+end_src
+
+右边的 ~x + 1~ 使用的是旧 x_1 ，然后建立一个新的绑定: x_2 -> 11. 这个 x_2 会遮蔽 x_1 。
+
+最后 ~x * 2~ 看到的是最近的绑定: ~x_2 * 2 = 22~ 。所以在 FP 中更准确的理解是:
+
+#+begin_example
+x_1 = 10
+x_2 = x_1 + 1
+result = x_2 * 2
+#+end_example
+
+而不是:
+
+#+begin_example
+x <- 10
+x <- x + 1
+#+end_example
+
+这种连续赋值的过程。实际上，同名变量是新的绑定，后绑定的变量会遮蔽先前绑定的。
+
+* ~let () = ...~
+
+之前见过很多次:
+
+#+begin_src ocaml
+  let () = print_endline "hello"
+#+end_src
+
+现在看就很直观: 左边的 ~()~ 是一个模式，右边的函数返回的也是 ~()~ ，所以上述语句就相当于要求 _右边必须产生 unit 值 ()_ 。
+
+因此， ~let () = do_someting ()~ 就是在利用模式 ~()~ 告诉类型系统，我期望这个计算是一个 ~unit~ computation 。
+
+

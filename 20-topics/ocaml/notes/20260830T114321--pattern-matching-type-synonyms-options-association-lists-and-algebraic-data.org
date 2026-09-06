@@ -477,3 +477,169 @@ OCaml list 本质上可以理解为:
 #+begin_src ocaml
   List.fold_left (fun acc x -> acc + x) 0 [1; 2; 3]
 #+end_src
+
+fold 是函数式编程中极为重要的一个抽象:
+
+#+begin_src ocaml
+  List.fold_left f init [a; b; c]
+  = f (f (f init a) b) c
+#+end_src
+
+LPO 中也专门比较了 ~fold_right~ 和 ~fold_left~: ~fold_right~ 的递归调用不是尾递归，大列表上可能 stack overflow(10000 行以上)； ~fold_left~ 的递归调用是尾递归，因此更适合长列表。
+
+* Exceptions
+
+OCaml 异常定义:
+
+#+begin_src ocaml
+  exception Parse_error of string
+  exception Empty
+#+end_src
+
+抛出:
+
+#+begin_src ocaml
+  raise (Parse_error "bad token")
+#+end_src
+
+捕获:
+
+#+begin_src ocaml
+  try
+    int_of_string "abc"
+  with
+  | Failure _ -> 0
+#+end_src
+
+CS3110 指出，异常值都有类型 ~exn~, 它类似一个 extensible vairant； ~try e with ...~ 中，如果 ~e~ 正常求值，整个 try 表达式就是 ~e~ 的值；如果抛出异常，则异常会像普通 pattern matching 一样匹配 handler。
+
+** 异常传播
+
+异常不是普通值，而是 exception packet，会沿表达式向外传播，直到遇到 ~try~ 。如果 handler 没有匹配上，不会产生新的 ~Match_failure~, 而是原异常继续传播。
+
+#+begin_src ocaml
+  let safe_int_string s =
+    try Some (int_of_string s)
+    with Failure _ -> None
+#+end_src
+
+这是一种很常见的边界处理：外部库函数可能抛异常，需要转换成 option / result
+
+** OUnit 测试异常需要 thunk
+
+#+begin_src ocaml
+  open OUnit2
+
+  let tests =
+    "suite" >::: [
+        "hd empty" >:: fun _ ->
+                       assert_raises (Failure "hd") (fun () -> List.hd []);
+      ]
+#+end_src
+
+注意这里的第二个参数 ~fun () -> List.hd []~ 叫做 thunk，用来延迟计算。 CS3110 提醒，忘记 ~fun () -> ...~ 会导致异常在 ~assert_raise~ 之前就被抛出。
+
+
+* 一个小程序
+
+这里我们会自己写一个小项目，项目的代码位于 [[file:~/Learning/projects/cs3110-ocaml-nix/exercises/chapter3/mini_expr/][表达式解释器]] ，下面是关于该项目的讲解。
+
+我们的项目同时引入了两层东西：一层是 *OCaml 项目工程结构* ，另一层是 *函数式解释器模型* 。下面按照从工程层面到语言层面的顺序拆开。
+
+** opam 的 dune
+
+~opam~ 负责环境和依赖。它决定你当前用哪一个 OCaml 编译器、安装了哪些库，例如 ~dune~, ~ounit2~, ~ocaml-lsp-server~ 等。
+
+~dune~ 负责构建项目，它决定哪些 ~.ml~ 文件组成库，哪些 ~.ml~ 文件组成可执行文件，哪些文件是测试。
+
+** 项目结构
+
+我们的项目结构是:
+
+#+begin_example
+mini_expr/
+├── lib/
+│   ├── expr.ml
+│   └── expr.mli
+├── bin/
+│   └── main.ml
+└── test/
+    └── test_expr.ml
+#+end_example
+
+这种目录组织方式很常见。
+
+- ~lib/~ 放核心逻辑，也就是表达式类型、求值器、环境 lookup 等。它应该尽量不负责命令行输入输出。
+- ~bin/~ 放程序入口。它只负责构造表达式、调用库、打印结果。
+- ~test/~ 放测试。它也调用 ~lib/~ 里的核心逻辑。
+
+~bin~ 的模块可以通过生成的库模块名访问生成的库模块名称访问 ~lib~ 中的模块；比如项目名称是 ~project_name~, ~lib/foo.ml~ 会作为 ~Project_name.Foo~ 被 ~bin~ 和 ~test~ 访问。
+
+所以我们在 ~bin/main.ml~ 中写 ~open Mini_expr.Expr~ ， ~Expr~ 是 ~Mini_expr~ 下面的子模块。
+
+** 为什么是 ~Mini_expr.Expr~:
+
+~lib/dune~ 里写的是:
+
+#+begin_src ocaml
+  (library
+   (name mini_expr))
+#+end_src
+
+Dune 的库名是小写下划线风格: ~mini_expr~ ，但在 OCaml 代码里模块名必须大写开头。因此库模块名就变成 ~Mini_expr~ 。
+
+然后 ~lib/expr.ml~ 这个文件就会成为库里的子模块:
+
+#+begin_src ocaml
+  Mini_expr.Expr
+#+end_src
+
+所以外部访问里面的函数，要么写完整路径:
+
+#+begin_src ocaml
+  Mini_expr.Expr.eval
+  Mini_expr.Expr.string_of_expr
+#+end_src
+
+要么打开模块:
+
+#+begin_src ocaml
+  open Mini_expr.Expr
+#+end_src
+
+然后直接用 ~eval~ 和 ~string_of_expr~ 。 Dune 官方文档也明确说， ~project_name~ 不是 OCaml 代码里的字面名字， OCaml 模块名会被 capitalized 。
+
+** ~.ml~ 和 ~.mli~ 的关系
+
+~expr.ml~ 是实现文件:
+
+#+begin_src ocaml
+  let eval env expr = ...
+  let string_of_expr expr = ...
+#+end_src
+
+~expr.mli~ 是接口文件:
+
+#+begin_src ocaml
+  val eval: env -> expr -> (int, string) result
+  val string_of_expr : expr -> string
+#+end_src
+
+如果存在 ~.mli~ , 那么外部模块只能看到 ~.mli~ 里声明的东西。即使 ~expr.ml~ 里实现了某个函数，只要 ~.mli~ 没写 ~val~, 外部也不能用。
+
+所以:
+
+#+begin_src ocaml
+  (* expr.ml *)
+  let debug_expr expr = ...
+#+end_src
+
+如果 ~.mli~ 没有 :
+
+#+begin_src ocaml
+  val debug_expr : expr -> string
+#+end_src
+
+那么 ~bin/main.ml~ 就不能调用它。
+
+可以把 ~.mli~ 理解为 C/C++ 里的 ~.h~ ，但它更严格、更重要：它不只是声明，还可以隐藏实现细节。
