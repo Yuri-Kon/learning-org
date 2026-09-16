@@ -1,0 +1,84 @@
+#+title:      make基础
+#+date:       [2026-09-16 Wed 23:00]
+#+filetags:   :buildsystem:
+#+identifier: 20260916T230010
+* Make
+
+make 在维护一张依赖图:
+
+#+begin_example
+source/header
+|
+| compile
+|
+object file
+|
+| link
+|
+executable
+#+end_example
+
+C++ 构建过程是：
+
+[[file:make-process.png][Make Process]]
+
+所以 Makefile 里的:
+
+#+begin_src Makefile
+  $(OBJ_DIR)/%.o: %.cpp
+                  $(CXX) ... -c $< -o $@
+#+end_src
+
+是在描述:
+
+#+begin_example
+.cpp --compile--> .o
+#+end_example
+
+而:
+
+#+begin_src makefile
+  $(TARGET): $(OBJECTS)
+  	$(CXX) $^ -o $@
+#+end_src
+
+是在描述:
+
+#+begin_example
+.o + .o + .o --link--> executable
+#+end_example
+
+这两条规则就是当前 Makefile 的骨架:
+
+#+begin_src makefile
+  CXX := g++
+  CPPFLAGS := -Iinclude
+  CXXFLAGS := -std=c++23 -Wextra -Wall -Wpedantic
+
+  SRC_DIR := src
+  APP_DIR := app
+  BUILD_DIR := build
+  OBJ_DIR := $(BUILD_DIR)/obj
+  BIN_DIR := $(BUILD_DIR)/bin
+  TARGET := $(BIN_DIR)/minitodo
+
+  SOURCES := $(wildcard $(SRC_DIR)/*.cpp) $(wildcard $(APP_DIR)/*.cpp)
+  OBJECTS := $(patsubst %.cpp,$(OBJ_DIR)/%.o,$(SOURCES))
+
+  .PHONY: all clean
+
+  all: $(TARGET)
+
+  $(TARGET): $(OBJECTS)
+  	@mkdir -p $(dir $@)
+  	$(CXX) $^ -o %@
+
+  $(OBJ_DIR)/%.o: %.cpp
+  	@mkdir -p $(dir $@)
+  	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
+
+  clean:
+  	rm -rf $(BUILD_DIR)
+#+end_src
+
+
