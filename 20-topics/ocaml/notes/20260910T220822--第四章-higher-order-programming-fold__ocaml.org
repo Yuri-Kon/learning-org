@@ -1,0 +1,392 @@
+#+title:      第四章-higher-order-programming-fold
+#+date:       [2026-09-10 Thu 22:08]
+#+filetags:   :ocaml:
+#+identifier: 20260910T220822
+* Filter, folder, 递归, pipeline
+
+本节承接 [[denote:20260906T170053][第四章-higher-order-programming-map]] ，继续学习第四章剩下的 filter, folder, 递归模式本身的抽象以及 pipeline.
+
+* ~filter~: 抽象“保留还是丢弃”
+
+先看两个不同递归:
+
+#+begin_src ocaml
+  let rec evens = function
+    | [] -> []
+    | x :: xs ->
+        if x mod 2 = 0
+        then x :: evens xs
+        else evens xs
+  let rec positives = function
+  | [] -> []
+  | x :: xs ->
+      if x > 0
+      then x :: positives xs
+      else positives xs
+#+end_src
+
+重复结构很明显，只有 ~if~ 的判断语句不同。因此我们可以将这个判断抽象出来，将其参数化:
+
+#+begin_src ocaml
+  let rec filter p = function
+    | [] -> []
+    | x :: xs ->
+        if p x
+        then x :: filter p xs
+        else filter p xs
+#+end_src
+
+得到的是 ~val filter : ('a -> bool) -> 'a list -> 'a list = <fun>~ 。
+
+这就是 ~filter~ 的本质。接受一个映射为 bool 的函数，并将一个列表转变为另一个列表，但是列表的类型不变，元素可以改变。
+
+我们可以将其与 ~map~ 一起比较:
+
+#+begin_src ocaml
+  map : ('a -> 'b) -> 'a list -> 'b list
+  filter : ('a -> bool) -> 'a list -> 'a list
+#+end_src
+
+- ~map~: 元素个数基本不变，但是元素类型可以改变
+- ~filter~: 元素个数可以变化，但是元素类型不变。
+
+
+* 从 ~map/filter~ 往上抽象
+
+现在我们回头看:
+
+#+begin_src ocaml
+  let rec sum = function
+    | [] -> 0
+    | x :: xs -> x + sum xs
+#+end_src
+
+以及:
+
+#+begin_src ocaml
+  let rec product = function
+    | [] -> 1
+    | x :: xs -> x * product xs
+#+end_src
+
+甚至:
+
+#+begin_src ocaml
+  let rec concat = function
+    | [] -> ""
+    | x :: xs -> x ^ concat xs
+#+end_src
+
+它们的共同结构都是：
+
+#+begin_src ocaml
+  let rec something = function
+    | [] -> base
+    | x :: xs ->
+       combine x (something xs)
+#+end_src
+
+于是我们也可以做一次抽象:
+
+#+begin_src ocaml
+  let rec fold_right f xs init =
+    match xs with
+    | [] -> init
+    | x :: rest ->
+       f x (fold_right f rest init)
+#+end_src
+
+CS3110 对 ~fold~ 的定义也正是: ~map~ 是逐元素变换， ~filter~ 是逐元素决定去留，而 ~fold~ 是把整个数据结构中的元素组合起来。
+
+但“组合起来”并不是最深的理解。
+
+* ~fold_right~ 本质上是在替换 List 的构造器
+
+OCaml list 在概念上的定义:
+
+#+begin_src ocaml
+  type 'a list =
+    | []
+    | (::) of 'a * 'a list
+#+end_src
+
+
+比如 ~[1; 2; 3]~ 其实是 ~1 :: (2 :: (3 :: []))~ 。现在如果:
+
+#+begin_src ocaml
+  List.fold_right f [1; 2; 3] init
+#+end_src
+
+展开就是:
+
+#+begin_src ocaml
+  f 1 (f 2 (f 3 init))
+#+end_src
+
+它的意思就是，对于 ~1 :: (2 :: (3 :: []))~ 形式，做下面的替换:
+
+1. 把 ~[]~ 替换为 ~init~
+2. 把 ~::~ 构造器替换为 ~f~
+
+
+这个理解很有趣。比如我们执行:
+
+#+begin_src ocaml
+  List.fold_right ( + ) [1; 2; 3] 0
+#+end_src
+
+实际上就是对形如 ~1 :: (2 :: (3 :: []))~ 的表达式，做：
+
+1. 将 ~::~ 替换为 ~+~
+2. 将 ~[]~ 替换为 0
+
+那么得到: ~1 + (2 + (3 + 0))~ ，结果是 6.
+
+再比如 ~List.fold_right ( * ) [1; 2; 3; 4] 1~ 就变成: ~1 * (2 * (3 * (4 * 1)))~
+
+* ~List.fold_right~ 中的 accumulator
+
+~List.fold_right~ 的类型是:
+
+#+begin_src ocaml
+  - : ('a -> 'acc -> 'acc) -> 'a list -> 'acc -> 'acc = <fun>
+#+end_src
+
+拆一下类型结构:
+
+因为 OCaml 的 ~->~ 是右结合的，所以对于 ~'a -> 'acc -> 'acc~ 实际上是 ~'a -> ('acc -> 'acc)~ ，整个 ~List.fold_right~ 类型可以写成:
+
+#+begin_src ocaml
+  ('a -> ('acc -> 'acc)) -> ('a list -> ('acc -> 'acc))
+#+end_src
+
+也就是说， ~fold_right~ 本身是一个柯里化函数，依次接受三个参数:
+
+#+begin_src ocaml
+  List.fold_right f xs init
+#+end_src
+
+这里面对应的就是:
+
+- ~f : 'a -> 'acc -> 'acc~
+- ~xs : 'a list~
+- ~init : 'acc~
+- 结果: ~'acc~
+
+这里比较令人迷惑的是，为什么 ~f~ 的类型一定要是 ~'a -> 'acc -> 'acc~ ，可以从递归类型直接推演，假设我们自己定义一个 ~fold_right~:
+
+#+begin_src ocaml
+
+  let rec fold_right f l e =
+    match l with
+    | [] -> e
+    | x :: r -> f x (fold_right f r e)
+#+end_src
+
+因为 ~l : 'a list~ ，所以 ~x : 'a~, ~r : 'a list~ ，假设 ~e : 'acc~, 那么递归调用 ~fold_right~ 最终应该返回和 ~e~ 同类的累积结果，因此:
+
+~fold_right f r e : `acc~
+
+于是对于 ~f x (fold right f r e)~ ，实际上就是:
+
+#+begin_example
+f
+│
+├─ x                         : 'a
+│
+└─ fold_right f r e          : 'acc
+
+↓
+结果                          : 'acc
+#+end_example
+
+因此编译器必然得到 ~f : 'a -> 'acc -> 'acc~ 的类型。
+
+这里的 ~'acc~ 不只是 accumulator 这种累加数字，它可以是任何东西。比如:
+
+- ~int~
+- ~string~
+- ~'a list~
+- ~tree~
+- ~record~
+- ~function~
+- ~AST~
+
+
+准确来说， accumulator 是“截至当前，已经计算出来的结果”。
+
+* ~map~ 本身甚至可以用 ~fold~ 表示
+
+现在我们重新回看 ~map~:
+
+#+begin_src ocaml
+  List.map f [1; 2; 3]
+#+end_src
+
+即:
+
+#+begin_src ocaml
+  let map f xs =
+    List.fold_right
+      (fun x acc -> f x :: acc)
+      xs
+      []
+#+end_src
+
+同样，
+
+#+begin_src ocaml
+  let filter p xs =
+    List.fold_right
+      (fun x acc -> if p x then x :: acc else acc)
+      xs
+      []
+#+end_src
+
+但这不意味要把实际代码里的一切都强行写成 fold 。有时候直接递归或者 ~List.map~ 或更加直观。
+
+* ~fold_left~ 是什么
+
+现在我们换一个方向。标准库中定义:
+
+#+begin_src ocaml
+  List.fold_left :
+    ('acc -> 'a -> 'acc)
+    -> 'acc
+    -> 'a list
+    -> 'acc
+#+end_src
+
+注意到参数顺序变了:
+
+#+begin_src ocaml
+  fold_right: 'a -> 'acc -> 'acc
+  fold_left: 'acc -> 'a -> 'acc
+#+end_src
+
+因为 ~fold_left~ 的思路是：
+
+#+begin_example
+当前 accmulator
++
+下一个元素
+↓
+新的 accumulator
+#+end_example
+
+例如:
+
+#+begin_src ocaml
+  List.fold_left ( + ) 0 [1; 2; 3]
+#+end_src
+
+展开就是:
+
+#+begin_src ocaml
+  ((0 + 1) + 2) + 3
+#+end_src
+
+一个简单的对照就是:
+
+- fold_right: ~fold_right f init [a1; a2; ...; an] = f a1 (f a2 (...(f an init)))~
+- fold_left: ~fold_left f init [b1; ...; bn] = f (... (f (f init b1) b2) ...) bn~
+
+可以大致将 ~fold_left~ 想象成一个不断更新状态的机器。
+
+* ~fold_left~ 的 accumulator 可以理解为“状态”
+
+假设:
+
+#+begin_src ocaml
+  List.fold_left transition initial_state events
+#+end_src
+
+那么就是:
+
+#+begin_example
+state0
+  |
+event1
+  ↓
+state1
+  |
+event2
+  ↓
+state2
+  |
+event3
+  ↓
+state3
+#+end_example
+
+也就是:
+
+#+begin_example
+state(n+1) = transition state(n) event(n)
+#+end_example
+
+所以对于 ~fold_left~ 来说， fold 并不是一个单纯的“列表求和工具”，它实际上能表达：
+
+#+begin_quote
+顺序读取输入，不断更新一个不可变状态。
+#+end_quote
+
+这和我们熟悉的命令式非常相似:
+
+#+begin_src python
+  state = initial_state
+
+  for event in events:
+      state = transition(state, event)
+#+end_src
+
+但是在函数式中，每一个 ~state0~, ~state1~, ~state2~ 都是一个新的值，而不是反复修改同一个变量。
+
+
+* ~fold_left~ 和 ~fold_right~ 各自的含义
+
+它们一般不能直接互换。有一个很明显的例子:
+
+#+begin_src ocaml
+  List.fold_right (-) [1; 2; 3] 0
+    (* 2 *)
+
+  List.fold_left (-) 0 [1; 2; 3]
+    (* -6 *)
+#+end_src
+
+因为 ~fold_right~ 是:
+
+#+begin_example
+(1 - (2 - (3 - 0))) = 2
+#+end_example
+
+其可以理解为将列表中的 ~::~ 构造器换成 ~-~ ，并将初始值 ~[]~ 换成0.
+
+而 ~fold_left~ 是:
+
+#+begin_example
+(((0 - 1) - 2) - 3) = -6
+#+end_example
+
+我们可以大致理解为， ~0~ 是一个初始状态， ~-~ 是希望作用于它的函数，后面的 list 是依次作用的元素。或者更简洁地，可以理解括号的方向相反。
+
+不能简单地理解成 ~fold_left~ 就是从左到右遍历， ~fold_right~ 就是从右到左遍历。真正重要的是 **括号结构** :
+
+#+begin_example
+fold_left:
+
+(((init ⊗ x1) ⊗ x2) ⊗ x3)
+#+end_example
+
+#+begin_example
+fold_right:
+
+x1 ⊗ (x2 ⊗ (x3 ⊗ init))
+#+end_example
+
+从入参的顺序也很容易联想到这个顺序。
+
+对于满足结合律的顺序，它们可能得到一样的结果；但一般的函数并没有这种保证。
+
+
