@@ -1,0 +1,469 @@
+#+title:      types
+#+date:       [2026-09-25 Fri 11:17]
+#+filetags:   :csapp:
+#+identifier: 20260925T111751
+* Types in C
+
+本节学习的重点是:
+
+#+begin_quote
+C如何把数学意义上的“整数”，映射成有限位宽的机器数据，并规定表达式在这些机器类型之间如何流动。
+#+end_quote
+
+比如:
+
+#+begin_src c
+  short a = 30000;
+  short b = 30000;
+
+  short c = a + b;
+#+end_src
+
+这里并不是“两个 ~short~ 做加法，然后溢出”。而实际上是:
+
+#+begin_example
+内存:
+a : short
+b : short
+
+表达式:
+a -> integer promotion -> int
+b -> integer promotion -> int
+a + b -> int + int -> int, 结果是 60000
+
+赋值:
+60000 -> short
+#+end_example
+* 新的整数类型模型
+
+在高级语言里，我们可能会这样理解:
+
+#+begin_src python
+  x = 100
+  y = 200
+  z = x + y
+#+end_src
+
+在 Python 中更加接近: ~x~ 是一个整数对象， ~+~ 表示数学意义上的整数加法，只要内存够，整数就可以继续长大。
+
+而在 C 中:
+
+#+begin_src c
+  int x = 100;
+  int y = 200;
+  int z = x + y;
+#+end_src
+
+这里面至少包含了这些信息:
+
+对于 x:
+
+- 存储空间有多大
+- 哪些 bit pattern 合法
+- bit pattern 如何解释
+- 算术运算在哪一种类型里执行
+- CPU 应该使用什么宽度
+- 运算结果应该写回到哪里
+
+
+所以C的整数类型首先是“有限的机器值域”，其次才是数学整数。
+
+在典型的 x86-64 Linux中:
+
+| C类型        | 常见大小 | 典型范围            |
+|-------------+--------+-------------------|
+| ~char~      | 1B     | 与 signedness 有关 |
+| ~short~     | 2B     | -32768 -- 32767   |
+| ~int~       | 4B     | -2^31 -- 2^31 - 1 |
+| ~long~      | 8B     | -2^63 -- 2^63 - 1 |
+| ~long long~ | 8B     | -2^63 -- 2^63 - 1 |
+
+但C标准并没有规定 ~short~ 就一定是16bit, ~int~ 就一定是 32 bit. 规定的是一系列最低要求、大小关系和值域关系。
+
+例如Linux x86-86 通常是 LP64:
+
+#+begin_example
+int 32
+long 64
+pointer 64
+#+end_example
+
+而 Windows x64 却是 LLP64:
+
+#+begin_example
+int 32
+long 32
+long long 64
+pointer 64
+#+end_example
+
+所以 ~long~ 并不是“天然的64位整数”。
+
+
+* 表达式有自己的类型
+
+这是理解 promotion, usual arthmetic conversions 和溢出的核心。
+
+很简单的实验:
+
+#+begin_src c
+  short st = SHRT_MAX;
+  printf("%d\n", st + 1);
+#+end_src
+
+直觉上可能是 ~short 最大值 + 1 = short 溢出~ . 但编译器看见的是：
+
+#+begin_example
+st
+short
+ │
+ │ integer promotion
+ ▼
+int
+
+1
+int
+ │
+ ▼
+
+int + int
+    │
+    ▼
+   int
+#+end_example
+
+因此表达式 ~st + 1~ 的类型其实是 ~int~ 。假设 ~SHRT_MAX = 32767~, 那么 ~st + 1~ 的值就是 32768, 不会发生溢出。
+
+* Integer Promotion
+
+CPU 不喜欢拿小数做算术。
+
+先看这个:
+
+#+begin_src c
+  unsigned char x = 250;
+  printf("%d\n", x + 10);
+#+end_src
+
+这里的结果直接是 260. 原因是:
+
+#+begin_example
+unsigned char x
+       │
+       │ integer promotion
+       ▼
+      int
+       │
+       ├── 250
+       │
+10 ────┘
+       │
+       ▼
+   int addition
+       │
+       ▼
+      260
+#+end_example
+
+这里我们可以明显看到:
+
+_变量的存储类型和表达式进行运算时使用的类型不是一回事_ 。这是C特别重要的特点。
+
+** Integer Promotion 的规则
+
+以下类型在参与很多表达式时:
+
+#+begin_example
+_Bool
+char
+signed char
+unsigned char
+short
+unsigned short
+#+end_example
+
+会首先进行 integer promotion. 核心规则是:
+
+- 如果 ~int~ 能表示该类型的所有可能值，就转换成 ~int~
+- 否则，就转换成 ~unsigned int~
+
+
+比如在典型机器上， ~unsigned short~ 的取值范围是 0-65535, 而 ~int~ 的取值范围是 -2147483648-2747483647, 所以 ~int~ 完全可以覆盖 ~unsigned short~, 所以在表达式运算时 ~unsigned short~ 会被转换成 ~int~ 。
+
+比如 ~unsigned short x = 65535~ ，在参与 ~x + 1~ 后的其实是 ~(int)x + 1~ 这样的表达形式。
+
+* 为什么C要设计 Integer promotion
+
+假设:
+
+#+begin_src c
+  unsigned char a;
+  unsigned char b;
+  a + b
+#+end_src
+
+CPU 当然可以执行8-bit加法。但是C语言历史上围绕机器的“自然整数宽度”设计，而 ~int~ 大致承担了 _当前机器比较自然、高效的基本整数计算类型_ 。所以很多“小于 int 的整数”进入表达式后会先升到 ~int~ 。
+
+因此，诸如 ~char~, ~short~, ~_Bool~ 这类很大程度上可以看成是 _更偏向于存储宽度的类型_, 而 ~int~ 更偏向于 _默认算术宽度_ 。
+
+当然现代CPU的情况比这个历史模型复杂的多，但作为理解 promotion 的模型很好用。
+
+
+* usual arithmetic conversions
+
+Integer pormotion 只回答: ~char~, ~short~ 这种小类型怎么办？
+
+但是像如果将 ~int~ 与 ~unsigned int~ 相加的情况，到底是使用 ~int~ 还是 ~unsigned int~ 呢？再比如 ~long~ 与 ~unsigned int~ , 应该使用什么呢？
+
+于是就出现了 usual arithmetic conversions, 它的目的其实就是:
+
+#+begin_quote
+找到一个共同类型，然后把A和B都转换到这个共同类型，执行运算。
+#+end_quote
+
+整数的转换规则可以参考:
+
+| 情况                                        | 结果                              |
+|--------------------------------------------+----------------------------------|
+| 先处理 ~char~ / ~short~ 等                   | integer promotion                |
+| 两边已经同类型                                | 直接使用                           |
+| signedness 相同                             | 较低 rank -> 较高 rank             |
+| unsigned 的 rank >= signed                 | signed -> unsigned               |
+| signed 的 rank 更高，且能表示 unsigned 的所有值 | usigned -> signed                |
+| 否则                                        | 两者变成对应的 unsigned signed-type |
+
+这里的 ~rank~ 的基本可以理解为:
+
+#+begin_quote
+_Bool < char < short < int < long < long long
+#+end_quote
+
+rank是语言上的概念，不能简单理解为 ~sizeof()~
+
+* 危险的例子
+
+根据上面的转化规则，设想这样的情况:
+
+#+begin_src c
+  int x = -1;
+  unsigned int y = 1;
+  printf("%d\n", x < y);
+#+end_src
+
+这里从数学角度理解，显然结果应该是1. 但典型C程序的运行结果却是0. 因为虽然 ~int~ 和 ~unsigned int~ 的 rank 一样，但是 signedness 不一样。按照规则，如果 unsigned 的 rank >= signed 的，那么就要从 signed 转化为 unsigned.  也就是说， ~int x = -1~ 要被转化成 ~unsigned int x~, ~-1~ 就会被变成 ~UINT_MAX~ 。因此结果是0。
+
+** 为什么 ~-1~ 会被变成 ~UINT_MAX~
+
+无符号转换有一个很干净的数学模型。对于N位的unsigned, 直接计算:
+
+#+begin_quote
+value mod 2^N
+#+end_quote
+
+比如 ~unsigned int x = -1~, 那么假设 unsigned int 是8B 32 bit的，那么计算过程就是:
+
+#+begin_quote
+-1 mod 2^32
+#+end_quote
+
+得到的结果就是4294967295。 bit pattern 就是: ~11111111 11111111 11111111 11111111~ 。
+
+从这里我们就能看到 bit pattern 和C value的区别了。同样的bit pattern, 在 ~signed int~ 下就会被解释为 ~-1~, 但是在 ~unsigned int~ 下就会被解释为 ~UINT_MAX~ 。
+
+所以我们可以得到一个体系结构的视角:
+
+#+begin_quote
+内存里通常没有“signed bit pattern”和“unsigned bit pattern”的区别。区别只来自于程序如何解释这些bit.
+#+end_quote
+
+* 从汇编角度理解
+
+对下面的内容，保存为 ~less.c~:
+#+begin_src c
+  int signed_less(int a, int b)
+  {
+      return a < b;
+  }
+
+  int unsigned_less(unsigned a, unsigned b)
+  {
+      return a < b;
+  }
+#+end_src
+
+然后执行:
+
+~gcc -O2 -S -masm=intel less.c~
+
+会得到一个 ~less.s~ ，这就是从该文件得到的汇编文件。在里面我们会看到:
+
+#+begin_src asm
+  signed_less:
+  .LFB0:
+  	.cfi_startproc
+  	endbr64
+  	xor	eax, eax
+  	cmp	edi, esi
+  	setl	al
+  	ret
+  	.cfi_endproc
+
+  unsigned_less:
+  .LFB1:
+  	.cfi_startproc
+  	endbr64
+  	xor	eax, eax
+  	cmp	edi, esi
+  	setb	al
+  	ret
+  	.cfi_endproc
+#+end_src
+
+注意这里特别漂亮。上下的都是 ~cmp~ ，说明CPU所做的减法本质是一样的。区别只在于 ~setl~ 和 ~setb~ 。
+
+核心都是 ~cmp edi, esi~ ，也就是做 ~edi - esi~, 但不保存结果，只更新标志位。区别在后面的条件判断。
+
+~setl al~ 里的 ~l~ 是less, 表示“有符号小于”。而 ~setb al~ 里的 ~b~ 是 below, 表示“无符号低于”。
+
+~cmp~ 本身并不知道是 signed 还是 unsigned, ~cmp edi, esi~ 在这两种情况下所做的完全一样，都只是让 ~EDI - ESI~ ，并设置一堆 flag:
+
+- ZF: Zero Flag
+- SF: Sign Flag
+- CF: Carry Flag
+- OF: Overflow Flag
+
+
+到底把这次减法理解为 signed 还是 unsigned, 是根据后面的条件跳转/条件赋值来决定的:
+
+- ~setl~ -> signed a < b
+- ~setb~ -> unsigned a < b
+
+
+从 CPU 的角度，对于一个 ~0xffffffff~, CPU 并不会天然认为它就是 ~-1~ 或者 ~UINT_MAX~, 它就是32位的 bit pattern:
+
+~11111111 11111111 11111111 11111111~
+
+是C/C++类型系统以及对应生成的 ~setl~ / ~setb~ 之类的指令，决定了如何解释这些bit pattern.
+
+
+** 甚至整数加法通常不知道 signedness
+
+如果我们改成:
+
+#+begin_src c
+  int add_signed(int a, int b)
+  {
+      return a + b;
+  }
+
+  unsigned add_unsigned(unsigned a, unsigned b)
+  {
+      return a + b;
+  }
+#+end_src
+
+其产生的汇编会形如:
+
+#+begin_src asm
+  add_signed:
+  .LFB0:
+  	.cfi_startproc
+  	endbr64
+  	lea	eax, [rdi+rsi]
+  	ret
+  	.cfi_endproc
+  add_unsigned:
+  .LFB1:
+  	.cfi_startproc
+  	endbr64
+  	lea	eax, [rdi+rsi]
+  	ret
+  	.cfi_endproc
+#+end_src
+
+可以看到完全一致。CPU并没有去区分signed和unsigned两种完全不同的普通加法，它们的bit pattern本身也是一样的。差异主要存在于语言语义等内容上面。这就是“C控制数据”的具体含义之一。
+
+* 三种溢出情况
+
+这三种必须严格区分。
+
+** 情况A: unsigned arithmetic overflow
+
+#+begin_src c
+  unsigned x = UINT_MAX;
+  x = x + 1;
+#+end_src
+
+结果是定义良好的: ~0~ 。因为 unsigned 算术是 modulo arithmetic, 也就是 ~mod 2^N~ 。
+
+** 情况B: signed arithmetic overflow
+
+#+begin_src c
+  int x = INT_MAX;
+  x = x + 1;
+#+end_src
+
+在C17里面，这属于 Undefined Behavior ，不能保证每次都会得到 ~INT_MIN~ 。
+
+** 情况C: 转换超出目标 signed 的类型范围
+
+例如:
+
+#+begin_src c
+  int x = 32768;
+  short s = x;
+#+end_src
+
+这里并不能算作 short arithmetic overflow, 因为压根就没有进行short运算。这里只是 int -> short 的转换(conversion) 。按照 C17 的语境：
+
+#+begin_quote
+如果值不能由目标signed表示，结果是 implementation-defined, 或者可能产生 implementation-deifned signal. 也就是说，这是依赖不同平台的实现的。
+#+end_quote
+
+在常见的 x86/GCC/Clang 上通常会得到结果 ~-32768~, 但是语义需要分清楚。
+
+* signed overflow 为什么是UB
+
+#+begin_src c
+  int f(int x) {
+    return x + 1 > x;
+  }
+#+end_src
+
+从CPU思维来看，如果 ~x == INT_MAX~ ， ~INT_MAX + 1 -> INT_MIN~ 所以是 false. 但在 C 中这种想法是错误的。因为 ~INT_MAX + 1~ 已经是 undefined behavior, 对于所有定义良好的程序输入 ~x + 1~ ，只可能发生在 ~x < INT_MAX~ 。因此编译器可以推理: ~x + 1 > x~ 永远为真。这就是为什么UB不能简单理解为“运行时会发生奇怪行为”，更重要的是 *UB给了编译器一种假设：合法程序绝不会到达这种状态* 。所以优化器能够据此改变甚至删除代码。
+
+
+* Usual Arithmetic Conversions 最值得研究的是 mixed signedness
+
+比如:
+
+#+begin_src c
+  long x = -1;
+  unsigned int y = 1;
+
+  printf("%d\n", x < y);
+#+end_src
+
+在典型的 linux x86-64 LP64 中:
+
+#+begin_example
+long:
+64-bit signed
+
+unsigned int:
+32-bit unsigned
+#+end_example
+
+这里 ~long~ 的 rank 更高。同时，64-bit signed long: -2^63 ... 2^63-1, 可以完整表示 unsigned int 的 0...2^32-1 ，所以就会发生 ~unsigned int -> long~ .比较就变成 ~-1L < 1L~ ，结果就是 true.
+
+这和 ~unsigned int 1~ 与 ~int 1~ 的比较结果完全不同。正确的分析过程应该是:
+
+1. 类型是什么
+2. 是否发生 integer promotion
+3. rank 谁更高
+4. signedness 是否相同
+5. signed 类型能不能容纳 unsigned 的所有值
+6. common type 是什么
+
+
+
