@@ -9,6 +9,8 @@
 /org-roam.db-*
 *.html
 
+/build/
+
 build/
 
 *.trash/
