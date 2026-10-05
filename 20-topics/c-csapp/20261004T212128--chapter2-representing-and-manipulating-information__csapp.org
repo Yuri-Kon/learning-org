@@ -1,0 +1,12 @@
+#+title:      chapter2-representing-and-manipulating-information
+#+date:       [2026-10-04 Sun 21:21]
+#+filetags:   :csapp:
+#+identifier: 20261004T212128
+
+* Representing and Manipulating Information
+
+主线:
+
+数据表示 -> 机器级指令 -> 编译 -> 处理器 -> 性能 -> 存储器。
+
+重点是理解 *C程序最终如何在真实机器上被表示和执行* 。

@@ -1,0 +1,10 @@
+#+title:      index
+#+date:       [2026-10-01 Thu 21:50]
+#+filetags:   :csapp:index:
+#+identifier: 20261001T215004
+
+* CSAPP With C
+
+使用 Linux 上的C编程来学习 CSAPP
+
+本次学习过程中，仍然按照章节目录布局，但是不再大量书写笔记，而是只记录必要的结果、分析和心得。每章一篇笔记，以及对应的实验项目。

@@ -1,0 +1,111 @@
+#+title:      lesson6-coordinates
+#+date:       [2026-10-03 Sat 22:17]
+#+filetags:   :matplotlib:
+#+identifier: 20261003T221755
+* 坐标系统与 ~transform~
+
+Matplotlib 中不止有一种坐标系。最值得掌握的是三种:
+
+- Data coordinates
+- Axes coordinates
+- Figure coordinates
+
+
+以及连接它们的核心概念: ~transform~
+
+~ax.text(3 ,5, "hello")~ 这里的坐标 ~(3, 5)~ 默认坐标是 data coordinates, 也就是 Axes 中的数据坐标。可以近似理解为 ~ax.text(3, 5, "hello", transform=ax.transData)~ 。
+
+其他坐标系的作用是标定某些特殊的内容。考虑这种情况:
+
+#+begin_src python
+  ax.set_xlim(0, 10)
+  ax.set_ylim(0, 10)
+  
+  ax.text(5, 9, "Title")  
+#+end_src
+
+标题差不多在顶部。但是如果以后修改 ~ax.set_ylim(0, 1000)~ ，这样标题仍然在 (5, 9), 就会跑到最下面了。因为这里的坐标是数据坐标，但是标题这种东西通常不是数据的一部分。于是就需要 Axes coordinates.
+
+* Axes coordinates
+
+在 Axes coordinates 中，整个 Axes 被归一化为 (0, 0) - (1, 1) 的矩阵。
+
+所以我们写:
+
+#+begin_src python
+  ax.text(
+      0.5,
+      0.95,
+      "Title",
+      transform=ax.transAxes
+  )
+#+end_src
+
+就表示标题在 ~x = Axes 宽度的 50%~, ~y = Axes 高度的 95%~ 的位置。这样无论 Axes 的尺寸怎么变，它始终位于顶部中央附近。
+
+* Figure coordinates
+
+同样， Figure coordinates 中整个 Figure 也被归一化为 (0,0) - (1,1) 的矩阵。注意区分 Figure 与 Axes:
+
+
+#+begin_export ascii
+Figure
+
+┌─────────────────────────────────┐
+│                                 │
+│       Axes                      │
+│     ┌─────────────────────┐     │
+│     │                     │     │
+│     │                     │     │
+│     └─────────────────────┘     │
+│                                 │
+└─────────────────────────────────┘
+#+end_export
+
+Axes 代表的是绘图区， Figure 是整个容器。
+
+* ~annotate~ 也支持不同的坐标系
+
+比如:
+
+#+begin_src python
+  ax.annotate(
+    "Top right",
+    xy=(0.9, 0.9),
+    xycoords="axes fraction"
+)
+#+end_src
+
+这就是在 Axes 顶部、最右边的位置。
+
+~annotate~ 中，箭头指向的位置 ~xy~ 和文字指向的位置 ~xytext~ 可以使用不同的坐标系:
+
+#+begin_src python
+  ax.annotate(
+    "Processor",
+    xy=(3, 2),
+    xycoords="data",
+
+    xytext=(0.8, 0.8),
+    textcoords="axes fraction",
+
+    arrowprops={
+        "arrowstyle": "->"
+    }
+)
+#+end_src
+
+对于标注，还有一个坐标系: ~offset points~:
+
+#+begin_src python
+  ax.annotate(
+    "read",
+    xy=(3, 4),
+    xycoords="data",
+
+    xytext=(-10, 10),
+    textcoords="offset points"
+)
+#+end_src
+
+这里 ~(-10, 10)~ 的意思是从 ~(3, 4)~ 向左10 points, 向上 10 points

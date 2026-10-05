@@ -1,0 +1,103 @@
+#+title:      csapp_perface
+#+date:       [2026-10-01 Thu 15:51]
+#+filetags:   :csapp:
+#+identifier: 20261001T155137
+* CSAPP 前言
+
+#+begin_quote
+The only way to learn systems is to do systems, either working concrete problems or writing and running programs on real systems
+#+end_quote
+
+本书一共12章。
+
+** Chapter1: 介绍计算机系统中的主要 ideas / themes
+
+** Chapter2: 涵盖计算算术， two's-complement number representations, 数字如何被表示。
+
+** Chapter3: Machine-Level Representation of Programs.
+
+阅读C编译器生成的x86-64机器码。包括:
+- 针对不同控制结构生成的指令模式
+- procedure 的实现，包括 stack allocation, register usage conventions, parameter passing
+- structure, union, arrays 不同数据结构的分配(allocate)与访问(access)方式
+- 实现 integer and floating-point 算术的指令
+- 从机器视角理解常见代码安全漏洞(buffer overflow)
+- 建立对指针透彻而具体的理解
+
+** Chapter4: Processor Architecture
+
+基本的 combinational(组合)和sequential(时序) logical elements. 展示这些元件如何组合成数据通路以执行一个 X86-64 的简化子集 -- Y86-64:
+- single-cycle datapath(单周期数据通路) 的设计
+- pipelining(流水线)
+
+** Chapter5: Optimizing Program Performance: 一系列提升代码性能的技术
+- 能减少程序工作量的 transforamtions.
+- 增强生成机器码中指令级的并行性的 transformations
+- 引入一个简单的操作模型，描述现代 out-of-order processor 是如何工作的
+
+** Chapter6: The Memory Hierarchy: 存储器层次结构.
+
+存储器系统由容量(capacity), 成本(cost), 访问时间(access time)等各不相同的存储结构所构成的层次结构(hierarchy)
+- 不同类型的随机访问存储器(RAM, Random Access Memory) 和 只读存储器(ROM, Read-Only Memory)，磁盘驱动器(magnetic-disk drive) 和 固态驱动器(solid-state drive) 的几何结构与组织方式。
+- 说明这些存储设备如何组织成一个层次结构
+- 引用局部性(locality of reference): 存储器山(memory mountain)
+- 如何改善程序的时间局部性(temporal locality)和空间局部性(spatial locality)以提高程序的性能
+
+** Chapter7: Linking: 链接
+- 静态链接(static linking) 和 动态链接(dynamic linking)
+- 可重定向目标文件(relocatable object file) 和 可执行目标文件(executable object file)
+- 符号解析 (symbol resolution), 重定位 (relocation), 静态库(static library), 共享目标库(shared object library)
+- 位置无关代码(position-independent code, PIC), 库存打桩(library interpositioning)
+
+** Chapter8: Exceptional Control Flow: 异常控制流
+
+这一部分将超越单一程序模型(single-program model), 引入异常控制流(exceptional control flow)这一一般性概念。
+
+异常控制流：发证在正常分支和过程调用(proceduce call)之外的控制流变化。
+
+- 底层的硬件异常(hardware exception)和中断(interrupt)
+- 并发进程(concurrent process) 之间的上下文切换(context switch)
+- 接受Linux信号引起的控制流突变
+- C语言中打破栈式调用记录(stack discipline)的非本地跳转(nonlocal jump)
+
+本章还将引入进程(process)的概念。进程是对正在执行的程序的一种抽象。
+
+** Chapter9: Virtual Memory: 虚拟内存
+
+介绍虚拟内存系统。理解为什么多个同时运行的进程可以各自使用完全相同的地址范围，其中一些页面(page)可以共享，而另一些页面则各自拥有独立的副本。
+
+- 管理和操纵虚拟内存时设计的问题：
+  - 存储分配器(storage allocator)的工作方式, 例如标准库中的 ~malloc~ 和 ~free~ 操作
+  - 虚拟内存空间(virtual memory space) 本质上就是一个字节数组(array of bytes), 程序可以将其划分为不同的存储单元(storage unit)
+  - 内存引用错误(memory referencint error)所造成的影响，例如内存泄漏(storage leak)和无效指针引用(invalid pointer reference)
+
+
+** Chapter10: System-Level I/O: 系统级I/O
+
+介绍 Unix I/O 的一些基本概念。例如文件(file)和描述符(descriptor)。
+
+- 文件是如何共享的
+- I/O重定向(redirection)是如何工作的
+- 如何访问文件元数据(file metadata)
+- 实现一个健壮的带缓冲I/O包(buffered I/O package)
+- 介绍C标准I/O库以及它与Linux I/O之间的关系，并重点介绍标准I/O的一些局限性
+
+
+** Chapter11: Networking Programming: 网络编程
+
+对网络进行编程，会将之前学习的很多概念都联系起来，例如进程、信号、字节序(byte ordering)、内存映射(memory mapping) 以及动态存储分配(dynami storage allocation)
+
+网络程序还为并发(concurrency)提供了一个很有代表性的应用背景。
+
+** Chapter12: Concurrent Programming: 并发编程
+
+以 Internet 服务器的设计作为贯穿始终的示例，引入并发编程。
+
+- 比较编写并发程序的三种基本机制——进程、I/O多路复用(I/O multiplexing)和线程(thread)
+- 同步(synchronization)的基本原理:
+  - 信号量(semaphore)的P操作和V操作
+  - 线程安全(thread safety)
+  - 可重入性(reentrancy)
+  - 竞态条件(race condition)
+  - 死锁(deadlock)
+- 如何利用线程级编程(thread-level programming)在程序中表达并行性(parallelism)

@@ -1,0 +1,101 @@
+#+title:      FILE_and_stream
+#+date:       [2026-09-28 Mon 21:25]
+#+filetags:   :csapp:
+#+identifier: 20260928T212555
+* stream
+
+~FILE~ 不要理解为“磁盘上的文件类型”。更准确地说，C标准库把 I/O 抽象成了 stream, 而 ~FILE~ 是标准库用来保存一个 stream 状态的对象类型；程序通常只持有 ~FILE*~ 。
+
+#+begin_example
+磁盘上的文件
+    │
+    │ fopen("foo.bin", "rb")
+    ▼
+C I/O stream
+    │
+    │ 由一个 FILE object 维护状态
+    ▼
+FILE *fp
+    │
+    ├── fread(...)
+    ├── fseek(...)
+    ├── feof(...)
+    ├── ferror(...)
+    └── fclose(...)
+#+end_example
+
+磁盘上的file是外部资源； stream 是程序与这个资源进行顺序 I/O 的抽象管道； ~FILE~ object 则保存这个通道所需要的状态。它通常涉及缓冲区、当前位置、 EOF/error 状态、字符宽度 / orientation 等，但 C 并不要求程序知道 ~FILE~ 的内部布局。
+
+在 Linux / POSIX 上还可以再往下一层看:
+
+#+begin_example
+C 程序
+
+FILE * / stdio stream
+        │
+        │ libc
+        ▼
+file descriptor
+        │
+        │ kernel
+        ▼
+open file description
+        │
+        ▼
+filesystem / device
+#+end_example
+
+POSIX 明确区分了 stream 和 file descriptor: ~fopen()~ 创建的是 stream, 而 ~open()~ 创建的是 file descriptor; 两者可以最终访问同一个底层 open-file description.
+
+所以以后看到:
+
+#+begin_src c
+  FILE *fp = fopen(path, "rb");
+#+end_src
+
+不要直接理解成 ~fp -> 文件~ , 更适合理解成:
+
+#+begin_example
+fp
+ │
+ ▼
+[ FILE object / stream state ]
+ │
+ ▼
+external file
+#+end_example
+
+* 为什么观察任意字节时，要使用 ~unsigned char~
+
+C中，一个非 bit-field 对象由连续的一个或多个 byte 构成；这些 byte 构成它的 object representation. C 还特别允许通过 character type 去访问其他类型的对象表示，而 ~unsigned char~ 很适合作为“纯字节”类型：它没有padding/trap representation, 每一种 bit pattern 都对应一个不同的值。 cppreference 也直接用 ~unsigned char[n]~ 来描述对象表示。
+
+这意味着，对于:
+
+#+begin_src c
+  int x = 12345678;
+  unsigned char *p = (unsigned char *)&x;
+#+end_src
+
+这里如图:
+
+#+begin_export ascii
+x: int object
+
+┌──────┬──────┬──────┬──────┐
+│ byte │ byte │ byte │ byte │   假设 sizeof(int) == 4
+└──────┴──────┴──────┴──────┘
+   ↑
+unsigned char *
+#+end_export
+
+~unsigned char~ 是逐byte观察 object representation 的窗口。
+
+这里为什么不优先用 ~char~ 呢？因为 plain ~char~ 是 signed 还是 unsigned 取决于实现。例如一个 byte:
+
+#+begin_example
+11111111 = 0xff
+#+end_example
+
+用 ~unsigned char~, 它有一个明确的非负值。如果用 ~signed char~, 它可能表现为负值。对于 hex dump, “一个byte -> 一个0x00...0xff的数” 正是我们想要的模型。
+
+而为什么不用 ~int *~ ？因为 ~int~ 要表达的是一个完整的整数对象，不是一个byte, 而且任意对象不能随便通过 ~int~ lvalue 访问； character type 则是 C aliasing 规则中的特殊例外。
