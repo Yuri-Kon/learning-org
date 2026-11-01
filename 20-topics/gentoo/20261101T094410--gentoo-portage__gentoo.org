@@ -181,4 +181,64 @@ Total: 1 package (1 reinstall), Size of downloads: 0 KiB
 
 这段代码列举了需要收集的元数据键，然后通过专用管道将其传递给包管理器。
 
+这里有个性能问题：如果每次 ~emerge -pv~ 都需要执行大量的 ebuild 来读取元数据，开销就会很大。所以 Portage 支持 **元数据缓存(metadata cache)**, 官方仓库一般包含预生成的 ~metadata/md5-cache/~, Portage 可以直接读取有效的缓存，而不必每次都加载 ebuild.
 
+接下来我们观察真实的元数据缓存:
+
+#+begin_src shell :results output
+  repo=$(portageq get_repo_path / gentoo)
+
+  ebuild_file=$(
+      # 选择Portage中除了mask之外的版本号最高的ebuild文件
+      fd -d 1 '[^(9999)].ebuild$' "$repo/sys-apps/portage" |
+          sort -V |
+          tail -n 1
+             )
+
+  echo "$ebuild_file"
+  echo
+
+  cache="$repo/metadata/md5-cache/sys-apps/$(basename "$ebuild_file" .ebuild)"
+
+  if [[ -f "$cache" ]]; then
+      rg -n '^(EAPI|DESCRIPTION|SLOT|KEYWORD|IUSE|DEFINED_PHASES)=' "$cache"
+  else
+      echo "No md5-cache file"
+  fi
+#+end_src
+
+#+RESULTS:
+: /var/db/repos/gentoo-git/sys-apps/portage/portage-3.0.83-r1.ebuild
+: 
+: 2:DEFINED_PHASES=compile configure install postinst preinst prepare pretend setup test
+: 3:DESCRIPTION=The package management and distribution system for Gentoo
+: 4:EAPI=8
+: 7:IUSE=apidoc build doc gentoo-dev +ipc +native-extensions +rsync-verify selinux test xattr python_targets_python3_12 python_targets_python3_13 python_targets_python3_14 python_targets_python3_15
+: 14:SLOT=0
+
+- ~.ebuild~ 是 Bash 程序
+- ~md5-cache~ 是提取后的元数据，方便包管理器查询
+- ~DEFINED_PHASE~ 表示 ebuild 或继承的 eclass 定义了哪些阶段函数
+
+
+那么我们来到这个假设:
+
+#+begin_src shell
+  EAPI=8
+
+  DESCRIPTION="Example"
+  SLOT="0"
+
+  src_compile() {
+      RDEPEND="dev-libs/openssl"
+      emake
+  }
+#+end_src
+
+那么 Portage能否通过正常的元数据提取过程，发现这个程序依赖 ~dev-libs/openssl~ 呢？
+
+答案是不能。 Portage 在提取这个ebuild的元数据时，会加载并求值顶层Bash代码，但并不会自动执行 ~src_compile~. 这里要理解 Portage 的实现机制:
+
+- 加载 ebuild: 求值顶层代码，包括变量赋值、函数定义和 inherit 调用
+- 执行构建阶段: 在相应阶段调用 ~src_unpack()~, ~src_compile()~ 和 ~src_install()~ 等函数
+- 依赖解析: 使用以获取的元数据，而不是实际编译软件来发现依赖
