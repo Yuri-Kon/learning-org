@@ -242,3 +242,117 @@ Total: 1 package (1 reinstall), Size of downloads: 0 KiB
 - 加载 ebuild: 求值顶层代码，包括变量赋值、函数定义和 inherit 调用
 - 执行构建阶段: 在相应阶段调用 ~src_unpack()~, ~src_compile()~ 和 ~src_install()~ 等函数
 - 依赖解析: 使用以获取的元数据，而不是实际编译软件来发现依赖
+
+
+*** Bash 的求值顺序
+
+考虑一段普通的 Bash 脚本:
+
+#+begin_src shell
+  RDEPEND=""
+
+  src_compile() {
+      RDEPEND="dev-libs/openssh"
+  }
+
+  DESCRIPTION="Example"
+#+end_src
+
+假设这个文件叫 ~demo.sh~, 那么通过:
+
+#+begin_src shell
+  source demo.sh
+#+end_src
+
+可以把它加载到当前的Shell.
+
+Bash 会依次处理三个顶层结构:
+
+| 结构                   | 加载时的行为           |
+|------------------------+------------------------|
+| ~RDEPEND=""~           | 立即执行赋值           |
+| ~src_compile() {...}~  | 定义函数，不执行函数体 |
+| ~DESCRIPTION="Example" | 立即执行赋值           |
+
+
+因此，在加载完毕后， ~RDEPEND~ 仍然是空字符串；而 ~src_compile~ 已经成为一个可以调用的函数。只有在执行 ~src_compile~ 之后，才会修改 ~RDEPNED~.
+
+*** Portage 的真实调用路径
+
+1. Python: 首先查找元数据缓存
+   源码入口: [[https://github.com/gentoo/portage/blob/master/lib/portage/dbapi/porttree.py]]
+
+   #+begin_src python
+     mydata, ebuild_hash = self._pull_valid_cache(
+         mycpv, myebuild, mylocation
+     )
+   #+end_src
+
+   接着会检查:
+
+   #+begin_src python
+     if mydata is None:
+         # 运行元数据生成过程
+         ...
+   #+end_src
+
+   这说明 Portage 并不需要每次查询都加载 ebuild. 首先会尝试复用缓存，只有缓存不存在或不能通过验证时才需要生成元数据。
+
+2. Python: 启用元数据生成阶段
+   继续进入: [[https://github.com/gentoo/portage/blob/master/lib/_emerge/EbuildMetadataPhase.py#L53]]
+
+   找到 ~EbuildMetadataPhase._async_start()~, 它会调用:
+
+   #+begin_src python
+     retval = doebuild(
+         ebuild_path,
+         "depend",
+         settings=settings,
+         # 其他参数略
+     )
+   #+end_src
+
+   注意这里的 ~"depend"~, 它是 Portage 内部提取元数据的阶段，不等于 ~DEPEND~ 依赖变量。
+
+   随后 Python 会通过构建执行逻辑准备环境，启动对应的 Bash 处理流程。
+
+3. Bash: 真正加载 ebuild
+
+   进入: [[https://github.com/gentoo/portage/blob/master/bin/ebuild.sh]]
+
+   这里会 ~source "${EBUILD}"~ ，这个调用将 ebuild 加载进 bash 环境，之后 Portage 检查已定义的阶段函数，并在 ~depend~ 阶段收集变量，例如:
+
+   #+begin_src shell
+     DEPEND
+     RDEPEND
+     SLOT
+     SRC_URI
+     LICENSE
+     KEYWORDS
+     IUSE
+     DEFINED_PHASES
+   #+end_src
+
+   收集到的元数据通过专门的文件描述符传回 Python 进程，而不是依赖解析器直接解析 Bash 语法。当 Python 收到 ~RDEPEND~ 时， Bash 中的 ~src_compile()~ 根本没有作为构建阶段被执行。
+
+4. Python: 重新接收 Bash 的结果
+
+   回到 ~EbuildMetadataPhase.py~, 会发现 Python 读取管道中的文本，并按照 ~key=value~ 的格式转换为字典。
+
+   其核心逻辑可以概括为:
+
+   #+begin_src python
+     metadata = {}
+     for line in metadata_lines:
+         key, value = line.split("=", 1)
+         metadata[key] = value
+   #+end_src
+
+   这样，Bash 中的 ~RDEPEND="dev-libs/openssl"~ 最终就能成为 Python 可以处理的元数据:
+   #+begin_src python
+     {
+         "RDEPEND": "dev-libs/openssl"
+     }
+   #+end_src
+
+   之后由依赖解析器进一步解释这个字符串，而不是将它当作普通 Python 代码执行。
