@@ -1,0 +1,1154 @@
+#+title:      lua_system
+#+date:       [2026-10-05 Mon 23:14]
+#+filetags:   :lua:
+#+identifier: 20261005T231452
+* 深入 Lua
+
+这一段我们的学习目的是做一个控制系统。学习路线包括:
+
+1. closure / upvalue / 状态封装 —— 多个子系统如何共享或隐藏状态
+2. coroutine —— ~create~ / ~resume~ / ~yield~ / ~status~ ，理解 “协作式并发”
+3. event loop —— 写一个极简事件循环
+4. 并发与同步 —— 多个 coroutine 同步控制状态时，什么时候安全，什么时候产生逻辑 race
+5. 状态机
+6. module / ~require~ / 错误处理
+7. 实现一个小型自动化控制中心
+
+* coroutine
+
+** coroutine 概览
+
+我们先来看这一个实例:
+
+#+begin_src lua :results output
+  local co = coroutine.create(
+      function(x)
+          print("worker: start", x)
+          local y = coroutine.yield(x + 1)
+          print("worker: resumed", y)
+          return y * 2
+      end
+  ) -- create but not perform
+
+  print("1:", coroutine.status(co))
+
+  local ok, value = coroutine.resume(co, 10) -- switch to function, forward yield
+  print("2:", ok, value)
+  print("3:", coroutine.status(co))
+
+  ok, value = coroutine.resume(co, 20) -- switch to function, forward return
+  print("4:", ok, value)
+  print("5:", coroutine.status(co))
+#+end_src
+
+#+RESULTS:
+: 1:	suspended
+: worker: start	10
+: 2:	true	11
+: 3:	suspended
+: worker: resumed	20
+: 4:	true	40
+: 5:	dead
+
+我们梳理一下这的控制权:
+
+开始时:
+
+#+begin_export ascii
+main
+|
+| create
+|
+coroutine
+#+end_export
+
+~create~ 只是创建 coroutine, 不会执行。
+
+第一次:
+
+#+begin_src lua
+  coroutine.resume(co, 10)
+#+end_src
+
+控制权就变成:
+
+#+begin_export ascii
+main
+ |
+ | resume(10)
+ |
+coroutine # 控制权转移到 coroutine
+
+print("woker: start", 10)
+
+coroutine.yield(11)
+ |
+ |
+ |
+main
+#+end_export
+
+也就是说，在执行到 ~resume()~ 的时候，控制权会转移到 coroutine, 并在 coroutine 中执行直到 ~yield~ 或 ~return~. 
+
+于是 ~coroutine.resume(co, 10)~ 会返回 ~true, 11~
+
+这里就出现了一个 Lua coroutine 最重要的性质： *双向传值* :
+
+#+begin_export ascii
+resume ------> coroutine
+                 +
+                 | yield
+                 |
+caller <---------+
+#+end_export
+
+主函数通过 ~resume~ 向 coroutine 传值，然后 coroutine 通过 ~yield~ 向调用者传值。这就是双向传值。
+
+第二次:
+
+#+begin_src lua
+  coroutine.resume(co, 20)
+#+end_src
+
+这个 ~20~ 会成为之前 ~local y = coroutine.yield(x + 1)~ 整个的返回值。意思就是 ~yield(11)~ 第一次会向外发送 ~11~, 之后 ~resume(co, 20)~ 又把 ~20~ 送了回来。这个 ~20~ 就赋值给了 ~y~.
+
+~yield~ 后执行状态会保存，下一次 ~resume~ 会从暂停位置继续。
+
+所以 coroutine 可以理解成:
+
+#+begin_export ascii
+coroutine
+
+caller --value--> coroutine
+caller <--value-- coroutine
+caller --value--> coroutine
+caller <--value-- coroutine
+#+end_export
+
+这样双向传值的过程。
+
+Lua 在 ~yield~ 之后，局部变量和调用栈都会存在。所以对于 Lua coroutine 可以理解成:
+
+#+begin_export ascii
+C function
+call → run → return → dead
+
+Lua coroutine
+resume → run → yield
+           ↑      ↓
+           └──────┘
+          resume again
+#+end_export
+
+** coroutine 保存的是什么
+
+coroutine 保存的是整个执行现场。我们看这个实例:
+
+#+begin_src lua :results output
+  local function level3()
+      local c = 30
+      print("level3 before yield")
+
+      coroutine.yield("pause")
+
+      print("level3 after yield", c)
+  end
+
+  local function level2()
+      local b = 20
+      level3()
+      print("level2", b)
+  end
+
+  local function level1()
+      local a = 10
+      level2()
+      print("level1", a)
+  end
+
+  local co = coroutine.create(level1)
+
+  print(coroutine.resume(co))
+  print("--- main ---")
+  print(coroutine.resume(co))
+#+end_src
+
+#+RESULTS:
+: level3 before yield
+: true	pause
+: --- main ---
+: level3 after yield	30
+: level2	20
+: level1	10
+: true
+
+第一次执行 ~resume~ 的调用关系是:
+
+#+begin_export ascii
+main
+
+   resume
+     │
+     ▼
+
+level1
+  a = 10
+  │
+  └── level2
+        b = 20
+        │
+        └── level3
+              c = 30
+              │
+              yield
+#+end_export
+
+~yield~ 之后，并不会销毁 ~level3~, ~level2~, ~level1~, 而是整个调用栈被冻结:
+
+#+begin_export ascii
+┌───────────────────────────┐
+│ level3                    │
+│ c = 30                    │
+│ PC = position after yield │
+├───────────────────────────┤
+│ level2                    │
+│ b = 20                    │
+├───────────────────────────┤
+│ level1                    │
+│ a = 10                    │
+└───────────────────────────┘
+
+       suspended
+#+end_export
+
+第二次 ~resume~ 的时候，实际上相当于:
+
+#+begin_export ascii
+把整个 stack 解冻
+        │
+        ▼
+
+level3 继续
+    ↓
+level2 继续
+    ↓
+level1 继续
+#+end_export
+
+所以在第二次 ~resume~ 之后仍然能够正确打印。
+
+这就是 coroutine 与普通函数最大的区别之一。
+
+普通函数中:
+
+#+begin_export ascii
+call
+ ↓
+stack frame
+ ↓
+return
+ ↓
+stack frame 消失
+#+end_export
+
+而 coroutine:
+
+#+begin_export ascii
+resume
+ ↓
+stack frames
+ ↓
+yield
+ ↓
+stack frames 保存
+ ↓
+resume
+ ↓
+继续使用原 stack frames
+#+end_export
+
+因此，对 coroutine 更准确的理解是:
+
+#+begin_quote
+coroutine 是一条可以挂起和恢复的执行流，拥有自己的执行栈。
+#+end_quote
+
+Lua 官方资料也把 coroutine 描述为 independent thread of execution, 但这里的 ~thread~ 不是 OS thread.
+
+** Lua 与 Python generator 的重要区别
+
+假设 Python generator:
+
+#+begin_src python
+  def foo():
+      yield 1
+#+end_src
+
+很容易理解。
+
+但是 Lua 可以:
+
+#+begin_src lua
+  local function c()
+      coroutine.yield()
+  end
+
+  local function b()
+      c()
+  end
+
+  local function a()
+      b()
+  end
+
+  local co = coroutine.create(a)
+  coroutine.resume(co)
+#+end_src
+
+~yield~ 可以发生在:
+
+#+begin_export ascii
+a
+└── b
+    └── c
+        └── yield
+#+end_export
+
+让整个调用链一起 suspend 。这使得 coroutine 不仅适合写iterator, 更适合表达:
+
+#+begin_export ascii
+task
+ ├── read()
+ │    └── wait()
+ │         └── yield
+ │
+ ├── process()
+ │
+ └── write()
+#+end_export
+
+而上层函数甚至可以不知道底层发生了 ~yield~.
+
+** asymmetric coroutine
+
+不对称协程。这是 coroutine 一个非常漂亮的概念。
+
+Lua 中有两个方向:
+
+#+begin_src lua
+  coroutine.resume(co)
+  coroutine.yield()
+#+end_src
+
+它们不是对称的。考虑:
+
+#+begin_export ascii
+main
+ |
+ | resume
+ v
+coroutine
+ |
+ | yield
+ v
+main
+#+end_export
+
+~yield~ 会永远返回给最近一次 ~resume~ 我的地方。
+
+也就是说，coroutine 自己不能指定切换到哪一个 coroutine, 它只能把控制权还给 caller. caller 再决定之后调用谁。
+
+** ~resume/yield~ 本质上是一次“控制权交换”
+
+这样就比较容易理解了。
+
+可以把:
+
+#+begin_src lua
+  local ok, k = coroutine.resume(co, 10)
+#+end_src
+
+看成一次特殊函数调用。
+
+普通函数是:
+
+#+begin_export ascii
+caller --call--> function
+caller <-return- function
+#+end_export
+
+coroutine 是:
+
+#+begin_export ascii
+caller -resume-->coroutine
+caller <--yield- coroutine
+
+caller -resume-->coroutine
+caller <--yield- coroutine
+
+caller -resume-->coroutine
+caller <-return- coroutine
+#+end_export
+
+于是 coroutine 可以多次 “返回”。
+
+例如:
+
+#+begin_src lua :results output
+  local co = coroutine.create(
+      function()
+          coroutine.yield(10)
+          coroutine.yield(20)
+          coroutine.yield(30)
+
+          return 40
+      end
+  )
+
+  print("0:", coroutine.status(co))
+  print(coroutine.resume(co))
+  print(coroutine.resume(co))
+  print(coroutine.resume(co))
+  print(coroutine.resume(co))
+  print("2:", coroutine.status(co))
+#+end_src
+
+#+RESULTS:
+: 0:	suspended
+: true	10
+: true	20
+: true	30
+: true	40
+: 2:	dead
+
+~yield~ 和 ~return~ 的区别只是 coroutine 状态。 ~yield~ 会到 suspend, 而 ~return~ 会到 dead
+
+coroutine 有四种状态:
+
+- suspended: 刚创建时，或者到达 yield 时。suspend 不区分 ready 或 yielded
+- running: 运行时
+- normal
+- dead: 结束
+
+
+我们重点理解一下 normal
+
+** ~normal~ 状态
+
+#+begin_src lua :results output
+  local co1
+  local co2
+
+  co2 = coroutine.create(
+      function()
+          print("inside co2")
+          print("co1 =", coroutine.status(co1))
+      end
+  )
+
+  co1 = coroutine.create(
+      function()
+          print("inside co1")
+          coroutine.resume(co2)
+          print("back to co1")
+      end
+  )
+
+  coroutine.resume(co1)
+#+end_src
+
+#+RESULTS:
+: inside co1
+: inside co2
+: co1 =	normal
+: back to co1
+
+~co1~ 正在运行，它是被 main 调用的 coroutine, 然后在 ~co1~ 执行过程中调用 ~coroutine.resume(co2)~, 现在调用链是:
+
+#+begin_export ascii
+main
+ │
+ co1
+ │
+ │ resume
+ ▼
+ co2
+#+end_export
+
+此时 ~co2~ 是 running, 而 ~co1~ 是 normal. 因为 ~co1~ 并没有 ~yield~, 所以并不是 suspend, 它只是在等待 ~resume(co2)~ 返回。等到 ~co2~ 返回之后， co1 就变成了 running.
+
+** coroutine 本质上形成了一颗控制关系树
+
+比如:
+
+#+begin_export ascii
+main
+ │
+ └─resume→ A
+             │
+             └─resume→ B
+                         │
+                         └─resume→ C
+#+end_export
+
+
+那么此时:
+
+C = running
+B = normal
+A = normal
+
+控制权最终会经过:
+
+#+begin_export ascii
+C return
+↓
+B
+↓
+A
+↓
+main
+#+end_export
+
+返回到 main.
+
+而如果 C 中包含 yield, 那么在C执行到这里时它就会被 suspend, 并通过 yield 返回给 B. 也就是说:
+
+#+begin_export ascii
+main
+ │
+ A
+ │
+ B
+ │ resume
+ ▼
+ C
+ │
+ yield
+ ▼
+ B
+#+end_export
+
+然后等待B的下一个 ~resume~
+
+这就是 asymmetric coroutine.
+
+** coroutine 和 thread 的最大区别
+
+OS thread:
+
+#+begin_export ascii
+Thread A             Thread B
+
+x = 1
+                     y = 2
+x = 3
+                     y = 4
+#+end_export
+
+操作系统 scheduler 可以几乎在任意指令之间切换。这叫做 preemptive scheduling, 抢占式调度。线程通常不知道自己在什么时候被暂停。
+
+coroutine:
+
+#+begin_export ascii
+Coroutine A
+
+x = 1
+x = 2
+x = 3
+
+yield()
+──────────────>
+
+Coroutine B
+
+y = 1
+y = 2
+
+yield()
+──────────────>
+
+Coroutine A
+
+x = 4
+#+end_export
+
+切换点是程序主动指定的 ~yield()~, 所以叫 cooperative scheduling, 协作时调度。
+
+** yield point
+
+可以根据 ~coroutine.yield()~ 将 coroutine 程序分割:
+
+#+begin_src lua
+  local x = state.x
+  local y = x + 1
+  state.x = y
+
+  coroutine.yield()
+
+  local a = state.a
+  do_something(a)
+
+  coroutine.yield()
+#+end_src
+
+可以形成:
+
+#+begin_export ascii
+──── execution region A ────
+
+local x = state.x
+local y = x + 1
+state.x = y
+
+──────── yield point ───────
+
+──── execution region B ────
+
+local a = state.a
+do_something(a)
+
+──────── yield point ───────
+#+end_export
+
+如果 scheduler 只在 yield 时切换任务，那么一个 execution region 内不会突然被另一个 coroutine 插进来。这就是 cooperative concurrency 比 thread 简单许多的原因。
+
+thread:
+
+#+begin_export ascii
+state.x = state.x + 1
+      ↑
+这里理论上就可能被切走
+#+end_export
+
+coroutine:
+
+#+begin_src lua
+  state.x = state.x + 1
+
+  -- 如果这里没有 yield
+  -- 其他 coroutine 不会突然运行
+#+end_src
+
+** coroutine 练习: producer / consumer
+
+#+begin_src lua :results output
+  -- procuder
+  local producer = coroutine.create(
+      function()
+          for i = 1, 5 do
+              print(("producer: %d"):format(i))
+
+              coroutine.yield(i)
+          end
+      end
+  )
+
+  -- consumer
+  while coroutine.status(producer) ~= "dead" do
+      local ok, value = coroutine.resume(producer)
+
+      if not ok then
+          error(value)
+      end
+
+      if value ~= nil then
+          print(("consumer: %d"):format(value))
+      end
+  end
+#+end_src
+
+#+RESULTS:
+#+begin_example
+producer: 1
+consumer: 1
+producer: 2
+consumer: 2
+producer: 3
+consumer: 3
+producer: 4
+consumer: 4
+producer: 5
+consumer: 5
+#+end_example
+
+这里的数据流是:
+
+#+begin_export ascii
+Producer
+   │
+   │ yield(item)
+   ▼
+Consumer
+   │
+   │ resume()
+   ▼
+Producer
+#+end_export
+
+这其实已经是 Lazy stream 了。 coroutine 保存的是任意执行状态。
+
+
+** 双向通道
+
+上面的例子中，我们只是通过 Producer 向 consumer 传递数据。那么可以改造成双向通道:
+
+#+begin_src lua :results output
+  -- producer
+
+  local co = coroutine.create(
+      function()
+          local value = 1
+
+          while true do
+              local command = coroutine.yield(value)
+              if command == "double" then value = value * 2
+              elseif command == "increment" then value = value + 1
+              elseif command == "stop" then return value
+              end
+          end
+      end
+  )
+
+  -- consumer
+
+  print(coroutine.resume(co))
+  print(coroutine.resume(co, "double"))
+  print(coroutine.resume(co, "increment"))
+  print(coroutine.resume(co, "double"))
+  print(coroutine.resume(co, "stop"))
+#+end_src
+
+#+RESULTS:
+: true	1
+: true	2
+: true	3
+: true	6
+: true	6
+
+这里的 ~local command = coroutine.yield(value)~ 的执行过程值得仔细研究一下:
+
+第一次 ~coroutine.resume(co)~ ，启动 coroutine 会执行到 ~local command = coroutine.yield(value)~, 然后此时 ~coroutine.yield(value)~ 会将 ~value~ 交给 caller, 立即暂停。 *这条语句还没有被执行完* 。
+
+也就是说，这整个赋值语句，在 yield 之后就停留在了那里，等待 ~coroutine.yield(value)~ 返回。这时候， ~command~ 的值应当被视为 ~command = ???~, 而不是 ~nil~, 因为它本来就没被赋值。
+
+可以理解为:
+
+#+begin_src lua
+  local command = coroutine.yield(value)
+                ^^^^^^^^^^^^^^^^^^^^^^
+                正停在这里
+#+end_src
+
+然后当 caller 执行第二次 ~resume~: ~coroutine.resume(co, "double")~, 这时候发生的事情是 *刚才暂停的 ~coroutine.yield(value)~ 现在返回了 ~"double"~*  ，因此在等待的赋值语句现在终于完成，等价于:
+
+#+begin_src lua
+  local command = "double"
+#+end_src
+
+所以后续就会用这个 ~command~ 参与条件判断。接下来的 ~print~ 也是一样的过程。
+
+整个过程可以化成一个时间线:
+
+#+begin_export ascii
+caller                          coroutine
+
+resume(co)
+   │
+   ├──────────────────────────► function()
+   │                            value = 1
+   │
+   │                            yield(1)
+   │             1              │
+   ◄────────────────────────────┤
+   │                            suspended
+   │
+   │
+resume(co, "double")
+   │
+   │        "double
+   ├──────────────────────────► yield(...) 返回 "double"
+   │
+   │                            command = "double"
+   │                            value = value * 2
+   │                            value = 2
+   │
+   │                            yield(2)
+   │             2              │
+   ◄────────────────────────────┤
+   │                            suspended
+   │
+resume(co, "increment")
+   │
+   │       "increment
+   ├──────────────────────────► yield(...) 返回 "increment"
+   │
+   │                            command = "increment"
+   │                            value = value + 1
+   │                            value = 3
+   │
+   │                            yield(3)
+   │             3              │
+   ◄────────────────────────────┤
+#+end_export
+
+
+** coroutine 可以做显式状态机
+
+不用 coroutine 的话，我们必须自己保存 state 的状态。
+#+begin_src lua
+  local machine = {
+      state = "start"
+  }
+
+  function step(m)
+      if m.state == "start" then
+          print("A")
+          m.state = "middle"
+      elseif m.state == "middle" then
+          print("B")
+          m.state = "finish"
+      elseif m.state == "finish" then
+          print("C")
+          m.state = "dead"
+  end
+#+end_src
+
+如果使用 coroutine, 就相当于我们将状态交给 lua runtime 管理:
+
+#+begin_src lua
+  local co = coroutine.create(
+      function()
+          print("A")
+          coroutine.yield()
+          print("B")
+          coroutine.yield()
+          print("C")
+      end
+  )
+#+end_src
+
+效果是一样的。状态仍然存在，只不过变成了 program counter + stack + locals, 由 lua runtime 保存。
+
+** async / await
+
+在 Python 中也能运用这种思想:
+
+#+begin_src python
+  async def foo():
+      x = await read()
+      process(x)
+#+end_src
+
+对于 ~async~ 更好的理解是:
+
+#+begin_export ascii
+执行 foo
+↓
+遇到 await
+↓
+保存执行状态
+↓
+控制权返回 event loop
+↓
+等待事件
+↓
+恢复 foo
+#+end_export
+
+其底层仍然是 resume -> yield -> event -> resume 这一套思想。
+
+Python 和 Lua 关于 coroutine 的概念上都是 suspendable computation, 可暂停计算。
+
+* 小型调度系统设计
+
+#+begin_quote
+Lua coroutine 本身只负责“暂停和恢复”，谁什么时候恢复它、为什么恢复它、恢复时传什么值，全部由我们设计
+#+end_quote
+一个自动化工厂模拟器，按照离散的 tick 进行。
+
+有三条协作流程:
+
+- 矿机
+- 熔炉
+- 打包机
+- 仓库
+
+
+流程是:
+
+#+begin_export ascii
+矿机
+ |
+ | ore_ready
+ |          
+熔炉        
+ |          
+ | ingot_ready
+ |            
+打包机        
+ |            
+ | package_ready
+ |
+仓库
+#+end_export
+
+挖矿：
+
+我们进行简化。考虑到挖矿最终会以数量而非tick为标准，但在这里我们简化为挖矿需要固定时间。
+
+假设挖矿需要 3 tick, 完成后产生 ore_ready 事件。
+
+此时矿机应该停止挖矿（我们假设它没有缓存，挖满就不能再挖）。
+
+熔炉：
+
+等待 ore_ready 事件。收到矿石之后（收到事件 != 收到矿石），开始熔炼。假设我们熔炼的每批熔炼所需时间为 4 tick
+
+熔炼完成后会发送 ingot_ready
+
+打包机：
+
+等待两个 ingot_ready. 收集够两个以后工作 2 tick, 然后产生 package_ready
+
+仓储:
+
+等待 package_ready, 每收到一个就打印当前库存
+
+注意，这里仅仅依靠事件传递，而不涉及真实的物品。后续会考虑添加对于产量的模拟。
+
+** 状态
+
+矿机的状态:
+
+#+begin_export ascii
+running --满(3 tick)--> 发送 ore_ready --> suspend(等待熔炉拿走矿物)
+^                                            |
+|                                            |
++--------------------------------------------+
+#+end_export
+
+问题: 如何确认熔炉已经拿走矿物？
+
+- 矿机自己库存检测
+- 熔炉拿走后给矿机发送一个信息
+
+
+矿机的状态如何推进？交给 scheduler. sheculer 是一个中央调度器。它统一负责收集事件、推进状态。
+
+矿机会执行 3 tick, 发送 ore_ready, 进入休眠。 scheduler 会接受 ore_ready, 调度 熔炉 的coroutine, 熔炉在拿走后会显示发送 ore_taken
+
+
+#+begin_example
+(小写不是状态而是事件)
+while true do
+  *WORKING* 3 tick
+  emit ore_ready
+  *WAITING* ore_taken
+end
+#+end_example
+
+熔炉的状态:
+
+#+begin_example
+while true do
+  *WAITING* ore_ready
+  *PULLING* ore_taking 1 tick
+  emit ore_taken
+  *WORKING* 4 tick
+  emit ignot_ready
+  *WAITING* ignot_taken
+end
+#+end_example
+
+#+begin_export ascii
+suspend --被 schedulre 调度(接收 ore_ready)--> running --4 tick--> 返回 ingot_ready
+^                                                                         |
+|                                                                         |
++-------------------------------------------------------------------------+
+#+end_export
+
+熔炉是按需执行。
+
+打包机:
+
+#+begin_example
+while true do
+  *WAITING* ignot_ready
+  *WAITING* ignot_ready(等待两次事件)
+  *PULLING* ignot_taking 1 tick (一次取走两个 event 对应的物品)
+  emit ignot_taken
+  *WORKING* 2 tick
+  emit package_ready
+  *WAITING* package_taken
+end
+#+end_example
+
+#+begin_export ascii
+suspend --接受两个(ignot_ready)--> running --2tick--> 返回 package_ready
+^                                                              |
+|                                                              |
++--------------------------------------------------------------+
+#+end_export
+
+仓储:
+
+#+begin_example
+while true do
+  *WAITING* package_ready
+  *WORKING* package_taking 1 tick
+  emit package_taken
+  print inventory
+end
+#+end_example
+
+需要区分机器状态和 scheduler 看到的状态。
+
+业务对照表:
+
+| 业务动作            | scheduler 看到的阻塞原因 |
+|-------------------+-----------------------|
+| 矿机挖矿            | sleep 3 tick          |
+| 发送 ore_ready     | 不阻塞                 |
+| 等待矿石被取走       | wait ore_taken        |
+| 熔炉等待矿石        | wait ore_ready        |
+| 取矿石             | sleep 1 tick          |
+| 发送 ore_taken     | 不阻塞                 |
+| 熔炼               | sleep 4 tick          |
+| 等待锭被取走        | wait ignot_taken      |
+| 打包器等待锭        | wait ignot_ready      |
+| 取锭               | sleep 1 tick          |
+| 发送 ignot_taken   | 不阻塞                 |
+| 打包               | sleep tick            |
+| 发送 package_ready | 不阻塞                 |
+| 等待包裹被取走       | wait package_taken    |
+| 仓储等待包裹        | wait package_ready    |
+| 取包裹             | sleep 1 tick          |
+| 发送 package_taken | 不阻塞                 |
+| 打印仓库容量        | 不阻塞                 |
+
+scheduler 必须理解的操作:
+
+- sleep: 时间管理
+- emit: 事件产生
+- wait: 事件等待
+
+
+当 ~wait("ore_taken")~ 之后， scheduler 至少需要保存的信息:
+
+- 谁在等: ~co = miner_coroutine~
+- 等什么: ~waiting_for = "ore_taken"~
+
+含义就是：这个 coroutine 现在还不能运行，除非出现 ~ore_taken~
+
+更进一步，我们的coroutine存在很多事件，可以设计成:
+
+#+begin_src lua
+  waiters = {
+      ore_taken = { miner_coroutine },
+      ignot_ready = { package_coroutine },
+      package_ready = { storage_coroutine },
+  }
+#+end_src
+
+这样当 ~emit("ore_taken")~ 的时候， scheduler 就可以找到 ~waiter["ore_taken"]~ 里应该恢复的 coroutine.
+
+~wait(event)~ 的本质就是，告诉 shceduler 把我挂到这个 ~event~ 的等待集合中。
+
+如果两个 coroutine 同时执行 ~wait("ore_taken")~, 那么一次 ~emit("ore_taken")~ 应该唤醒一个。所以 ~emit~ 中应该携带关联信息。比如:
+
+#+begin_src lua
+  emit("ore_taken", "miner_A")
+#+end_src
+
+这里我们需要的关联信息是 *一次尚未完成的交接* 。矿机发出 ~ore_ready~ 就进入了这个数据传输过程:
+
+#+begin_export ascii
+miner              ignot
+|                    |(wait ore_ready)
++----ore_ready------>|                
+|    (with id)       |                
+|(keep working)      |
+|<---ore_taken-------+
+|    (with id)       |(resume)
+|                    |        
+#+end_export
+
+假设我们未来的矿机有 cache, 或者可以存储多个 batch, 那么它发送的 ore_ready 必须对应某一个 batch, 而 ignot 返回的 ore_taken 也必须对应这个 batch.
+
+我们可以把矿物批抽象成:
+
+#+begin_src lua
+  ore = {
+      id = 17,
+      producer = mine_A
+  }
+#+end_src
+
+矿机发送:
+
+#+begin_src lua
+  emit("ore_ready", ore)
+#+end_src
+
+熔炉取走后会发送:
+
+#+begin_src lua
+  emit("ore_taken", ore)
+#+end_src
+
+这样既然我们都事件明确带有 ~name~ 和 ~id~, 那么 ~waiters~ 等待的 coroutine 集合应该结构调整为:
+
+#+begin_src lua
+  waiters = {
+      ore_taken = {
+          [17] = miner_A_co
+      }
+  }
+#+end_src
+
+也就是，搜索条件是 *先按照事件类型找，再按照实例 id 找* 这样的模式。对应 ~waiters[event_name][event_id]~ ，例如:
+
+#+begin_src lua
+  waiters["ore_taken"][17]
+#+end_src
+
+得到的就是等待“第17批矿物被取走” 的 coroutine. 后续甚至可以扩展成:
+
+#+begin_src lua
+  waiters["ore_taken"] = {
+      [17] = mine_A_co,
+      [18] = mine_B_co,
+      [19] = mine_C_co,
+  }
+#+end_src
+
+如果 ~emit("ore_taken", 17)~ 时这个 coroutine 还不存在，那么就暂存这个 event: ~pendig["ore_taken"][17] = event~ . 以后矿机如果执行 ~wait("ore_taken" 17)~ ， scheduler 会先检查 ~pending~ ，如果已经存在，就不阻塞， 而是立即消费这个时间并继续执行。
+
+于是现在有两个对称结构:
+
+#+begin_src lua
+  waiters[event_name][event_id] = coroutine
+  pendings[event_name][event_id] = event
+#+end_src
+
+那么我们应该进一步澄清矿机的需求:
+
+- 等待 ~ore_taken~
+- 并且 batch id ∈ {17, 18, 19}
+
+
+建模为一个新状态 ~wait_any("ore_taken", 17, 18, 19)~
+
+比如当前缓存:
+
+#+begin_export ascii
+miner buffer:
+  batch 17
+  batch 18
+  batch 19
+#+end_export
+
+那么miner会发送 ~wait_any("ore_taken", {17, 18, 19})~ ，只要收到了任何一个 ~emit("ore_taken", 18)~ ，或者 17/19, 矿机就可以恢复，并删除对应的 batch, 缓存重新有一个空位。
+
+

@@ -1,0 +1,480 @@
+#+title:      lua_closure
+#+date:       [2026-10-05 Mon 19:51]
+#+filetags:   :lua:
+#+identifier: 20261005T195104
+
+* Function, Closure, Upvalue
+
+每次执行一个函数定义时，都会实例化一个新的 function instance, 也就是 closure. Lua 函数引用外层局部变量时，这些外部局部变量会成为它的 upvalue
+
+* function 本身就是值
+
+#+begin_src lua
+  local function square(x)
+      return x * x
+  end
+#+end_src
+
+本质上接近:
+
+#+begin_src lua
+  local square
+
+  square = function(x)
+      return x * x
+  end
+#+end_src
+也就是声明一个函数并赋值给一个变量。 Lua function value 会可能携带 代码 + 捕获的环境，这就是 closure
+
+* closure: function + environment
+
+closure 就是 函数 + 捕获的环境。比如:
+
+#+begin_src lua :results output
+  local function make_adder(n)
+      return function(x)
+          return x + n
+      end
+  end
+
+  local add10 = make_adder(10)
+  local add20 = make_adder(20)
+
+  print(add10(30))
+  print(add20(30))
+#+end_src
+
+#+RESULTS:
+: 40
+: 50
+
+这里 ~make_adder~ 返回后，它自己的调用栈显然就结束了。但是 ~add10~ 仍然需要访问 ~n = 10~ , 所以逻辑模型就是:
+
+#+begin_export ascii
+add10
+ ├── code ─────► function(x) return x + n end
+ │
+ └── environment
+       └── n = 10
+#+end_export
+
+~make_adder~ 返回的值是一个 closure. ~add10~ 不仅携带它的代码，还包括 ~n = 10~ 这个环境。这里的 ~n~ 就是 *upvalue*: Lua 函数所使用的外部局部变量。
+
+* upvalue
+
+upvalue 不是 “复制进去的值”：
+
+#+begin_src lua :results output
+  local function counter()
+      local n = 0
+
+      return function()
+          n = n + 1
+          return n
+      end
+  end
+
+  local c = counter()
+
+  print(c())
+  print(c())
+  print(c())
+#+end_src
+
+#+RESULTS:
+: 1
+: 2
+: 3
+
+如果 closure 在创建时只是简单的 ~copy n~, 那么这个结果就不好解释。正确的理解是， closure 持有这个 upvalue, 而并不仅仅是创建 closure 那一瞬间变量的值。
+
+再比如:
+
+#+begin_src lua :results output
+  local function make()
+      local x = 10
+      local get = function()
+          return x
+      end
+
+      local set = function(v)
+          x = v
+      end
+
+      return get, set
+  end
+
+  local get, set = make()
+  print(get())
+  set(42)
+  print(get())
+#+end_src
+
+#+RESULTS:
+: 10
+: 42
+
+这里， ~get~ 和 ~set~ 共享一个 upvalue. 这是很神奇的机制，并不是单纯的复制那一瞬间的值，而是函数返回的 closure 持有这个 upvalue
+
+也就是:
+
+#+begin_export ascii
+             x = 42
+              |
+              │
+          shared upvalue
+          /            \
+       get              set
+#+end_export
+
+Lua C API 甚至提供 ~lua_upvalueid~ 来判断两个 closure 是否共享同一个 upvalue, 并提供 ~lua_upvaluejoin~ 来操作共享关系。
+
+** C 模拟 closure
+
+假设我们希望实现 ~make_adder(10)~, 普通的 ~int (*f)(int)~ 并不够，因为它没有地方存 ~n~ . 可以通过结构体模拟:
+
+#+begin_src C :results output
+  #include <stdio.h>
+  struct Adder {
+    int n;
+  };
+
+  int call_adder(struct Adder *self, int x)
+  {
+    return self -> n + x;
+  }
+
+  struct Adder add10 = {
+    .n = 10
+  };
+
+  printf("%d\n", call_adder(&add10, 5));
+
+#+end_src
+
+#+RESULTS:
+: 15
+
+于是从这个层面，我们可以把闭包理解成:
+
+#+begin_src C
+  struct Closure {
+    function_pointer code;
+    environment env;
+  };
+#+end_src
+
+概念上:
+
+#+begin_export ascii
+Lua closure
+
++--------------------+
+| code               |
++--------------------+
+| upvalue 1          |
+| upvalue 2          |
+| ...                |
++--------------------+
+#+end_export
+
+Lua C API 会把这种模型暴露出来。
+
+下一节我们会看到 ~lua_pushcclosure(L, func, n)~, 它的意思基本就是:
+
+#+begin_quote
+把一个C函数和栈顶的 ~n~ 个 Lua value 组成一个 C Closure
+#+end_quote
+
+
+对于上文我们写的 ~make_adder~, 在 C API 中可以做出概念上类似的:
+
+#+begin_src C
+  static int add(lua_State *L)
+  {
+    lua_Integer n = lua_tointeger(L, lua_upvalueindex(1));
+
+    lua_Integer x = luaL_checkinteger(L, 1);
+
+    lua_pushinteger(L, n + x)
+    return 1;
+  }
+#+end_src
+
+然后创建:
+#+begin_src C
+  lua_pushinteger(L, 10)
+  lua_pushcclosure(L, add, 1);
+#+end_src
+
+之后 Lua 那边就可以:
+
+#+begin_src lua
+  print(add10(5))
+#+end_src
+
+所以 Lua closure 和 C closure 的关系就是:
+
+#+begin_export ascii
+Lua closure              C closure
+
+Lua function             lua_CFunction
+    +                         +
+upvalues                 Lua upvalues
+    │                         │
+    └──────────┬──────────────┘
+               │
+          function value
+#+end_export
+
+* multiple results 的位置效应
+
+比如:
+#+begin_src lua :results output
+  local function f()
+      return 1, 2, 3
+  end
+
+  local a, b, c = f()
+
+  print(a)
+  print(b)
+  print(c)
+
+  local x, y, z = f(), 100
+  print()
+  print(x)
+  print(y)
+  print(z)
+#+end_src
+
+#+RESULTS:
+: 1
+: 2
+: 3
+: 
+: 1
+: 100
+: nil
+
+第二个赋值的结果很有趣。因为 *只有表达式列表最后一个位置的 multires expression 才能展开多个结果* 。
+
+有一个直观的实验:
+
+#+begin_src lua :results output
+  local function f()
+      return 1, 2, 3
+  end
+
+  print(f(), 100)
+  print(100, f(), 200)
+  print(100, f())
+#+end_src
+
+#+RESULTS:
+: 1	100
+: 100	1	200
+: 100	1	2	3
+
+可以看到，第一个只能返回 ~1 100~, 最后一个由于多返回值的函数在最后一个位置，因此能完全展开它的返回结果
+
+** 这与 C API 关系密切
+
+为什么 Lua C function 是这种签名？
+
+#+begin_src C
+  typedef int (*lua_CFunction)(lua_State *L);
+#+end_src
+
+这里我们看不到参数和返回值。尤其是:
+
+#+begin_src C
+  int add(lua_State *L)
+#+end_src
+
+这个 ~int~ 并不是结果。
+
+函数的参数和结果都通过 *Lua stack* 传递。而函数最后的 ~return 1;~ 的意思是：“我向 Lua 返回了1个结果”。
+
+比如:
+
+#+begin_src C
+  static int divmod(lua_State *L)
+  {
+    lua_Integer a = luaL_checkinteger(L, 1);
+    lua_Integer b = luaL_checkinteger(L, 2);
+
+    lua_pushinteger(L, a / b);
+    lua_pushinteger(L, a % b);
+
+    return 2;
+  }
+#+end_src
+
+然后 Lua 就可以:
+
+#+begin_src lua
+  local q, r = divmod(17, 5)
+#+end_src
+
+注意这个对应:
+
+#+begin_export ascii
+lua:
+
+return q, r
+
+C API:
+
+lua_pushinteger(L, q);
+lua_pushinteger(L, r);
+return 2;
+#+end_export
+
+非常工整的对齐。
+* vararg: ~...~
+
+Lua 的 variadic function:
+
+#+begin_src lua :results output
+  local function f(a, ...)
+      print(a)
+      print(...)
+  end
+
+  f(1, 2, 3, 4)
+#+end_src
+
+#+RESULTS:
+: 1
+: 2	3	4
+
+这里: ~a = 1~, ~... = 2, 3, 4~ 。注意， ~...~ 不是一个 table, 是一个 *multires expression* .
+
+那么我们如何把 ~...~ 收入 table 呢？假设我们这样做:
+
+#+begin_src lua :results output
+  local function f(...)
+      local args = {...}
+
+      for i, x in ipairs(args) do
+          print(i, x)
+      end
+  end
+
+  f(10, nil, 30)
+#+end_src
+
+#+RESULTS:
+: 1	10
+
+可以看到这里只有一个变量被纳入了 table. 所以 Lua 提供 ~table.pack(...)~ 用于打包可变表达式:
+
+#+begin_src lua :results output
+  local function f(...)
+      local args = table.pack(...)
+
+      print(args.n)
+
+      for i = 1, args.n do
+          print(i, args[i])
+      end
+  end
+
+  f(10, nil, 30)
+#+end_src
+
+#+RESULTS:
+: 3
+: 1	10
+: 2	nil
+: 3	30
+
+可以看到所有3个参数都被纳入了table. 反过来，使用 ~table.unpack(args, 1, args.n)~ 可以重新变成 multiple results
+* 一个 upvalue 实验
+
+#+begin_src lua :results output
+  local function make_pair()
+      local x = 0
+      local function inc()
+          x = x + 1
+          return x
+      end
+
+      local function get()
+          return x
+      end
+
+      return inc, get
+  end
+
+  local inc1, get1 = make_pair()
+  local inc2, get2 = make_pair()
+
+  print(inc1())
+  print(inc1())
+  print(get1())
+  print(get2())
+#+end_src
+
+#+RESULTS:
+: 1
+: 2
+: 2
+: 0
+
+所以结构应该是:
+
+#+begin_export ascii
+make_pair call #1
+
+ x₁
+ ▲ ▲
+ │  │
+inc1 get1
+
+
+make_pair call #2
+
+ x₂
+ ▲ ▲
+ │  │
+inc2 get2
+#+end_export
+
+所以这里 ~inc1/get1~ 共享一个upvalue, ~inc2/get2~ 共享另一个 upvalue
+
+* 小结
+
+到这里，我们已经学习了:
+
+#+begin_export ascii
+values
+dynamic typing
+
+local / lexical scope
+
+table
++---- sequence
++---- record
++---- map
++--- set 
+        
+first-class function 
+closure              
+upvalue
+       
+multiple results
+vararg
+      
+metatable
+metamethod
+__index
+__add  
+__call
+...   
+   
+reference semantics
+#+end_export
+
+接下来我们将回到 C 开始学 Lua API.

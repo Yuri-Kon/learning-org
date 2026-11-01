@@ -13,6 +13,20 @@
 
 build/
 
+*.tex
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.tex
+*.toc
+*.xdv
+TAGS
+
+publish/
+auto/
+
 *.trash/
 
 .obsidian/*.json

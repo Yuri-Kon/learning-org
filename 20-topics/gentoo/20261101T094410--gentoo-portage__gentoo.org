@@ -1,0 +1,184 @@
+#+title:      Gentoo Portage
+#+date:       [2026-11-01 Sun 09:44]
+#+filetags:   :gentoo:
+#+identifier: 20261101T094410
+* Portage 的整体模型
+
+| 名称     | 职责                        | 本质                             |
+|----------+-----------------------------+----------------------------------|
+| Portage  | 整套包管理系统               | 依赖解析、构建、安装、数据库及工具 |
+| ~emerge~ | 用户主要操作入口             | 高层包管理命令                    |
+| ~ebuild~ | 描述软件包的元数据和构建过程 | 在特定环境下执行的Bash脚本        |
+
+[[file:image/poratge.arch.svg][Portage 安装软件包各组件协作过程]]
+
+Portage 的默认布局:
+
+- ~/etr/portage/~: Portage 的主要目录
+  - ~make.conf~: 主要配置
+  - ~package.use~: 按软件包设置 USE
+  - ~repos.conf~: 仓库注册信息
+  - ~make.profile~: 当前 Profile 链接
+- ~/var/db/repos/~:
+  - ~gentoo/~: 官方的 ebuild 仓库
+  - ~local/~: 个人仓库
+- ~/var/cache/disfiles/~: 下载的源码归档缓存
+- ~/var/tmp/portage~: 解包、编译、临时安装等构建工作目录
+- ~/var/db/pkg/~: 已安装软件包数据库(VDB)
+
+
+-----
+
+* Portage 如何知道一个包存在
+
+当输入:
+
+#+begin_src shell :results output
+  emerge -pv sys-apps/portage
+#+end_src
+
+#+RESULTS:
+#+begin_example
+
+These are the packages that would be merged, in order:
+
+Calculating dependencies ... done!
+Dependency resolution took 0.60 s (backtrack: 0/20).
+
+[ebuild   R    ] sys-apps/portage-3.0.82.2-r1::gentoo  USE="(ipc) native-extensions rsync-verify xattr -apidoc -build -doc -gentoo-dev (-selinux) -test" PYTHON_TARGETS="python3_14 -python3_12 -python3_13 (-python3_15)" 0 KiB
+
+Total: 1 package (1 reinstall), Size of downloads: 0 KiB
+
+ ,* IMPORTANT: 34 news items need reading for repository 'gentoo'.
+ ,* Use eselect news read to view new items.
+
+#+end_example
+
+~emerge~ 需要知道:
+
+- ~sys-apps/portage~ 是一个合法的软件包名称吗
+- 它有哪些版本
+- 哪些版本可以在当前系统上安装
+- 当前系统已经安装了哪个版本
+- 它需要哪些依赖
+
+
+这里涉及到三个不同的数据来源:
+
+- ~/etc/portage/~: 配置。决定使用哪些仓库、 Profile、 USE Flags 等
+- ~/var/db/repos/gentoo/~: 仓库。包含可用软件包的 ebuild、元数据、eclass 等
+- ~/var/db/pkg/~: 记录实际安装的软件包、版本和文件等信息
+
+
+执行:
+
+#+begin_src shell :results output
+  ls /var/db/repos/gentoo/sys-apps/portage
+#+end_src
+
+#+RESULTS:
+: files
+: Manifest
+: metadata.xml
+: portage-3.0.79-r1.ebuild
+: portage-3.0.80.ebuild
+: portage-3.0.81.1.ebuild
+: portage-3.0.81.2.ebuild
+: portage-3.0.81.ebuild
+: portage-9999.ebuild
+
+这里展示的 ~portage-<版本>.ebuild~ 就是仓库提供的 portage 版本。
+
+执行:
+
+#+begin_src shell :results output
+  ls -d /var/db/pkg/sys-apps/portage-*
+#+end_src
+
+#+RESULTS:
+: /var/db/pkg/sys-apps/portage-3.0.82.2-r1
+
+这里展示的是本系统安装的版本。
+
+可用的软件包与已经安装的软件包，是两类不同的数据。这里可以有一个抽象:
+
+#+begin_quote
+~/var/db/repos/~ (Repo) 负责描述候选软件包， ~/var/db/pkg/~ (VDB) 描述已安装状态。Portage 根据配置和依赖关系决定如何从一种状态迁移到另一种状态。
+#+end_quote
+
+* ebuild 是什么
+
+** ebuild 是一段 Bash 程序
+
+官方开发手册将 ebuild 定义为：在特定环境中执行的 bash 脚本。
+
+我们可以写一个简化的 ebuild:
+
+#+begin_src shell
+  EAPI=8
+
+  DESCRIPTION="A simple application"
+  HOMEPAGE="https://example.org"
+  SRC_URI="https://example.org/foo.${PV}.tar.gz"
+
+  LICENSE="MIT"
+  SLOT="0"
+  KEYWORDS="~amd64"
+
+  IUSE="debug"
+
+  src_configure() {
+      econf $(use_enable debug)
+  }
+
+  src_compile() {
+      emake
+  }
+
+  src_install() {
+      emake DESTDIR="${D}" install
+  }
+#+end_src
+
+这份 ebuild 文件包括两种性质不同的内容:
+
+- 软件包元数据: 描述软件包的属性，供 portage 选择软件包和计算依赖等
+  #+begin_src shell
+    EAPI=8
+    DESCRIPTION="A simple application"
+    SLOT="0"
+    KEYWORDS="~amd64"
+    IUSE="debug"
+  #+end_src
+- 构建阶段函数: 定义软件包在某个构建阶段应该如何执行
+  #+begin_src shell
+    src_compile() {
+        emake
+    }
+  #+end_src
+
+
+这就引出一个问题:
+
+**既然 ebuild 是 bash 脚本，为什么 python 编写的 portage 能够读取其中的变量和函数?**
+
+** Portage 如何获取 ebuild 中的信息
+
+当需要从 ebuild 中生成元数据时， Portage 可以启动 bash 执行环境，在特殊的 ~depend~ 阶段加载 ebuild 和相关 eclass, 然后收集元数据变量。
+
+在 Portage 的 [[https://github.com/gentoo/portage/blob/master/bin/ebuild.sh][bin/ebuild.sh]] 源码中，可以找到:
+
+#+begin_src shell
+  if [[ ${EBUILD_PHASE} = depend ]] ; then
+      set -f
+
+      metadata_keys={
+          DEPEND RDEPEND SLOT SRC_URI RESTRICT HOMEPAGE LICENSE DESCRIPTION
+          KEYWORDS INHERITED IUSE REQUIRED_USE PDEPEND BDEPEND EAPI PROPERTIES
+          DEFINED_PHASES IDEPEND INHERIT
+      }
+#+end_src
+
+这段代码列举了需要收集的元数据键，然后通过专用管道将其传递给包管理器。
+
+

@@ -1,0 +1,1530 @@
+#+title:      lua-tutoral
+#+date:       [2026-10-04 Sun 23:36]
+#+filetags:   :lua:
+#+identifier: 20261004T233612
+
+* Lua 的 8 种基本类型
+#+begin_src lua :results output
+  print(type(nil))
+  print(type(true))
+  print(type(42))
+  print(type("hello"))
+  print(type(function() end))
+  print(type({}))
+#+end_src
+
+#+RESULTS:
+: nil
+: boolean
+: number
+: string
+: function
+: table
+
+还有 ~userdata~ 和 ~thread~.
+
+
+注意:
+#+begin_src lua :results output
+  print(type(42))
+  print(type(3.14))
+#+end_src
+
+#+RESULTS:
+: number
+: number
+
+结果都是 ~number~, 但是 lua 内部会区分 integer 和 float:
+
+#+begin_src lua :results output
+  print(math.type(42))
+  print(math.type(3.14))
+#+end_src
+
+#+RESULTS:
+: integer
+: float
+
+
+** ~nil~
+
+注意这个:
+
+#+begin_src lua :results output
+  local x
+  print(x)
+#+end_src
+
+#+RESULTS:
+: nil
+
+结果是 ~nil~ .表示 absence of a value 这是一个完整类型，不能等同于 ~NULL~, 比如在 table 中:
+
+#+begin_src lua :results output
+  local t = {}
+
+  t.x = 10
+  print(t.x)
+
+  t.x = nil
+  print(t.x)
+#+end_src
+
+#+RESULTS:
+: 10
+: nil
+
+设置 ~t.x = nil~ 实际上意味着这个key不存在了。
+
+** ~boolean~
+
+lua 中只有 ~false~ 和 ~nil~ 是假，其他全是真
+
+#+begin_src lua :results output
+  if "" then
+      print("empty string")
+  end
+
+  if 0 then
+      print("zero number")
+  end
+
+  if not nil then
+      print("not nil")
+  end
+
+  if not false then
+      print("not false")
+  end
+#+end_src
+
+#+RESULTS:
+: empty string
+: zero number
+: not nil
+: not false
+
+可以看到, 空字符串也是 ~true~.
+
+* ~local~: 局部变量
+
+~x = 10~ 默认是全局变量。lua 的 local 是lexical scope, 也是我们熟悉的词法作用域。比如:
+
+#+begin_src lua :results output
+  local x = 10
+
+  do
+      local y = 20
+      print(x, y)
+  end
+
+  print(x)
+  print(y)
+#+end_src
+
+#+RESULTS:
+: 10	20
+: 10
+: nil
+
+可以看到，在词法块内声明的 ~local~ 变量在出词法块后就消失为 ~nil~ 。相反，如果我们不让 ~y~ 是 ~local~:
+
+
+#+begin_src lua :results output
+  local x = 10
+
+  do
+      y = 20
+      print(x, y)
+  end
+
+  print(x)
+  print(y)
+#+end_src
+
+#+RESULTS:
+: 10	20
+: 10
+: 20
+
+可以看到 ~y~ 会一直存在。因此我们可以认为全局变量在修改整个环境，且 lua 默认使用全局变量。
+
+* 函数式特征
+
+先求值，再赋值。
+
+比如多重赋值:
+
+#+begin_src lua :results output
+  local a, b = 10, 20
+  print(a, b)
+#+end_src
+
+#+RESULTS:
+: 10	20
+
+甚至可以直接交换变量:
+#+begin_src lua :results output
+  local a, b = 10, 20
+  print(a, b)
+  a, b = b, a
+  print(a, b)
+#+end_src
+
+#+RESULTS:
+: 10	20
+: 20	10
+
+因为 lua 会先计算右侧的值，也就是说在 ~a, b = b, a~ 中会先计算为 ~a, b = 20, 10~ 再赋值给左侧。
+
+** multiple returns
+
+函数可以返回多个值。这是 Lua 区别很多函数式语言的一个特点，因为很多FP会返回一个 product type, 而 Lua 是直接返回多个结果。比如:
+
+#+begin_src lua :results output
+  local function divmod(a, b)
+      return a // b, a % b
+  end
+
+  local q, r = divmod(17, 5)
+
+  print(q)
+  print(r)
+#+end_src
+
+#+RESULTS:
+: 3
+: 2
+
+再比如:
+
+#+begin_src lua :results output
+  local function f()
+      return 1, 2, 3
+  end
+
+  local a, b, c = f()
+
+  print(a, b, c)
+#+end_src
+
+#+RESULTS:
+: 1	2	3
+
+直接就是返回的多个值，而不是一个 tuple.
+
+** Function is Value
+
+#+begin_src lua
+  local square = function(x)
+      return x * x
+  end
+
+  local function square(x)
+      return x * x
+  end
+#+end_src
+
+这两个是一种东西。因为在 Lua 中，函数也是一个值，可以赋值给变量。这里就会用到我们FP中的一些思想:
+
+#+begin_src lua :results output
+  local function apply(f, x)
+      return f(x)
+  end
+
+  local function square(x)
+      return x * x
+  end
+
+  print(apply(square, 5))
+#+end_src
+
+#+RESULTS:
+: 25
+
+大概就类似于 OCaml 中的:
+#+begin_src ocaml
+  let apply f x = f x ;;
+  let square x = x * x ;;
+  apply square 5 ;;
+#+end_src
+
+#+RESULTS:
+: 25
+
+当然我们也可以实现近似的 partial application:
+
+#+begin_src lua :results output
+  local adder = function(n)
+      return function(x)
+          return x + n
+      end
+  end
+
+  local add10 = adder(10)
+
+  print(adder(5)(10))
+  print(add10(5))
+#+end_src
+
+#+RESULTS:
+: 15
+: 15
+
+就是 OCaml 中的:
+
+#+begin_src ocaml :results ouptut
+  let adder x y = x + y ;;
+  let add10 = adder 10 ;;
+
+  add10 5;;
+#+end_src
+
+#+RESULTS:
+: 15
+
+但 OCaml 里能部分应用更多还是因为 ~val adder : int -> (int -> int) = <fun>~, 当传入一个 ~10~ 之后的 ~add10~ 就是 ~val add : int -> int = <fun>~ ，更多还是 lambda 演算的结果。
+
+* lua 的核心: table
+
+lua 中的所有东西都通过 table 建立出来，包括 array, dict, map, struct, class 等等。比如:
+
+#+begin_src lua :results output
+  local t = {
+      name = "lua",
+      version = "5.4.8"
+  }
+
+  print(t.name)
+#+end_src
+
+#+RESULTS:
+: lua
+
+~t.name~ 是 ~t["name"]~ 的语法糖.
+
+所以对于这样的:
+
+#+begin_src lua
+  local person = {
+      name = "Alice",
+      age = 20,
+  }
+#+end_src
+
+从 C 的角度看起来就很像结构体:
+
+#+begin_src C
+  struct Persion {
+    const char *name;
+    int age;
+  };
+#+end_src
+
+但是在 lua 中 table 更接近 hash table 或 associative array
+
+** 数组也是 table
+
+比如:
+#+begin_src lua :results output
+  local xs = {1, 2, 3}
+
+  print(xs[1])
+  print(xs[2])
+  print(xs[3])
+#+end_src
+
+#+RESULTS:
+: 1
+: 2
+: 3
+
+对于数组，lua 惯例从 1 开始，当然也可以随意赋值。比如:
+
+#+begin_src lua :results output
+  local xs = {1, 2, 3}
+  xs[0] = 0
+
+  xs[-10] = "minus ten"
+  print(xs[-10])
+  print(xs[0])
+  print(xs[1])
+  print(xs[2])
+  print(xs[3])
+#+end_src
+
+#+RESULTS:
+: minus ten
+: 0
+: 1
+: 2
+: 3
+
+table 的 key 可以是很多不同类型。
+
+那么根据我们前面说的， ~function~ 也是 lua 的类型，那么就会有:
+
+#+begin_src lua :results output
+  local person = {
+      name = "Alice",
+      hello = function(self)
+          print("Hello, " .. self.name)
+      end
+  }
+
+  -- person.hello(person)
+  person:hello()
+#+end_src
+
+#+RESULTS:
+: Hello, Alice
+
+~person.hello(person)~ 和 ~person:hello()~ 基本一致。但是 Lua 并没有引入一个 ~class~, 而仍然只是 table + function.
+
+* 小练习
+
+#+begin_src lua :results output
+  local function map(f, xs)
+      local result = {}
+      for i, x in ipairs(xs) do
+          result[i] = f(x)
+      end
+
+      return result
+  end
+
+  local function compose(f, g)
+      return function(x)
+          return f(g(x))
+      end
+  end
+
+  local double = function(x)
+      return x * 2
+  end
+
+  local square = function(x)
+      return x * x
+  end
+
+  local f = compose(square, double)
+
+  local xs = {1, 2, 3, 4, 5}
+  local ys = map(f, xs)
+
+  for _, x in ipairs(ys) do
+      print(x)
+  end
+#+end_src
+
+#+RESULTS:
+: 4
+: 16
+: 36
+: 64
+: 100
+
+其实这里就用到高阶函数了。看一下 OCaml 的版本:
+
+#+begin_src ocaml
+  let rec map f = function
+    | [] -> []
+    | x :: xs -> (f x) :: map f xs ;;
+
+  let compose f g x = f (g x);;
+
+  let double x = x * 2;;
+  let square x = x * x;;
+
+  let f = compose square double;;
+
+  let xs = [1; 2; 3; 4; 5];;
+
+  let ys = map f xs;;
+
+  ys;;
+#+end_src
+
+#+RESULTS:
+| 4 | 16 | 36 | 64 | 100 |
+* tabel 深入
+
+table 是 lua 唯一的数据结构机制。可以表示 array, list, set, record, graph 和 tree 等等
+** table constructor
+
+最基本的就是 ~local t = {}~. 官方语法本质上只有三种 field:
+
+#+begin_src lua :results output
+  local t = {
+      [10] = "ten",
+      name = "Lua",
+      "A",
+      "B",
+  }
+  print(t[10])
+  print(t.name)
+  print(t[1])
+  print(t[2])
+#+end_src
+
+#+RESULTS:
+: ten
+: Lua
+: A
+: B
+
+~t.name~ 就是 ~t["name"]~, ~local t = { name = "Lua" }~ 就是 ~local t = { ["name"] = "Lua" }~ . 本质就是 table indexing.
+** array 只是 table 的一种使用习惯
+
+比如:
+
+#+begin_src lua :results output
+  local xs = {1, 2, 3}
+
+  -- 等价于
+  local ys = {
+      [1] = 1,
+      [2] = 2,
+      [3] = 3,
+  }
+#+end_src
+
+Lua习惯索引从1开始。
+
+对比一下C的array:
+
+#+begin_src C
+  int xs[3] = {1, 2, 3};
+#+end_src
+
+它本质上直接表示了一段连续存储:
+
+#+begin_export ascii
+address       
+  |           
++-+-+---+---+ 
+| 1 | 2 | 3 | 
++---+---+---+ 
+#+end_export
+
+但是 Lua 的语言语义只是告诉了你三对映射关系。是与C array非常不同的抽象。
+** table is heterogeneous
+
+可以往一个 Lua table 里塞所有你想得到的类型。
+
+#+begin_src lua :results output
+  local t = {
+      10,
+      "hello",
+      true,
+      hi = function()
+          print("hi")
+      end,
+      {1, 2, 3},
+  }
+
+  print(t[1])
+  print(t[2])
+  print(t[3])
+  print(t.hi())
+  print(t[4])
+#+end_src
+
+#+RESULTS:
+: 10
+: hello
+: true
+: hi
+: 
+: table: 0x55ba15964c70
+
+所有没有 ~key~ 的 ~value~, 会按照书写顺序从1开始编号。如果一个 ~value~ 有 ~key~, 那就通过 ~key~ 访问它。如果没有，那就通过它是第几个没有 ~key~ 的 ~value~ 访问它。
+
+同样，既然我们的 ~value~ 可以是任何值，那么 ~key~ 也几乎可以是任何值，只有两个例外: ~nil~ 和 ~NaN~.
+
+可以这样:
+
+#+begin_src lua :results output
+  local t = {}
+  t[1] = "integer"
+  t["1"] = "string"
+  local key = {}
+  t[key] = "hello"
+
+  print(t[1])
+  print(t["1"])
+  print(t[key])
+#+end_src
+
+#+RESULTS:
+: integer
+: string
+: hello
+
+一个 table 也可以成为另一个 table 的 key
+** table 表示 record
+
+类似于C中的结构体，Lua 中可以这样表示:
+
+#+begin_src lua :results output
+  local person = {
+      name = "Alice",
+      age = 20
+  }
+  print(person.name)
+  print(person.age)
+#+end_src
+
+#+RESULTS:
+: Alice
+: 20
+
+可以看一下 OCaml 中的实现:
+
+#+begin_src ocaml
+  type person = {
+      name : string;
+      age : int;
+    };;
+  let alice = {name = "Alice"; age = 20};;
+#+end_src
+
+#+RESULTS:
+: {name = "Alice"; age = 18}
+
+#+begin_quote
+OCaml 中注意区分 variant 与 record. record 需要一个前置的类型定义，这个类型接近于“带字段的乘积类型”；而 variant 表达的是可能性，定义一个 variant 就相当于定义了一组新类型。
+#+end_quote
+** ~nil~ 意味着不存在
+
+#+begin_src lua :results output
+  local t = {}
+  print(t.foo)
+#+end_src
+
+#+RESULTS:
+: nil
+
+结果是 ~nil~ , 因为不存在 key ~foo~, 所以你访问 ~t["foo"]~ 就会得到 ~nil~. 同理，如果对一个已经存在的 ~key~ 赋值为 ~nil~ ，就相当于删除了这个 ~key~
+
+#+begin_src lua :results output
+  local t = {
+      foo = "hello",
+  }
+
+  print(t.foo)
+
+  t.foo = nil
+
+  print(t.foo)
+#+end_src
+
+#+RESULTS:
+: hello
+: nil
+** table 实现 set
+直接:
+#+begin_src lua :results output
+  local set = {}
+  set["C"] = true
+  set["Lua"] = true
+  set["OCaml"] = true
+
+  -- 查询
+  if set["Lua"] then
+      print("contains Lua")
+  end
+#+end_src
+
+#+RESULTS:
+: contains Lua
+
+
+这里 ~value~ 并不重要，知识在利用 ~key~ 的存在性。因为在 Lua 中，除了 ~nil~ 和 ~false~ ，其他值都是 ~true~.
+** ~pairs~ 和 ~ipairs~
+
+对于:
+
+#+begin_src lua :results output
+  local person = {
+      name = "Alice",
+      age  = 20
+  }
+
+  for k, v in pairs(person) do
+      print(k, v)
+  end
+#+end_src
+
+#+RESULTS:
+: name	Alice
+: age	20
+
+这里不能假设顺序，因为 ~pairs~ 不保证取出的顺序。如果我们想要顺序遍历，使用 ~ipairs~:
+
+#+begin_src lua :results output
+  local xs = {10; 20; 30; 40; 50}
+  xs["say hi"] = "hi"
+  for i, x in ipairs(xs) do
+      print(i, x)
+  end
+
+  print()
+  for k, v in pairs(xs) do
+      print(k, v)
+  end
+#+end_src
+
+#+RESULTS:
+#+begin_example
+1	10
+2	20
+3	30
+4	40
+5	50
+
+1	10
+2	20
+3	30
+4	40
+5	50
+say hi	hi
+#+end_example
+~ipairs~ 只会从 ~1, 2, 3 ...~ 的 ~key~ 开始顺序遍历，直到第一个不存在的index, 不会访问其他类型的 ~key~. 而 ~pairs~ 则会访问table中的所有 ~key~, 但不保证顺序。
+
+再比如:
+
+#+begin_src lua :results output
+  local xs = {
+      foo = "foo",
+      [1] = 10,
+      [5] = 50,
+      fooz = "fooz",
+      bar = "bar",
+      [2] = 20,
+      baz = "baz",
+      [4] = 40,
+      [3] = 40,
+      bail = "bail",
+      [6] = 60,
+  }
+
+  for i, x in ipairs(xs) do
+      print(i, x)
+  end
+#+end_src
+
+#+RESULTS:
+: 1	10
+: 2	20
+: 3	40
+: 4	40
+: 5	50
+: 6	60
+
+这个结果很有意思。Lua 对数据有一个精确的概念: sequence. 它是 “从1开始连续存在，且没有 hole 的 table”. 根据我们上面的结果，这些索引的位置并不重要，只要存在即可。
+
+对于:
+
+#+begin_src lua :results output
+  local b = {
+      [1] = 10,
+      [2] = 20,
+      [4] = 40,
+  }
+
+  for i, x in ipairs(b) do
+      print(i, x)
+  end
+#+end_src
+
+#+RESULTS:
+: 1	10
+: 2	20
+
+这里存在一个 hole:
+#+begin_export ascii
+1   2   3   4
+|   |   |   |
+10  20 nil  40
+#+end_export
+
+所以只有 1 和 2 形成了 sequence. 但如果我们直接:
+
+#+begin_src lua :results output
+  local b = {
+      [1] = 10,
+      [2] = 20,
+      [4] = 40,
+  }
+
+  b[3] = 30
+
+  for i, x in ipairs(b) do
+      print(i, x)
+  end
+#+end_src
+
+#+RESULTS:
+: 1	10
+: 2	20
+: 3	30
+: 4	40
+
+这里 ~b[3]~ 被插入的位置不重要，只要存在，就能与另外三个形成一个 sequence.
+
+** ~#~ 返回 border
+
+#+begin_src lua :results output
+  xs = {
+      10,
+      nil,
+      30,
+      40,
+      hello = "hello"
+  }
+  print(#xs)
+#+end_src
+
+#+RESULTS:
+: 4
+
+这是稀疏 table。 ~#t~ 的正式定义是返回 table 的一个 ~border~, 只有当 table 是没有 hole 的 sequence 时，才对应直觉上的长度。否则，可能存在多个 border. 比如这里， ~nil~ 也被计算其中。
+
+** tabel 是 reference semantics
+
+#+begin_src lua :results output
+  local a = { x = 10 }
+  local b = a
+  b.x = 20
+  print(a.x)
+#+end_src
+
+#+RESULTS:
+: 20
+
+很容易理解:
+
+#+begin_export ascii
+a------+
+       |
+   +---+----+
+   | x = 20 |          
+   +---+----+
+       |
+b------+
+#+end_export
+
+table assignment, 函数传参，返回值操作的都是 reference, 不会进行对象复制。
+
+
+** table equality
+
+#+begin_src lua :results output
+  local a = {1, 2, 3}
+  local b = {1, 2, 3}
+
+  print(a == b)
+
+  local c = a
+  print (a == c)
+#+end_src
+
+#+RESULTS:
+: false
+: true
+
+~==~ 默认比较的是 ~same object?~, 不是 ~same contents?~ 。这里虽然 ~a~ 和 ~b~ 包含元素相同，但实际上对应的是不同对象。而 ~c~ 直接使用的是 ~a~ 的引用，因此和 ~a~ 是同一个对象。更纯粹的:
+
+#+begin_src lua :results output
+  print({1, 2, 3} == {1, 2, 3})
+#+end_src
+
+#+RESULTS:
+: false
+
+
+** table 中放 function
+
+#+begin_src lua :results output
+  local counter = {
+      value = 0,
+  }
+
+  counter.inc = function(self)
+      self.value = self.value + 1
+  end
+
+  counter.inc(counter)
+  print(counter.value)
+#+end_src
+
+#+RESULTS:
+: 1
+
+这里是在 ~counter~ 定义后，又往其中添加了一个函数 ~inc~ 作为值。 ~counter~ 的定义非常朴素:
+
+#+begin_export ascii
+counter
+
+"value" --> 1
+"inc" --> function
+#+end_export
+
+我们也可以这样写:
+
+#+begin_src lua :results output
+  local counter = {
+      value = 0,
+  }
+
+  function counter:inc()
+      self.value = self.value + 1
+  end
+
+  counter:inc()
+  print(counter.value)
+#+end_src
+
+#+RESULTS:
+: 1
+
+~:~ 是Lua提供的语法糖，大致等于:
+
+#+begin_src lua
+  counter.inc = function(self)
+      self.value = self.value + 1
+  end
+
+  counter.inc(counter)
+#+end_src
+
+这里需要注意，与 python 不同， ~self~ 只是一个普通的参数名，目的是让 ~counter~ 传递进来。你完全可以写:
+
+#+begin_src lua
+  counter.inc = function(this)
+      this.value = this.value + 1
+  end
+
+  counter.inc(counter)
+#+end_src
+
+到这里我们其实已经有了一个对象 ~counter~:
+
+#+begin_export ascii
+Counter object 
+               
++--------------+
+|value = 0     |
+|inc = function|
++--------------+
+#+end_export
+
+但这样创建多个对象会很麻烦，如果我们想创建 ~counter_2~ 和 ~counter~ 的属性与方法一致的话，还得再写一遍。于是 Lua 就使用 ~metatable~ 和 ~_index~ 去解决这个问题。
+* ~metatable~ 和 ~metamethod~
+** ~metatable~ 是什么
+ #+begin_quote
+~metatable~ 是一个附着在 Lua 值上的“运行时行为表”，当Lua解释器遇到某些特殊操作时，会查询这张表，查看程序是否为这个特殊的操作提供了自定义语义。
+ #+end_quote
+ 每个 Lua value 都可以有一个 metatable, 其本身只是一个普通的 Lua table, 其中一些特殊字段定义了原值在某些事件下的行为。
+
+ 在 Lua 解释器看来，如果写 ~a + b~ ，其看到的是一个“事件”： ~ADD(a, b)~ . 因为 ~a~ 和 ~b~ 都是 number, 所以 Lua 自己知道 ~ADD(number, number)~ 是做数值加法。假如说我们这样:
+
+ #+begin_src lua
+   local a = {x = 1}
+   local b = {x = 2}
+   print(a + b)
+ #+end_src
+
+ 那么Lua就不知道 ~ADD(table, table)~ 应该如何求值。所以默认是error. 这里就是 ~metatable~ 插入的地方:
+
+ #+begin_src lua
+   local mt = {
+       __add = function(a, b)
+           return {x = a.x + b.x, y = a.y + b.y}
+       end
+   }
+
+   setmetatable(a, mt)
+ #+end_src
+
+ 那么 ~a + b~ 时，Lua就会做以下尝试:
+
+#+begin_example
+ADD(a, b)
+
+a、b 不是两个普通 number
+       │
+       ▼
+查找 a 的 metatable
+       │
+       ▼
+找到 __add
+       │
+       ▼
+调用 mt.__add(a, b)
+#+end_example
+
+对于 ~+~, 规定：只要至少一个操作数不是 number, Lua 就会找 ~__add~; 先看左操作数，再看右操作数，如果找到就调用。
+
+所以对于运算有这个模型:
+
+#+begin_export ascii
+             Lua primitive semantics
+                       │
+                能直接处理吗？
+                 /          \
+               yes           no
+                │             │
+            直接执行      查 metatable
+                              │
+                           metamethod
+                              │
+                         自定义语义
+#+end_export
+
+~metatable~ 解决的是“一个值遇到某种语言操作时，应该表现成什么样子”。
+
+metatable 定义为一个普通的 table, 它通过特定字段改变一个值在某些事件下的行为。
+
+比如:
+#+begin_src lua :results output
+  local t = {}
+  local mt = {}
+
+  setmetatable(t, mt)
+  print(getmetatable(t) == mt)
+#+end_src
+
+#+RESULTS:
+: true
+** ~setmetatable~ 实际上并没有创建任何类型
+
+比如:
+
+#+begin_src lua :results output
+  local p = {
+      x = 1,
+      y = 2
+  }
+  local PointMT = {}
+  setmetatable(p, PointMT)
+  print(type(p))
+#+end_src
+
+#+RESULTS:
+: table
+
+这里并不是创建了一个 ~PointMT~ 类型的对象 ~p~. 我们可以通过 ~type(p)~ 查看, ~p~ 的类型仍然只是 table.
+
+也就是说:
+
+- table = 数据
+- metatable = 某些语言操作对应的行为
+
+
+** metamethod: ~__tostring~
+
+#+begin_src lua :results output
+  local p = {
+      x = 10,
+      y = 20,
+  }
+  print(p)
+#+end_src
+
+#+RESULTS:
+: table: 0x5612a4a918e0
+
+现在我们希望让打印它的结果类似 ~Point(10, 20)~, 可以这样做:
+
+#+begin_src lua :results output
+  local p = {
+      x = 10,
+      y = 20,
+  }
+
+  local mt = {
+      __tostring = function(self)
+          return string.format(
+              "Point(%d, %d)",
+              self.x,
+              self.y
+          )
+      end,
+  }
+
+  setmetatable(p, mt)
+
+  print(p)
+#+end_src
+
+#+RESULTS:
+: Point(10, 20)
+
+** ~__add~
+
+现在让两个 Point 直接相加:
+
+#+begin_src lua :results output
+  local mt = {}
+
+  mt.__add = function(a, b)
+      return {
+          x = a.x + b.x,
+          y = a.y + b.y,
+      }
+  end
+
+  local p1 = setmetatable({
+      x = 1,
+      y = 2,
+  }, mt)
+
+  local p2 = setmetatable({
+      x = 10,
+      y = 20,
+  }, mt)
+
+  local p3 = p1 + p2
+
+  print(p3.x, p3.y)
+#+end_src
+
+#+RESULTS:
+: 11	22
+
+如果普通加法不能完成，Lua就会先检查第一个 operand 的 ~__add~, 没有的话，就检查第二个 operand.
+
+因此 ~p1 + p2~ 可以理解成:
+
+#+begin_export ascii
+       +
+      / \
+    p1   p2
+     │
+     ▼
+metatable
+     │
+     ▼
+  __add
+     │
+     ▼
+__add(p1, p2)
+#+end_export
+
+现在我们可以组合起来，写得像个真正的 ~Point~:
+
+#+begin_src lua :results output
+  local PointMT = {}
+
+  PointMT.__add = function(a, b)
+      return setmetatable({x = a.x + b.x, y = a.y + b.y}, PointMT)
+  end
+
+  PointMT.__tostring = function(p)
+      return string.format(
+          "Point(%d, %d)", p.x, p.y
+      )
+  end
+
+  local p1 = setmetatable(
+      {
+          x = 1,
+          y = 2
+      },
+      PointMT
+  )
+
+  local p2 = setmetatable(
+      {
+          x = 10,
+          y = 20
+      },
+      PointMT
+  )
+
+  local p3 = p1 + p2
+
+  print(p3)
+#+end_src
+
+#+RESULTS:
+: Point(11, 22)
+
+注意这里我们 ~__add~ 返回的仍然是一个 ~setmetatable(..., PointMT)~ 。如果只返回 ~x = ..., y = ...~ 那么 ~p1 + p2~ 的结果就失去了 ~Point~ 的行为。而我们希望所有 ~Point~ 都共用一个 ~metatable~. 但对于 Lua 来说，它从来没有创建一个 ~Point~ type, 如果你执行 ~type(p1)~, 其结果仍然是 ~table~. ~Point~ 只是我们自己建立的抽象。
+
+** ~__index~
+
+这是 Lua 对象模型的核心。比如:
+
+#+begin_src lua :results output
+  local mt = {
+      __index = {
+          name = "default"
+      }
+  }
+
+  local t = {}
+
+  setmetatable (t, mt)
+
+  print (t.name)
+#+end_src
+
+#+RESULTS:
+: default
+
+这里 ~t~ 里根本就没有 ~name~ 这个key, 却会找到 metatable 的 ~name~, 也就是说，当我们执行 ~t.name~ 的时候，会执行:
+
+#+begin_export ascii
+raw table t
+           
+"name" 存在吗? 
+     |
+     no
+查 metatable
+     |
+     |
+查 __index
+#+end_export
+
+发现 ~mt.__index~ 是一张表，于是就继续查 ~mt.__index["name"]~ 就得到了 ~"default"~ .
+
+这就是官方定义: ~__index~ 在 table 中不存在某个key的时候触发，如果 ~__index~ 是函数，就调用函数；如果是 table, 继续在table上执行索引操作。只有当 raw lookup 失败之后才会调用 ~__index~.
+
+那么进一步，我们可以做:
+
+#+begin_src lua :results output 
+  local methods = {}
+
+  methods.length = function(self)
+      return math.sqrt(
+          self.x * self.x + self.y * self.y
+      )
+  end
+  local p = {x = 3, y = 4}
+  setmetatable(p, {__index = methods})
+  print(p.length(p))
+#+end_src
+
+#+RESULTS:
+: 5.0
+
+当然可以用 ~:~ 语法糖写得更简洁一些:
+
+#+begin_src lua :results output
+  local methods = {}
+
+  function methods:length()
+      return math.sqrt(
+          self.x * self.x + self.y * self.y
+      )
+  end
+
+  local p = {x = 3, y = 4}
+
+  setmetatable(p, { __index = methods })
+
+  print(p:length())
+#+end_src
+
+#+RESULTS:
+: 5.0
+
+*** prototype 风格
+
+于是我们可以这样组织 ~Point~:
+
+#+begin_src lua :results output
+  local Point = {}
+
+  function Point:length()
+      return math.sqrt(
+          self.x * self.x + self.y * self.y
+      )
+  end
+
+  local p = { x = 3, y = 4 }
+
+  setmetatable(p, {
+      __index = Point,
+  })
+
+  print(p:length())
+#+end_src
+
+#+RESULTS:
+: 5.0
+
+整体结构是:
+
+#+begin_export ascii
+p
+│
+├── x = 3
+└── y = 4
+     │
+     │ metatable
+     ▼
++------------------+
+| __index           |
++---------+--------+
+          │
+          ▼
+        Point
+          │
+          └── length = function
+#+end_export
+
+这里发现 ~__index~ 是个名为 ~Point~ 的表格，于是会到 ~Point~ 里继续找 ~length~ 的索引。
+
+在上面，instance data 存放在每个变量中，而 shared behavior 存在 ~Point~ 中。于是多个 instance 可以共用 ~Point~ 中的方法或行为。
+
+*** Lua 经典写法
+
+于是我们现在可以写:
+
+#+begin_src lua :results output
+  local Point = {}
+
+  Point.__index = Point
+
+  function Point.new(x, y)
+      local p = {
+          x = x,
+          y = y
+      }
+      return setmetatable(p, Point)
+  end
+
+  function Point:length()
+      return math.sqrt(
+          self.x * self.x + self.y * self.y
+      )
+  end
+
+  local p = Point.new(3, 4)
+  print(p:length())
+  
+  local q = p.new(5, 6)
+  print(q:length())
+#+end_src
+
+#+RESULTS:
+: 5.0
+: 7.8102496759067
+
+这里 ~p~ 是通过 ~Point.new~ 创建的，而后者返回的就是一个 metatable, 所以通过这样创建就可以让 ~p~ 使用 ~Point~ 中的属性了。另一方面， ~Point.__index = Point~ 也指定了当 ~p~ 中找不到某个key时，也应该回到 ~Point~ 中去找。于是我们应该有这种写法:
+
+#+begin_src lua
+  local q = p.new(5, 6)
+  print(q:length())
+#+end_src
+
+整体链路就是:
+
+从 ~p~ 中查找 ~new~ -> 从 ~Point~ 中查找 ~__index~ -> ~__index~ 是 ~Point~ 这个 table -> 从 ~Point~ 中查找 ~new~ -> 最终调用 ~Point.new()~
+
+~Point.__index = Point~ 这一句没有任何特殊的地方，就是在告诉 Lua ~p~ 的行为描述表是 ~Point~, 仅此而已。我们完全可以让这个 ~__index~ 的值是别的东西:
+
+#+begin_src lua :results output
+  local Point = {}
+  local PointMT = {}
+
+  Point.__index = PointMT
+
+  function Point.new(x, y)
+      local p = {
+          x = x,
+          y = y
+      }
+      return setmetatable(p, Point)
+  end
+
+  function PointMT:length()
+      return math.sqrt(
+          self.x * self.x + self.y * self.y
+      )
+  end
+
+  local p = Point.new(3, 4)
+  print(p:length())
+#+end_src
+
+#+RESULTS:
+: 5.0
+
+可以看到依旧可以成立。那么在这种写法下， ~p.new()~ 的写法还会成立吗？答案是不会。因为 ~p~ 的 ~__index~ 已经被换成了 ~PointMT~, 而 ~PointMT~ 中不存在 ~new~ 这个方法。只有 ~Point.new~ 才是有效的。
+
+到这里，我们其实就能形成一个小型的 object abstraction 了。根据 ~__index~, ~__add~, ~__tostring~ 可以实现一个完整的 ~Point~ object. 但 Lua 并不提供 class 这样的机制，一切都是我们通过table和function组合的。
+** ~__newindex~: 拦截写操作
+
+~__index~ 会找 ~t[k]~, 而 ~__newindex~ 会拦截 ~t[k] = v~ 这样的操作，一旦 ~__newindex~ 被触发，Lua本身就不会再做原始 assignment. 比如:
+
+#+begin_src lua :results output
+  local t = {}
+
+  setmetatable(t, {
+      __newindex = function(self, key, value)
+          print("write", key, value)
+      end
+  })
+
+  t.x = 10
+  print(t.x)
+#+end_src
+
+#+RESULTS:
+: write	x	10
+: nil
+
+可以看到，触发了 ~__newindex~, 但是并没有被赋值。
+
+如果想真正赋值，必须使用 ~rawset~:
+
+
+#+begin_src lua :results output
+  local t = {}
+
+  setmetatable(t, {
+      __newindex = function(self, key, value)
+          print("write", key, value)
+          rawset(self, key, value)
+      end
+  })
+
+  t.x = 10
+  print(t.x)
+#+end_src
+
+#+RESULTS:
+: write	x	10
+: 10
+
+不要在 ~__newindex~ 中使用 ~self[key] = value~, 因为这会引起无限递归。
+
+#+begin_export ascii
+self[key] = value
+      │
+      ▼
+__newindex
+      │
+      ▼
+self[key] = value
+      │
+      ▼
+__newindex
+      │
+      ▼
+...
+#+end_export
+
+于是就有 ~rawget(t, k)~ 和 ~rawset(t, k, v)~ ，可以理解为： “不经过 metatable, 直接访问 table”
+** ~__call~
+
+比如:
+
+#+begin_src lua :results output
+  local multiplier = {
+      n = 10
+  }
+
+  setmetatable(multiplier, {
+      __call = function(self, x)
+          return self.n * x
+      end
+  })
+
+  print(multiplier(5))
+  print(type(multiplier))
+#+end_src
+
+#+RESULTS:
+: 50
+: table
+
+这里我们似乎能把一个 table 当一个 callable function 来用。因为 ~multiplier~ 虽然是一个 table, 但是直接对它进行 ~multiplier(5)~ 就会调用 ~__call(multiplier, 5)~ 。从FP的角度，这就是可以制造 “带状态的 callable value”
+
+此外， ~__call~ 可以返回多个值。
+
+比如:
+
+#+begin_src lua :results output
+  local multiplier = {
+      n = 10,
+      calls = 0
+  }
+
+  setmetatable(multiplier, {
+      __call = function(self, x)
+          self.calls = self.calls + 1
+          return self.n * x
+          
+      end
+  })
+
+  print(multiplier(5))
+  print(multiplier.calls)
+
+  print(multiplier(10))
+  print(multiplier.calls)
+#+end_src
+
+#+RESULTS:
+: 50
+: 1
+: 100
+: 2
+
+这就是一个简单记录调用次数的 callable value. 同时可以把 ~calls~ 换成任何希望记录状态的内容。
+** 常用 metamethod 小结
+
+| metamethod   | 控制                     |
+|--------------+--------------------------|
+| ~__index~    | ~t[k]~ 找不到时          |
+| ~__newindex~ | ~t[k] = v~ 找不到 ~k~ 时 |
+| ~__call~     | ~t(...)~                 |
+| ~__tostring~ | ~tostring(t)~            |
+| ~__add~      | ~a + b~                  |
+| ~__sub~      | ~a - b~                  |
+| ~__mul~      | ~a * b~                  |
+| ~__eq~       | ~a == b~                 |
+| ~__lt~       | ~a < b~                  |
+| ~__le~       | ~a <= b~                 |
+| ~__len~      | ~#a~                     |
+| ~__concat~   | ~a .. b~                 |
+* 与C建立联系
+
+metatable 在 Lua 与 C 的交互里尤其重要。C 里可以创建 ~userdata~ ，里面实际保存:
+
+#+begin_src C
+  struct File;
+  struct Socket;
+  struct Window;
+  struct GameEntity;
+#+end_src
+
+然后给这个 ~userdata~ 设置 metatable:
+
+#+begin_export ascii
+userdata
+   │
+   ▼
+metatable
+   │
+   ├── __index
+   ├── __gc
+   ├── __tostring
+   └── methods
+#+end_export
+
+那么在 Lua 用户看来的可能就是:
+
+#+begin_src lua
+  file:read()
+  socket:send(data)
+  vector:length()
+#+end_src
+
+但是真正的数据不在 Lua table 里。
