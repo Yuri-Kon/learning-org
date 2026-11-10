@@ -294,3 +294,111 @@ CREATED ──▶ RUNNING ─┼──▶ FAILED
 #+RESULTS:
 : without Lock: 1
 : with Lock: 2
+
+** 实验四: 多线程实践
+
+下面有一个有Bug的程序:
+
+#+begin_src python :results output
+  from threading import Thread, Lock, Barrier
+
+
+  class Account:
+      def __init__(self, balance):
+          self._balance = balance
+          self._lock = Lock()
+
+      def withdraw_unsafe(self, amount, barrier):
+          """故意存在竞态条件的版本"""
+          if self._balance < amount:
+              return False
+
+          old_balance = self._balance
+
+          # 保证两个线程都读取完余额才继续
+          barrier.wait(timeout=3)
+
+          self._balance = old_balance - amount
+          return True
+
+      def withdraw(self, amount):
+          """TODO 1: 实现线程安全的取款"""
+          # 余额不足返回 False
+          # 否则扣除金额并返回 True
+          with self._lock:
+              if self._balance < amount:
+                  return False
+              self._balance -= amount
+              return True
+          
+
+      def deposit(self, amount):
+          """TODO 2: 实现线程安全的存款"""
+          with self._lock:
+              self._balance += amount
+          return True
+
+      def get_balance(self):
+          """TODO 3: 安全地读取当前余额"""
+          with self._lock:
+              return self._balance
+
+  def run_two_threads(action):
+      results = [None, None]
+
+      def worker(index):
+          results[index] = action()
+
+      threads = [
+          Thread(target=worker, args=(i,))
+          for i in range(2)
+      ]
+
+      for thread in threads:
+          thread.start()
+
+      for thread in threads:
+          thread.join(timeout=3)
+          assert not thread.is_alive()
+
+      return results
+
+
+  if __name__ == "__main__":
+      # 实验一：错误实现
+      account = Account(100)
+      barrier = Barrier(2)
+
+      results = run_two_threads(
+          lambda: account.withdraw_unsafe(80, barrier)
+      )
+
+      print("Unsafe results:", results)
+      print("Unsafe balance:", account._balance)
+
+      # 实验二：等待你实现的安全版本
+      account = Account(100)
+
+      results = run_two_threads(
+          lambda: account.withdraw(80)
+      )
+
+      print("Safe results:", results)
+      print("Safe balance:", account.get_balance())
+
+      assert results.count(True) == 1
+      assert results.count(False) == 1
+      assert account.get_balance() == 20
+
+      account.deposit(30)
+      assert account.get_balance() == 50
+
+      print("All tests passed!")
+#+end_src
+
+#+RESULTS:
+: Unsafe results: [True, True]
+: Unsafe balance: 20
+: Safe results: [True, False]
+: Safe balance: 20
+: All tests passed!
